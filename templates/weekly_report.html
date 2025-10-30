@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{ project }} — Weekly Field Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 32px; color: #1f2933; }
+      h1 { margin-bottom: 4px; }
+      h2 { margin-top: 28px; }
+      table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+      th, td { border: 1px solid #d2d6dc; padding: 8px 10px; text-align: left; }
+      th { background-color: #f5f7fa; }
+      .metric-grid { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 18px; }
+      .metric { background: #f5f7fa; border-radius: 8px; padding: 16px; min-width: 160px; }
+      .metric span { display: block; font-size: 13px; text-transform: uppercase; color: #52606d; margin-bottom: 6px; }
+      .metric strong { font-size: 24px; color: #1f2933; }
+    </style>
+  </head>
+  <body>
+    <h1>{{ project }} — Weekly Field Report</h1>
+    <p>Generated on {{ generated_on }}</p>
+
+    <div class="metric-grid">
+      <div class="metric">
+        <span>Total completes</span>
+        <strong>{{ total_completes | default(0) }}</strong>
+      </div>
+      {% if target_n %}
+      <div class="metric">
+        <span>Target sample</span>
+        <strong>{{ target_n }}</strong>
+      </div>
+      {% endif %}
+      {% if projected_end %}
+      <div class="metric">
+        <span>Projected end date</span>
+        <strong>{{ projected_end }}</strong>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if enumerator_summary %}
+    <h2>Enumerator Productivity</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Enumerator</th>
+          <th>Completed surveys</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for name, count in enumerator_summary.items() %}
+        <tr>
+          <td>{{ name }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if treatment_summary %}
+    <h2>Progress by Treatment Arm</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Arm</th>
+          <th>Completions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for arm, count in treatment_summary.items() %}
+        <tr>
+          <td>{{ arm }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if flag_counts %}
+    <h2>Data Quality Flags</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Flag</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for flag, count in flag_counts.items() %}
+        <tr>
+          <td>{{ flag }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if backcheck_list %}
+    <h2>Backcheck Cases</h2>
+    {{ backcheck_list | safe }}
+    {% endif %}
+  </body>
+</html>

@@ -1,0 +1,81 @@
+project: "RCT Field Flow Demo"
+
+paths:
+  baseline_data: "examples/dummy_baseline.csv"
+  submissions_data: "examples/dummy_submissions.csv"
+
+randomization:
+  id_column: "participant_id"
+  treatment_column: "treatment"
+  method: "stratified"
+  strata: ["district", "gender"]
+  cluster: null
+  arms:
+    - name: "treatment"
+      proportion: 0.5
+    - name: "control"
+      proportion: 0.5
+  balance_covariates: ["age", "hh_size"]
+  iterations: 10000
+  use_existing_assignment: true
+  seed: 20250128
+
+case_assignment:
+  case_id_column: "participant_id"
+  label_template: "{participant_id} - {community}"
+  team_column: "team"
+  default_team: "unassigned"
+  team_rules:
+    - name: "team_a"
+      match:
+        community: ["Mbwelera"]
+    - name: "team_b"
+      match:
+        community: ["Kasiya"]
+  form_ids:
+    default: ["follow_up"]
+    treatment: ["follow_up_treat"]
+    control: ["follow_up_control"]
+  additional_columns:
+    - "community"
+    - "district"
+    - "treatment"
+
+surveycto:
+  server: "${SCTO_SERVER}"
+  username: "${SCTO_USER}"
+  password: "${SCTO_PASS}"
+  form_id: "follow_up"
+
+monitoring:
+  submissions_path: "examples/dummy_submissions.csv"
+  submission_timestamp_column: "submission_date"
+  enumerator_column: "enumerator"
+  treatment_column: "treatment"
+  community_column: "community"
+  rest_days:
+    default: "Sunday"
+  work_days_per_week: 6
+
+quality_checks:
+  duration_column: "duration"
+  min_duration_seconds: 600
+  max_duration_seconds: null
+  duplicate_keys: ["participant_id"]
+  gps_columns: ["gps_lat", "gps_lon"]
+  other_specify_suffix: "_other"
+  intervention_columns: []
+  speed_quantile: 0.25
+
+backcheck:
+  sample_size: 30
+  high_risk_quota: 0.6
+  random_seed: 20240201
+
+reports:
+  weekly_template: "templates/weekly_report.html"
+
+analysis:
+  outcome_columns: ["income", "consumption"]
+  heterogeneity_columns: ["gender"]
+  attrition_flag_column: "completed_followup"

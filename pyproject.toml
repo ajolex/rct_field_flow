@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "rct_field_flow"
+version = "0.1.0"
+description = "End-to-end RCT field operations: randomization, case assignment, monitoring, quality control, and analysis."
+authors = ["Aubrey Jolex <aubreyjolex@gmail.com.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/ajolex/rct_field_flow"
+repository = "https://github.com/ajolex/rct_field_flow"
+keywords = ["rct", "randomization", "fieldwork", "surveycto", "data-quality", "impact-evaluation"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pandas = "^2.0"
+numpy = "^1.24"
+streamlit = "^1.28"
+plotly = "^5.17"
+requests = "^2.31"
+jinja2 = "^3.1"
+weasyprint = "^62.0"
+typer = {extras = ["all"], version = "^0.9"}
+statsmodels = "^0.14"
+linearmodels = "^5.3"
+scipy = "^1.11"
+python-dotenv = "^1.0"
+
+[tool.poetry.scripts]
+rct-field-flow = "rct_field_flow.cli:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

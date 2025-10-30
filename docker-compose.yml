@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - SCTO_SERVER=${SCTO_SERVER}
+      - SCTO_USER=${SCTO_USER}
+      - SCTO_PASS=${SCTO_PASS}
+    volumes:
+      - .:/app
