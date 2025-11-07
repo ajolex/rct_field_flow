@@ -258,13 +258,20 @@ class Randomizer:
         clusters = df[[cluster_col] + strata_cols].drop_duplicates().set_index(cluster_col)
         assignments = {}
 
-        for offset, (_, subset) in enumerate(
-            clusters.groupby(strata_cols, dropna=False, sort=False)
-        ):
-            stratum_seed = None if seed is None else seed + offset
-            cluster_ids = subset.index.to_list()
-            cluster_assignments = self._assign_simple(len(cluster_ids), stratum_seed)
+        # If no strata, randomize all clusters together
+        if not strata_cols:
+            cluster_ids = clusters.index.to_list()
+            cluster_assignments = self._assign_simple(len(cluster_ids), seed)
             assignments.update(dict(zip(cluster_ids, cluster_assignments)))
+        else:
+            # Randomize clusters within each stratum
+            for offset, (_, subset) in enumerate(
+                clusters.groupby(strata_cols, dropna=False, sort=False)
+            ):
+                stratum_seed = None if seed is None else seed + offset
+                cluster_ids = subset.index.to_list()
+                cluster_assignments = self._assign_simple(len(cluster_ids), stratum_seed)
+                assignments.update(dict(zip(cluster_ids, cluster_assignments)))
 
         assigned = df[cluster_col].map(assignments)
         if assigned.isna().any():
