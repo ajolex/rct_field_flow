@@ -8,7 +8,18 @@ from .randomize import (
     Randomizer,
     TreatmentArm,
 )
-from .report import generate_weekly_report
+
+# Optional import - report module requires weasyprint with native dependencies
+try:
+    from .report import generate_weekly_report
+except ImportError as e:
+    generate_weekly_report = None
+    import warnings
+    warnings.warn(
+        f"Report module unavailable: {e}. Install GTK libraries for PDF generation: "
+        "https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows",
+        ImportWarning
+    )
 
 __all__ = [
     "RandomizationConfig",

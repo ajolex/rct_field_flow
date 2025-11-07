@@ -4,7 +4,7 @@ Python toolkit for managing field operations in randomized controlled trials—c
 
 ## Workflow Overview
 
-- **Randomize participants** using simple, stratified, or cluster designs with rerandomization (up to 10,000 iterations) to maximise joint balance p-values across covariates. Existing treatment assignments (e.g., follow-up rounds) are ingested for balance checks without reassigning.
+- **Randomize participants** using simple, stratified, or cluster designs with rerandomization (up to 10,000 iterations) to maximise joint balance p-values across covariates. Existing treatment assignments (e.g., follow-up rounds) are ingested for balance checks without reassigning. See [Randomization Guide](docs/RANDOMIZATION.md) for detailed documentation.
 - **Assign SurveyCTO cases** to enumerator teams based on configurable rules (community, strata, quotas) and produce upload-ready CSVs.
 - **Upload cases** directly to SurveyCTO via the API.
 - **Monitor progress** in Streamlit with productivity, progress-by-arm, and projected end dates that respect rest days.

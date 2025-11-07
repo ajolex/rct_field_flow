@@ -74,15 +74,46 @@ def randomize(
     baseline: Path = typer.Option(..., exists=True, readable=True, help="Baseline dataset (CSV)."),
     output: Path = typer.Option(Path("randomized_cases.csv"), help="Output CSV for assignments."),
     config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True, help="Project config."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress and diagnostics."),
+    balance_output: Optional[Path] = typer.Option(None, "--balance-table", help="Save balance table CSV."),
 ) -> None:
-    """Run randomization with rerandomization balance checks."""
+    """Run randomization with rerandomization balance checks.
+    
+    This randomization command supports simple, stratified, and cluster randomization with optional rerandomization to
+    maximize balance on specified covariates.
+    
+    Note: When using many iterations (>1000), rerandomization can affect randomization inference
+    assumptions. The verbose flag will show diagnostics to help validate assignment fairness.
+    """
     app_config = load_config(str(config_path))
     rand_cfg = build_randomization_config(app_config.get("randomization", {}))
     df = pd.read_csv(baseline)
-    result = Randomizer(rand_cfg).run(df)
+    
+    if verbose:
+        typer.echo(f"Loaded {len(df)} observations from {baseline}")
+        typer.echo(f"Method: {rand_cfg.method}")
+        typer.echo(f"Treatment arms: {', '.join(a.name for a in rand_cfg.arms)}")
+        if rand_cfg.strata:
+            typer.echo(f"Stratification variables: {', '.join(rand_cfg.strata)}")
+        if rand_cfg.cluster:
+            typer.echo(f"Cluster variable: {rand_cfg.cluster}")
+        if rand_cfg.balance_covariates:
+            typer.echo(f"Balance covariates: {', '.join(rand_cfg.balance_covariates)}")
+        typer.echo(f"Iterations: {rand_cfg.iterations}")
+        typer.echo("")
+    
+    result = Randomizer(rand_cfg).run(df, verbose=verbose)
     result.assignments.to_csv(output, index=False)
-    typer.echo(f"Saved assignments to {output}")
+    
+    typer.echo(f"\nSaved assignments to {output}")
     typer.echo(f"Best min p-value: {result.best_min_pvalue:.4f}")
+    
+    if balance_output:
+        result.balance_table.to_csv(balance_output, index=False)
+        typer.echo(f"Balance table saved to {balance_output}")
+    
+    if result.iterations > 1:
+        typer.echo(f"Used {result.iterations} iterations (mean p-value: {result.diagnostics.get('mean_p_value', 0):.4f})")
 
 
 @app.command("assign-cases")

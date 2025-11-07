@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
@@ -42,13 +43,23 @@ class RandomizationConfig:
 
 @dataclass
 class RandomizationResult:
-    """Outcome of a randomization run."""
+    """Outcome of a randomization run.
+    
+    Attributes:
+        assignments: DataFrame with treatment assignments
+        balance_table: DataFrame with balance test results
+        best_min_pvalue: Highest minimum p-value across balance tests
+        iterations: Number of rerandomization iterations run
+        used_existing_assignment: Whether existing assignments were used
+        diagnostics: Additional diagnostic information
+    """
 
     assignments: pd.DataFrame
     balance_table: pd.DataFrame
     best_min_pvalue: float
     iterations: int
     used_existing_assignment: bool
+    diagnostics: Dict = field(default_factory=dict)
 
 
 class Randomizer:
@@ -58,49 +69,124 @@ class Randomizer:
         self.config = config
         self._validate_config()
 
-    def run(self, df: pd.DataFrame) -> RandomizationResult:
+    def run(self, df: pd.DataFrame, verbose: bool = False) -> RandomizationResult:
+        """Run randomization with optional rerandomization.
+        
+        Args:
+            df: DataFrame with units to randomize
+            verbose: If True, print progress and diagnostic information
+            
+        Returns:
+            RandomizationResult with assignments and diagnostics
+            
+        Note:
+            When using rerandomization (iterations > 1), be aware that this can
+            affect randomization inference assumptions. See Bruhn & McKenzie (2009)
+            for details on the trade-offs between balance and inference validity.
+        """
         cfg = self.config
         work_df = df.copy()
+
+        # Validate input data
+        if cfg.id_column not in work_df.columns:
+            raise ValueError(f"ID column '{cfg.id_column}' not found in data")
+        
+        # Check for duplicates
+        if work_df[cfg.id_column].duplicated().any():
+            raise ValueError(f"Duplicate IDs found in column '{cfg.id_column}'")
 
         if (
             cfg.use_existing_assignment
             and cfg.treatment_column in work_df.columns
             and work_df[cfg.treatment_column].notna().any()
         ):
+            if verbose:
+                print(f"Using existing assignment in column '{cfg.treatment_column}'")
             balance_table, min_p = self._balance_table(work_df, cfg.treatment_column)
+            self._validate_treatment_distribution(work_df, cfg.treatment_column, verbose)
             return RandomizationResult(
                 assignments=work_df,
                 balance_table=balance_table,
                 best_min_pvalue=min_p,
                 iterations=0,
                 used_existing_assignment=True,
+                diagnostics={"existing_assignment": True}
             )
 
         best_assignment = None
         best_min_pvalue = -np.inf
         best_balance_table = pd.DataFrame()
         total_iterations = max(1, cfg.iterations)
+        
+        # For validation: track assignment frequencies if doing rerandomization
+        assignment_tracker = {} if total_iterations > 100 else None
+        p_value_history = []
+
+        if verbose and total_iterations > 1:
+            print(f"Running {total_iterations} iterations to find best balance...")
+            if total_iterations > 1000:
+                warnings.warn(
+                    "Rerandomization with many iterations can affect randomization inference. "
+                    "Consider validating that no units are systematically favored.",
+                    UserWarning
+                )
 
         for i in range(1, total_iterations + 1):
             seed = self._iteration_seed(i)
             assignment = self._assign(work_df, seed)
             work_df[cfg.treatment_column] = assignment
+            
+            # Track assignments for validation
+            if assignment_tracker is not None:
+                for idx, arm in assignment.items():
+                    if idx not in assignment_tracker:
+                        assignment_tracker[idx] = []
+                    assignment_tracker[idx].append(arm)
+            
             balance_table, min_p = self._balance_table(work_df, cfg.treatment_column)
+            p_value_history.append(min_p)
+            
             if min_p > best_min_pvalue:
                 best_min_pvalue = min_p
                 best_assignment = assignment.copy()
                 best_balance_table = balance_table.copy()
+            
+            if verbose and i % max(1, total_iterations // 10) == 0:
+                print(f"  Iteration {i}/{total_iterations}, current best p-value: {best_min_pvalue:.4f}")
 
         if best_assignment is None:
             raise RuntimeError("Randomization failed to produce an assignment.")
 
         work_df[cfg.treatment_column] = best_assignment
+        
+        # Validate treatment distribution
+        self._validate_treatment_distribution(work_df, cfg.treatment_column, verbose)
+        
+        # Compute diagnostics
+        diagnostics = {
+            "p_value_history": p_value_history,
+            "mean_p_value": np.mean(p_value_history),
+            "median_p_value": np.median(p_value_history),
+        }
+        
+        # Check for systematic assignment bias if we tracked
+        if assignment_tracker:
+            diagnostics["assignment_check"] = self._check_assignment_probabilities(
+                assignment_tracker, work_df, verbose
+            )
+        
+        if verbose:
+            print("\nRandomization complete!")
+            print(f"Best minimum p-value: {best_min_pvalue:.4f}")
+            print(f"Mean p-value across iterations: {diagnostics['mean_p_value']:.4f}")
+        
         return RandomizationResult(
             assignments=work_df,
             balance_table=best_balance_table,
             best_min_pvalue=best_min_pvalue,
             iterations=total_iterations,
             used_existing_assignment=False,
+            diagnostics=diagnostics
         )
 
     # ------------------------------------------------------------------ #
@@ -239,3 +325,88 @@ class Randomizer:
         balance_table = pd.DataFrame.from_records(records)
         balance_table["min_p_value"] = min_p if np.isfinite(min_p) else np.nan
         return balance_table, min_p if np.isfinite(min_p) else np.nan
+
+    def _validate_treatment_distribution(
+        self, 
+        df: pd.DataFrame, 
+        treatment_col: str,
+        verbose: bool = False
+    ) -> None:
+        """Validate that treatment assignments match expected proportions.
+        
+        Raises:
+            AssertionError: If assignments deviate significantly from expected proportions
+        """
+        treatment_counts = df[treatment_col].value_counts()
+        total = len(df)
+        
+        for arm in self.config.arms:
+            expected = arm.proportion * total
+            actual = treatment_counts.get(arm.name, 0)
+            # Allow some tolerance for rounding
+            diff = abs(actual - expected)
+            max_diff = max(1, len(self.config.arms))  # Allow at most 1 per arm difference
+            
+            if diff > max_diff:
+                raise AssertionError(
+                    f"Treatment arm '{arm.name}' has {actual} observations but expected "
+                    f"~{expected:.0f} (proportion {arm.proportion}). Difference: {diff}"
+                )
+        
+        if verbose:
+            print("\nTreatment distribution validation passed:")
+            for arm in self.config.arms:
+                actual = treatment_counts.get(arm.name, 0)
+                print(f"  {arm.name}: {actual} ({100*actual/total:.1f}%, expected {100*arm.proportion:.1f}%)")
+
+    def _check_assignment_probabilities(
+        self,
+        assignment_tracker: Dict,
+        df: pd.DataFrame,
+        verbose: bool = False
+    ) -> Dict:
+        """Check if any units are systematically favored in treatment assignment.
+        
+        Following the reference guide's advice to check assignment probabilities
+        across iterations to ensure fairness.
+        
+        Returns:
+            Dictionary with statistics about assignment probability distribution
+        """
+        # Calculate empirical assignment probabilities
+        arm_names = [arm.name for arm in self.config.arms]
+        prob_stats = {arm: [] for arm in arm_names}
+        
+        for idx, assignments in assignment_tracker.items():
+            for arm in arm_names:
+                prob = assignments.count(arm) / len(assignments)
+                prob_stats[arm].append(prob)
+        
+        # Compute statistics
+        diagnostics = {}
+        for arm in arm_names:
+            probs = np.array(prob_stats[arm])
+            diagnostics[arm] = {
+                "mean": float(np.mean(probs)),
+                "std": float(np.std(probs)),
+                "min": float(np.min(probs)),
+                "max": float(np.max(probs)),
+            }
+            
+            # Check for concerning patterns
+            expected = next(a.proportion for a in self.config.arms if a.name == arm)
+            if abs(np.mean(probs) - expected) > 0.05:  # More than 5% deviation
+                warnings.warn(
+                    f"Units' average probability of '{arm}' assignment ({np.mean(probs):.3f}) "
+                    f"deviates from expected ({expected:.3f}). Some units may be systematically favored.",
+                    UserWarning
+                )
+        
+        if verbose:
+            print("\nAssignment probability check:")
+            for arm, stats in diagnostics.items():
+                expected = next(a.proportion for a in self.config.arms if a.name == arm)
+                print(f"  {arm}: mean={stats['mean']:.3f} (expected={expected:.3f}), "
+                      f"std={stats['std']:.3f}, range=[{stats['min']:.3f}, {stats['max']:.3f}]")
+        
+        return diagnostics
