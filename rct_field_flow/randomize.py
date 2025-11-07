@@ -345,7 +345,15 @@ class Randomizer:
             actual = treatment_counts.get(arm.name, 0)
             # Allow some tolerance for rounding
             diff = abs(actual - expected)
-            max_diff = max(1, len(self.config.arms))  # Allow at most 1 per arm difference
+            
+            # For cluster randomization, allow more tolerance since we can't perfectly
+            # balance individual counts when randomizing at the cluster level
+            if self.config.method == "cluster":
+                # Allow up to 10% deviation or at least 10 units, whichever is larger
+                max_diff = max(10, total * 0.10)
+            else:
+                # For non-cluster randomization, strict tolerance
+                max_diff = max(1, len(self.config.arms))
             
             if diff > max_diff:
                 raise AssertionError(
