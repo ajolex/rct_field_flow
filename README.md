@@ -13,7 +13,6 @@ Python toolkit for managing field operations in randomized controlled trials—c
 - **Generate weekly reports** (HTML/PDF) summarising key metrics, flag counts, and backcheck rosters.
 - **Run one-click analytics** for ATEs, heterogeneity, and attrition summaries.
 
-Original Stata `.do` files for randomization, case assignment, monitoring, and balance checks were ported and normalised into the Python modules to keep the same field implementation logic while adding flexibility for new studies.
 
 ## Installation
 
