@@ -136,7 +136,10 @@ def render_dashboard(df: pd.DataFrame, cfg: dict) -> None:
         if duration_col == "<none>":
             duration_col = None
     with opt2:
-        supervisor_candidates = [c for c in df.columns if "super" in c.lower() or "team" in c.lower()]
+        supervisor_candidates = [c for c in df.columns if "super" in c.lower() or "team" in c.lower() or "lead" in c.lower()]
+        # If no matching columns found, show all columns
+        if not supervisor_candidates:
+            supervisor_candidates = list(df.columns)
         supervisor_col = st.selectbox("Supervisor Column (optional)", ["<none>"] + supervisor_candidates)
         if supervisor_col == "<none>":
             supervisor_col = None
