@@ -197,9 +197,10 @@ class Randomizer:
         if not cfg.arms:
             raise ValueError("At least one treatment arm must be provided.")
         total_prop = sum(arm.proportion for arm in cfg.arms)
-        if not np.isclose(total_prop, 1.0):
+        # Allow tolerance of ±0.01 for rounding errors (e.g., 0.33 + 0.33 + 0.34 = 1.00)
+        if not np.isclose(total_prop, 1.0, atol=0.01):
             raise ValueError(
-                f"Treatment arm proportions must sum to 1. Got {total_prop:.4f}."
+                f"Treatment arm proportions must sum to 1 (±0.01 tolerance). Got {total_prop:.4f}."
             )
         if cfg.method not in ("simple", "stratified", "cluster"):
             raise ValueError(f"Unsupported randomization method: {cfg.method}")

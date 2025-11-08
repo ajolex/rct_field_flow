@@ -24,6 +24,10 @@ linearmodels = ">=7.0"
 scipy = "^1.11"
 python-dotenv = "^1.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-cov = "^4.1"
+
 [tool.poetry.scripts]
 rct-field-flow = "rct_field_flow.cli:app"
 

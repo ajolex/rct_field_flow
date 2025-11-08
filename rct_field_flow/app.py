@@ -164,15 +164,31 @@ def render_randomization() -> None:
                 value=default_config.get("treatment_column", "treatment"),
                 key="rand_treatment_col",
             )
-            method_options = ["simple", "stratified", "cluster"]
+            method_options = ["simple", "stratified", "cluster", "stratified + cluster"]
+            method_labels = {
+                "simple": "Simple Randomization",
+                "stratified": "Stratified Randomization",
+                "cluster": "Cluster Randomization",
+                "stratified + cluster": "Stratified + Cluster Randomization"
+            }
             default_method = default_config.get("method", "simple")
             method_index = method_options.index(default_method) if default_method in method_options else 0
             method = st.selectbox(
                 "Method",
                 method_options,
+                format_func=lambda x: method_labels[x],
                 index=method_index,
                 key="rand_method",
+                help="Choose randomization method. Stratified+Cluster randomizes clusters within strata."
             )
+            
+            with st.expander("ℹ️ Method explanations"):
+                st.markdown("""
+                - **Simple**: Each individual randomly assigned to treatment/control
+                - **Stratified**: Randomize separately within each stratum (e.g., by gender, region)
+                - **Cluster**: Randomize entire groups (e.g., villages, schools) - all members get same treatment
+                - **Stratified + Cluster**: Randomize clusters within strata (e.g., randomize villages within districts)
+                """)
             iterations = st.number_input(
                 "Iterations",
                 min_value=1,
@@ -210,17 +226,19 @@ def render_randomization() -> None:
             )
             strata: List[str] = []
             cluster_col: str | None = None
-            if method == "stratified":
+            if method in ["stratified", "stratified + cluster"]:
                 strata = st.multiselect(
-                    "Strata columns",
+                    "Strata columns (stratify randomization within groups)",
                     available_cols,
                     key="rand_strata",
+                    help="Randomization will be done separately within each stratum to ensure balance."
                 )
-            if method == "cluster":
+            if method in ["cluster", "stratified + cluster"]:
                 cluster_col = st.selectbox(
-                    "Cluster column",
+                    "Cluster column (randomize entire groups)",
                     available_cols,
                     key="rand_cluster",
+                    help="All units within the same cluster will receive the same treatment."
                 )
 
         st.markdown("#### Treatment arms")
@@ -261,14 +279,17 @@ def render_randomization() -> None:
         st.error("Random seed is required and must be a positive integer.")
         return
 
+    # Map "stratified + cluster" to "cluster" method with strata
+    actual_method = "cluster" if method == "stratified + cluster" else method
+
     rand_config = RandomizationConfig(
         id_column=id_column,
         treatment_column=treatment_column or "treatment",
-        method=method,  # type: ignore[arg-type]
+        method=actual_method,  # type: ignore[arg-type]
         arms=arms,
-        strata=strata,
+        strata=strata if strata else None,
         cluster=cluster_col,
-        balance_covariates=balance_covariates,
+        balance_covariates=balance_covariates if balance_covariates else None,
         iterations=int(iterations),
         seed=int(seed),
         use_existing_assignment=use_existing,
