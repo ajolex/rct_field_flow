@@ -69,9 +69,86 @@ class SurveyCTO:
         response.raise_for_status()
         return pd.DataFrame(response.json())
 
-    def upload_cases(self, csv_path: str, form_id: str):
-        url = f"{self.base_url}/cases/upload"
-        files = {"file": open(csv_path, "rb")}
-        data = {"form_id": form_id}
-        response = requests.post(url, files=files, auth=self.auth, data=data, timeout=120)
-        return response.json()
+    def upload_cases(
+        self, 
+        csv_path: str, 
+        form_id: str,
+        mode: str = "merge"
+    ) -> dict:
+        """
+        Upload cases to SurveyCTO case management.
+        
+        Args:
+            csv_path: Path to CSV file with cases
+            form_id: The form ID to upload cases for
+            mode: Upload mode - one of:
+                - "merge": Update existing cases and add new ones (default)
+                - "append": Only add new cases, skip existing ones
+                - "replace": Delete all existing cases and upload only these
+        
+        Returns:
+            API response dictionary with upload results
+            
+        Note:
+            SurveyCTO case management API endpoint: /api/v2/forms/data/caselist/{form_id}
+            The CSV must contain required columns: 'caseid', 'label', 'users', 'formids'
+            Additional columns can be included for preloading data.
+        """
+        if mode not in ["merge", "append", "replace"]:
+            raise ValueError(f"Invalid mode '{mode}'. Must be 'merge', 'append', or 'replace'")
+        
+        # SurveyCTO case management upload endpoint
+        url = f"{self.base_url}/forms/data/caselist/{form_id}"
+        
+        with open(csv_path, "rb") as f:
+            files = {"file": f}
+            # SurveyCTO uses 'mode' parameter for upload behavior
+            data = {"mode": mode}
+            response = requests.post(
+                url, 
+                files=files, 
+                auth=self.auth, 
+                data=data, 
+                timeout=120
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    def upload_cases_from_dataframe(
+        self,
+        df: pd.DataFrame,
+        form_id: str,
+        mode: str = "merge"
+    ) -> dict:
+        """
+        Upload cases directly from a DataFrame.
+        
+        Args:
+            df: DataFrame with case data (must have: caseid, label, users, formids)
+            form_id: The form ID to upload cases for
+            mode: Upload mode ('merge', 'append', or 'replace')
+            
+        Returns:
+            API response dictionary with upload results
+        """
+        import tempfile
+        import os
+        
+        # Validate required columns
+        required_cols = ["caseid", "label", "users", "formids"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise ValueError(f"DataFrame missing required columns: {missing_cols}")
+        
+        # Create temporary CSV file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, newline='') as f:
+            temp_path = f.name
+            df.to_csv(f, index=False)
+        
+        try:
+            result = self.upload_cases(temp_path, form_id, mode)
+            return result
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)

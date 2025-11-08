@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
+import requests
 import streamlit as st
 import yaml
 
@@ -1214,20 +1215,140 @@ def render_case_assignment() -> None:
                 st.markdown("#### Roster Preview")
                 st.dataframe(roster.head(20), use_container_width=True)
                 
-                # Download button
-                csv_buffer = io.StringIO()
-                roster.to_csv(csv_buffer, index=False)
-                st.download_button(
-                    "📥 Download Roster CSV",
-                    data=csv_buffer.getvalue(),
-                    file_name="surveycto_case_roster.csv",
-                    mime="text/csv",
-                )
+                # Store roster in session state for upload
+                st.session_state['generated_roster'] = roster
+                
+                # Download and Upload options
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    csv_buffer = io.StringIO()
+                    roster.to_csv(csv_buffer, index=False)
+                    st.download_button(
+                        "📥 Download Roster CSV",
+                        data=csv_buffer.getvalue(),
+                        file_name="surveycto_case_roster.csv",
+                        mime="text/csv",
+                    )
+                
+                with col2:
+                    if st.button("🚀 Upload to SurveyCTO", help="Upload cases via SurveyCTO API"):
+                        st.session_state['show_upload_form'] = True
                 
             except Exception as exc:
                 st.error(f"❌ Assignment failed: {exc}")
                 import traceback
                 st.code(traceback.format_exc())
+    
+    # Upload to SurveyCTO section
+    if st.session_state.get('show_upload_form') and st.session_state.get('generated_roster') is not None:
+        st.markdown("---")
+        st.markdown("### 🚀 Upload Cases to SurveyCTO")
+        
+        roster = st.session_state['generated_roster']
+        
+        # Validate roster has required columns
+        required_cols = ['id', 'label', 'users', 'formids']
+        missing_cols = [col for col in required_cols if col not in roster.columns]
+        
+        if missing_cols:
+            st.error(f"❌ Roster missing required columns: {missing_cols}")
+            st.info("Required columns: id (or caseid), label, users, formids")
+        else:
+            # Rename 'id' to 'caseid' if needed (SurveyCTO expects 'caseid')
+            upload_roster = roster.copy()
+            if 'id' in upload_roster.columns and 'caseid' not in upload_roster.columns:
+                upload_roster = upload_roster.rename(columns={'id': 'caseid'})
+            
+            with st.form("upload_cases_form"):
+                st.markdown("#### SurveyCTO Connection")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    scto_server = st.text_input(
+                        "SurveyCTO Server",
+                        placeholder="yourserver.surveycto.com",
+                        help="Your SurveyCTO server URL"
+                    )
+                    scto_username = st.text_input(
+                        "Username",
+                        help="SurveyCTO account username"
+                    )
+                
+                with col2:
+                    scto_form_id = st.text_input(
+                        "Form ID",
+                        help="The form ID to upload cases for"
+                    )
+                    scto_password = st.text_input(
+                        "Password",
+                        type="password",
+                        help="SurveyCTO account password"
+                    )
+                
+                st.markdown("#### Upload Options")
+                upload_mode = st.radio(
+                    "Upload mode",
+                    ["merge", "append", "replace"],
+                    help="""
+                    • merge: Update existing cases and add new ones (recommended)
+                    • append: Only add new cases, skip existing ones
+                    • replace: Delete ALL existing cases and upload only these
+                    """
+                )
+                
+                mode_descriptions = {
+                    "merge": "✅ **Merge** will update existing cases with matching IDs and add new cases.",
+                    "append": "➕ **Append** will only add new cases and skip any with existing IDs.",
+                    "replace": "⚠️ **Replace** will DELETE all existing cases and upload only these cases!"
+                }
+                st.info(mode_descriptions[upload_mode])
+                
+                if upload_mode == "replace":
+                    st.warning("⚠️ WARNING: Replace mode will permanently delete all existing cases. This cannot be undone!")
+                    confirm_replace = st.checkbox("I understand this will delete all existing cases")
+                else:
+                    confirm_replace = True
+                
+                upload_submitted = st.form_submit_button(
+                    f"Upload {len(upload_roster)} cases to SurveyCTO",
+                    type="primary" if upload_mode != "replace" else "secondary",
+                    disabled=not confirm_replace
+                )
+            
+            if upload_submitted:
+                if not all([scto_server, scto_username, scto_password, scto_form_id]):
+                    st.error("❌ Please fill in all SurveyCTO connection fields")
+                else:
+                    try:
+                        with st.spinner(f"Uploading {len(upload_roster)} cases to SurveyCTO..."):
+                            client = SurveyCTO(
+                                server=scto_server,
+                                username=scto_username,
+                                password=scto_password
+                            )
+                            
+                            result = client.upload_cases_from_dataframe(
+                                df=upload_roster,
+                                form_id=scto_form_id,
+                                mode=upload_mode
+                            )
+                            
+                            st.success("✅ Successfully uploaded cases to SurveyCTO!")
+                            st.json(result)
+                            
+                            # Clear the upload form
+                            if st.button("Close upload form"):
+                                st.session_state['show_upload_form'] = False
+                                st.rerun()
+                            
+                    except requests.exceptions.HTTPError as e:
+                        st.error(f"❌ Upload failed: {e}")
+                        st.error(f"Response: {e.response.text if hasattr(e, 'response') else 'No response details'}")
+                    except Exception as exc:
+                        st.error(f"❌ Upload failed: {exc}")
+                        import traceback
+                        st.code(traceback.format_exc())
 
 
 # ----------------------------------------------------------------------------- #

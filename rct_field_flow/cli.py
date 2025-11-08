@@ -267,25 +267,59 @@ def analyze(
 def upload_cases_cmd(
     csv: Path = typer.Option(..., exists=True, readable=True),
     config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    mode: str = typer.Option(
+        "merge",
+        help="Upload mode: 'merge' (update + add), 'append' (add only), 'replace' (delete all + upload)"
+    ),
 ) -> None:
-    """Upload a case CSV to SurveyCTO."""
+    """
+    Upload a case CSV to SurveyCTO case management.
+    
+    Modes:
+    - merge: Update existing cases and add new ones (default)
+    - append: Only add new cases, skip existing ones
+    - replace: Delete all existing cases and upload only these (DANGEROUS!)
+    """
+    if mode not in ["merge", "append", "replace"]:
+        typer.echo(f"Invalid mode '{mode}'. Must be 'merge', 'append', or 'replace'", err=True)
+        raise typer.Exit(code=1)
+    
+    if mode == "replace":
+        confirm = typer.confirm(
+            "⚠️  WARNING: Replace mode will DELETE ALL existing cases. Continue?",
+            default=False
+        )
+        if not confirm:
+            typer.echo("Upload cancelled.")
+            raise typer.Exit(code=0)
+    
     app_config = load_config(str(config_path))
     scto_cfg = app_config.get("surveycto", {})
     server = _resolve_placeholder(scto_cfg.get("server", ""))
     username = _resolve_placeholder(scto_cfg.get("username", ""))
     password = _resolve_placeholder(scto_cfg.get("password", ""))
     form_id = _resolve_placeholder(scto_cfg.get("form_id", ""))
-    if not all([server, username, password]):
-        typer.echo("Missing SurveyCTO credentials. Set environment variables or update config.", err=True)
+    
+    if not all([server, username, password, form_id]):
+        typer.echo("Missing SurveyCTO credentials or form_id. Set environment variables or update config.", err=True)
         raise typer.Exit(code=1)
-    response = upload_to_surveycto(
-        csv_path=str(csv),
-        server=server,
-        username=username,
-        password=password,
-        form_id=form_id,
-    )
-    typer.echo(f"SurveyCTO response: {response}")
+    
+    typer.echo(f"Uploading cases in '{mode}' mode to form '{form_id}'...")
+    
+    try:
+        response = upload_to_surveycto(
+            csv_path=str(csv),
+            server=server,
+            username=username,
+            password=password,
+            form_id=form_id,
+            mode=mode,
+        )
+        typer.echo("✅ Upload successful!")
+        typer.echo(f"SurveyCTO response: {response}")
+    except Exception as e:
+        typer.echo(f"❌ Upload failed: {e}", err=True)
+        raise typer.Exit(code=1)
 
 
 def main():
