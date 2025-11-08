@@ -846,9 +846,9 @@ def render_randomization() -> None:
         treatment_column=treatment_column or "treatment",
         method=actual_method,  # type: ignore[arg-type]
         arms=arms,
-        strata=strata if strata else None,
+        strata=strata if strata else [],
         cluster=cluster_col,
-        balance_covariates=balance_covariates if balance_covariates else None,
+        balance_covariates=balance_covariates if balance_covariates else [],
         iterations=int(iterations),
         seed=int(seed),
         use_existing_assignment=use_existing,
