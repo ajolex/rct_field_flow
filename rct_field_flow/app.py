@@ -583,7 +583,7 @@ def render_quality_checks() -> None:
         
         # Configuration tabs
         tab1, tab2, tab3, tab4 = st.tabs([
-            "🔢 Outlier Detection",
+            " Outlier Detection",
             "⏱️ Duration Checks",
             "👥 Duplicate Detection",
             "✅ Intervention Fidelity"
@@ -593,16 +593,196 @@ def render_quality_checks() -> None:
         with tab1:
             st.markdown("**Detect outliers in numeric variables using IQR or standard deviation methods**")
             
-            if not numeric_cols:
-                st.warning("⚠️ No numeric columns automatically detected. Select columns manually below.")
-                st.info("💡 **Tip:** Columns may need to be converted to numeric. The tool will attempt automatic conversion.")
+            # Reshape option
+            with st.expander("🔄 Reshape repeated measures (Wide to Long)", expanded=False):
+                st.info("📋 **Example:** `icm_hr_worked_7d_1`, `icm_hr_worked_7d_2`, `icm_hr_worked_7d_3` → `icm_hr_worked_7d`")
+                
+                enable_reshape = st.checkbox(
+                    "Enable data reshaping before outlier detection",
+                    value=False,
+                    help="Reshape wide data with repeated measures into long format",
+                    key="enable_reshape"
+                )
+                
+                if enable_reshape:
+                    st.markdown("**Identify variable patterns to reshape**")
+                    
+                    # Auto-detect potential reshape patterns
+                    import re
+                    potential_patterns = {}
+                    for col in all_cols:
+                        # Look for patterns like var_1, var_2, var_3 or var_a, var_b, var_c
+                        match = re.match(r'^(.+?)(_\d+|_[a-z])$', col)
+                        if match:
+                            base = match.group(1)
+                            if base not in potential_patterns:
+                                potential_patterns[base] = []
+                            potential_patterns[base].append(col)
+                    
+                    # Filter to patterns with multiple columns
+                    potential_patterns = {k: v for k, v in potential_patterns.items() if len(v) > 1}
+                    
+                    if potential_patterns:
+                        st.success(f"🔍 Found {len(potential_patterns)} potential reshape patterns")
+                        
+                        # Show detected patterns in an expander
+                        with st.expander("View detected patterns", expanded=False):
+                            for base, cols in list(potential_patterns.items())[:10]:
+                                st.write(f"**{base}**: {', '.join(cols[:5])}" + (f" ... (+{len(cols)-5} more)" if len(cols) > 5 else ""))
+                        
+                        # Let user select which patterns to reshape
+                        selected_patterns = st.multiselect(
+                            "Select variable patterns to reshape",
+                            options=list(potential_patterns.keys()),
+                            help="Choose base variable names to reshape from wide to long",
+                            key="reshape_patterns"
+                        )
+                    else:
+                        st.warning("No reshape patterns automatically detected. Enter pattern manually below.")
+                        selected_patterns = []
+                    
+                    # Manual pattern entry
+                    st.markdown("**Or enter pattern manually:**")
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        manual_pattern = st.text_input(
+                            "Variable pattern (use * as wildcard)",
+                            placeholder="e.g., icm_hr_worked_7d_*",
+                            help="Enter the pattern for columns to reshape. Use * for the varying part.",
+                            key="manual_pattern"
+                        )
+                    with col2:
+                        st.write("")  # Spacing
+                        st.write("")  # Spacing
+                        add_manual = st.button("Add pattern", key="add_manual_pattern")
+                    
+                    if manual_pattern and add_manual:
+                        # Convert wildcard to base name
+                        base_name = manual_pattern.replace("_*", "").replace("*", "")
+                        if base_name not in selected_patterns:
+                            selected_patterns.append(base_name)
+                            st.success(f"✅ Added pattern: {base_name}")
+                    
+                    # Key columns for reshaping
+                    if selected_patterns:
+                        st.markdown("**Specify ID columns (preserved during reshape)**")
+                        id_cols = st.multiselect(
+                            "ID columns",
+                            all_cols,
+                            default=[col for col in ['caseid', 'id', 'respondent_id', 'KEY'] if col in all_cols],
+                            help="Columns that uniquely identify each observation (e.g., caseid, enumerator)",
+                            key="reshape_id_cols"
+                        )
+                        
+                        if id_cols:
+                            if st.button("🔄 Apply Reshape", type="primary", key="apply_reshape_btn"):
+                                with st.spinner("Reshaping data..."):
+                                    try:
+                                        reshaped_dfs = []
+                                        
+                                        for pattern in selected_patterns:
+                                            # Find all columns matching this pattern
+                                            matching_cols = [col for col in all_cols if col.startswith(pattern + "_")]
+                                            
+                                            if len(matching_cols) > 1:
+                                                # Get columns to keep (id columns + matching columns)
+                                                cols_to_keep = id_cols + matching_cols
+                                                subset = df[cols_to_keep].copy()
+                                                
+                                                # Reshape using melt to convert wide to long
+                                                melted = subset.melt(
+                                                    id_vars=id_cols,
+                                                    value_vars=matching_cols,
+                                                    var_name=f'{pattern}_index',
+                                                    value_name=pattern
+                                                )
+                                                
+                                                # Drop rows with missing values
+                                                melted = melted.dropna(subset=[pattern])
+                                                
+                                                reshaped_dfs.append(melted)
+                                                
+                                                st.success(f"✅ Reshaped {len(matching_cols)} columns for '{pattern}' → {len(melted)} observations")
+                                        
+                                        if reshaped_dfs:
+                                            # Merge all reshaped dataframes
+                                            if len(reshaped_dfs) == 1:
+                                                reshaped_data = reshaped_dfs[0]
+                                            else:
+                                                # Merge multiple patterns
+                                                reshaped_data = reshaped_dfs[0]
+                                                for i in range(1, len(reshaped_dfs)):
+                                                    reshaped_data = reshaped_data.merge(
+                                                        reshaped_dfs[i],
+                                                        on=id_cols,
+                                                        how='outer'
+                                                    )
+                                            
+                                            # Store in session state
+                                            st.session_state['reshaped_data'] = reshaped_data
+                                            st.session_state['reshaped_patterns'] = selected_patterns
+                                            
+                                            st.success(f"📊 Reshaped dataset: {len(reshaped_data)} rows × {len(reshaped_data.columns)} columns")
+                                            
+                                            with st.expander("Preview reshaped data", expanded=True):
+                                                st.dataframe(reshaped_data.head(20), use_container_width=True)
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error during reshaping: {e}")
+                                        if 'reshaped_data' in st.session_state:
+                                            del st.session_state['reshaped_data']
+                        else:
+                            st.warning("⚠️ Please select at least one ID column for reshaping")
+            
+            st.divider()
+            
+            # Check if we have reshaped data
+            if 'reshaped_data' in st.session_state:
+                reshaped_data = st.session_state['reshaped_data']
+                reshaped_patterns = st.session_state.get('reshaped_patterns', [])
+                
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.info(f"✨ **Using reshaped data** ({len(reshaped_data)} observations). Reshaped variables: {', '.join(reshaped_patterns)}")
+                with col2:
+                    if st.button("🔄 Reset", help="Clear reshape and use original data", key="clear_reshape_btn"):
+                        del st.session_state['reshaped_data']
+                        if 'reshaped_patterns' in st.session_state:
+                            del st.session_state['reshaped_patterns']
+                        st.rerun()
+                
+                # Get columns from reshaped data
+                available_numeric_cols = reshaped_data.select_dtypes(include=['number']).columns.tolist()
+                available_all_cols = reshaped_data.columns.tolist()
+                
+                # Highlight reshaped variables
+                reshaped_var_options = []
+                other_var_options = []
+                for col in (available_all_cols if not available_numeric_cols else available_numeric_cols):
+                    if col in reshaped_patterns:
+                        reshaped_var_options.append(f"📊 {col} (reshaped)")
+                    else:
+                        other_var_options.append(col)
+                
+                # Combine with reshaped vars first
+                outlier_var_options = reshaped_var_options + other_var_options
+            else:
+                # Use original data
+                if not numeric_cols:
+                    st.warning("⚠️ No numeric columns automatically detected. Select columns manually below.")
+                    st.info("💡 **Tip:** Columns may need to be converted to numeric. The tool will attempt automatic conversion.")
+                
+                outlier_var_options = all_cols if not numeric_cols else numeric_cols
             
             outlier_vars = st.multiselect(
                 "Select variables to check for outliers",
-                options=all_cols if not numeric_cols else numeric_cols,
+                options=outlier_var_options,
                 help="Choose variables to analyze. Must contain numeric values.",
                 key="outlier_vars"
             )
+            
+            # Clean up outlier_vars to remove formatting
+            outlier_vars = [var.replace("📊 ", "").replace(" (reshaped)", "") for var in outlier_vars]
             
             col1, col2 = st.columns(2)
             
@@ -729,26 +909,38 @@ def render_quality_checks() -> None:
         
         # Run interactive quality checks
         if run_checks:
+            # Use reshaped data if available, otherwise use original
+            if 'reshaped_data' in st.session_state:
+                working_df = st.session_state['reshaped_data'].copy()
+                st.info(f"✨ Running checks on reshaped data ({len(working_df)} observations)")
+            else:
+                working_df = df.copy()
+            
             flagged_records = []
             
             # 1. Outlier detection
             if outlier_vars:
                 with st.spinner("Detecting outliers..."):
                     for var in outlier_vars:
+                        # Check if variable exists in working dataframe
+                        if var not in working_df.columns:
+                            st.warning(f"⚠️ Column '{var}' not found in dataset. Skipping...")
+                            continue
+                        
                         # Try to convert to numeric
                         try:
-                            df[var] = pd.to_numeric(df[var], errors='coerce')
+                            working_df[var] = pd.to_numeric(working_df[var], errors='coerce')
                         except Exception:
                             st.warning(f"⚠️ Could not convert '{var}' to numeric. Skipping...")
                             continue
                         
                         # Check if we have numeric values after conversion
-                        if not pd.api.types.is_numeric_dtype(df[var]):
+                        if not pd.api.types.is_numeric_dtype(working_df[var]):
                             st.warning(f"⚠️ Column '{var}' does not contain numeric values. Skipping...")
                             continue
                         
                         if group_by_outlier != "None":
-                            for group_val, group_data in df.groupby(group_by_outlier):
+                            for group_val, group_data in working_df.groupby(group_by_outlier):
                                 values = group_data[var].dropna()
                                 if len(values) > 3:
                                     if outlier_method == "IQR":
@@ -773,7 +965,7 @@ def render_quality_checks() -> None:
                                             'record_index': idx
                                         })
                         else:
-                            values = df[var].dropna()
+                            values = working_df[var].dropna()
                             if len(values) > 3:
                                 if outlier_method == "IQR":
                                     q1, q3 = values.quantile([0.25, 0.75])
@@ -785,7 +977,7 @@ def render_quality_checks() -> None:
                                     lower = mean - outlier_threshold * std
                                     upper = mean + outlier_threshold * std
                                 
-                                outliers = df[(df[var] < lower) | (df[var] > upper)]
+                                outliers = working_df[(working_df[var] < lower) | (working_df[var] > upper)]
                                 for idx, row in outliers.iterrows():
                                     flagged_records.append({
                                         'check_type': 'outlier',
@@ -800,18 +992,22 @@ def render_quality_checks() -> None:
             # 2. Duration checks
             if duration_col != "None":
                 with st.spinner("Checking survey duration..."):
+                    if duration_col not in working_df.columns:
+                        st.error(f"❌ Column '{duration_col}' not found in dataset.")
+                        st.stop()
+                    
                     # Try to convert to numeric
                     try:
-                        df[duration_col] = pd.to_numeric(df[duration_col], errors='coerce')
+                        working_df[duration_col] = pd.to_numeric(working_df[duration_col], errors='coerce')
                     except Exception:
                         st.error(f"❌ Could not convert '{duration_col}' to numeric. Please select a numeric column.")
                         st.stop()
                     
-                    if not pd.api.types.is_numeric_dtype(df[duration_col]):
+                    if not pd.api.types.is_numeric_dtype(working_df[duration_col]):
                         st.error(f"❌ Column '{duration_col}' does not contain numeric values. Please select a different column.")
                         st.stop()
                     
-                    durations = df[duration_col].copy()
+                    durations = working_df[duration_col].copy()
                     
                     if duration_unit == "Minutes":
                         durations = durations * 60
@@ -823,8 +1019,8 @@ def render_quality_checks() -> None:
                         lower_thresh = min_duration if duration_unit == "Seconds" else min_duration * 60
                         upper_thresh = max_duration if duration_unit == "Seconds" else max_duration * 60
                     
-                    fast_surveys = df[df[duration_col] < lower_thresh]
-                    slow_surveys = df[df[duration_col] > upper_thresh]
+                    fast_surveys = working_df[working_df[duration_col] < lower_thresh]
+                    slow_surveys = working_df[working_df[duration_col] > upper_thresh]
                     
                     for idx, row in fast_surveys.iterrows():
                         flagged_records.append({
@@ -847,7 +1043,7 @@ def render_quality_checks() -> None:
             # 3. Duplicate detection
             if duplicate_keys:
                 with st.spinner("Detecting duplicates..."):
-                    duplicates = df[df.duplicated(subset=duplicate_keys, keep=False)]
+                    duplicates = working_df[working_df.duplicated(subset=duplicate_keys, keep=False)]
                     
                     for idx, row in duplicates.iterrows():
                         key_vals = {k: row[k] for k in duplicate_keys}
@@ -860,7 +1056,7 @@ def render_quality_checks() -> None:
             # 4. Treatment fidelity
             if treatment_col != "None":
                 with st.spinner("Checking intervention fidelity..."):
-                    invalid_treatments = df[~df[treatment_col].isin(expected_vals)]
+                    invalid_treatments = working_df[~working_df[treatment_col].isin(expected_vals)]
                     
                     for idx, row in invalid_treatments.iterrows():
                         flagged_records.append({
@@ -878,9 +1074,9 @@ def render_quality_checks() -> None:
                 flagged_df = pd.DataFrame(flagged_records)
                 
                 # Group results if requested
-                if group_results_by != "None":
+                if group_results_by != "None" and group_results_by in working_df.columns:
                     flagged_df = flagged_df.merge(
-                        df[[group_results_by]],
+                        working_df[[group_results_by]],
                         left_on='record_index',
                         right_index=True,
                         how='left'
