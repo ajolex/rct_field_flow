@@ -1,5 +1,5 @@
 pandas>=2.0
-numpy>=1.24
+numpy>=2.0,<3.0
 streamlit>=1.28
 plotly>=5.17
 requests>=2.31
@@ -7,6 +7,6 @@ jinja2>=3.1
 weasyprint>=62.0
 typer[all]>=0.9
 statsmodels>=0.14
-linearmodels>=5.3
+linearmodels>=7.0
 scipy>=1.11
 python-dotenv>=1.0

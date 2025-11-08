@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Dict
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-import weasyprint
 
 
 @dataclass
@@ -51,6 +50,15 @@ def generate_weekly_report(context: Dict, config: Dict | None = None) -> Dict[st
 
     if cfg.render_pdf:
         pdf_path = output_dir / f"{cfg.output_filename}.pdf"
+        # Import weasyprint lazily so HTML-only rendering works without native deps
+        try:
+            import weasyprint  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(
+                "WeasyPrint is not available or its native dependencies are missing. "
+                "On Windows, install GTK/Pango as documented: "
+                "https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows"
+            ) from e
         weasyprint.HTML(string=html).write_pdf(str(pdf_path))
         outputs["pdf"] = pdf_path
 

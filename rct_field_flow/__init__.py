@@ -12,11 +12,12 @@ from .randomize import (
 # Optional import - report module requires weasyprint with native dependencies
 try:
     from .report import generate_weekly_report
-except ImportError as e:
+except (ImportError, OSError) as e:
+    # Catch OSError raised by cffi when GTK/Pango DLLs (eg. libgobject-2.0-0.dll) are missing on Windows
     generate_weekly_report = None
     import warnings
     warnings.warn(
-        f"Report module unavailable: {e}. Install GTK libraries for PDF generation: "
+        f"Report module unavailable: {e}. Install GTK/Pango libraries for PDF generation: "
         "https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows",
         ImportWarning
     )

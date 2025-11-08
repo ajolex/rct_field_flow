@@ -14,7 +14,6 @@ from .assign_cases import assign_cases
 from .backcheck import sample_backchecks
 from .flag_quality import flag_all
 from .randomize import RandomizationConfig, Randomizer, TreatmentArm
-from .report import generate_weekly_report
 from .upload_cases import upload_to_surveycto
 
 app = typer.Typer(help="RCT Field Flow CLI")
@@ -55,6 +54,11 @@ def build_randomization_config(cfg: dict) -> RandomizationConfig:
             TreatmentArm("treatment", 0.5),
             TreatmentArm("control", 0.5),
         ]
+    if "seed" not in cfg or cfg.get("seed") in (None, "", 0):
+        raise ValueError("Randomization config must include a positive integer 'seed' for reproducibility.")
+    seed = int(cfg["seed"])
+    if seed <= 0:
+        raise ValueError("Randomization seed must be a positive integer.")
     return RandomizationConfig(
         id_column=cfg["id_column"],
         treatment_column=cfg.get("treatment_column", "treatment"),
@@ -64,7 +68,7 @@ def build_randomization_config(cfg: dict) -> RandomizationConfig:
         cluster=cfg.get("cluster"),
         balance_covariates=cfg.get("balance_covariates", []),
         iterations=cfg.get("iterations", 1),
-        seed=cfg.get("seed"),
+        seed=seed,
         use_existing_assignment=cfg.get("use_existing_assignment", True),
     )
 
@@ -221,7 +225,19 @@ def report(
         "target_n": target,
         "projected_end": projected_end,
     }
-    outputs = generate_weekly_report(context, {**app_config.get("reports", {}), "output_dir": str(output_dir)})
+    # Import lazily so other commands work without WeasyPrint/GTK installed
+    try:
+        from .report import generate_weekly_report
+    except Exception as e:
+        raise typer.BadParameter(
+            "Report generation requires WeasyPrint and GTK/Pango on Windows. "
+            "If you don't need PDFs, set reports.render_pdf=false in your config. "
+            f"Detail: {e}"
+        )
+    outputs = generate_weekly_report(
+        context,
+        {**app_config.get("reports", {}), "output_dir": str(output_dir)}
+    )
     for kind, path in outputs.items():
         typer.echo(f"{kind.upper()} report: {path}")
 

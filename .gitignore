@@ -8,3 +8,7 @@ data/
 *.csv
 # keep one small, synthetic example baseline in version control
 !examples/sample_baseline.csv
+
+# Fix scripts
+*fix.py
+*_fix.py

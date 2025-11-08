@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import requests
+from .surveycto import _normalize_server
 
 
 def upload_to_surveycto(
@@ -11,7 +12,8 @@ def upload_to_surveycto(
     form_id: str | None = None,
 ) -> dict:
     """Upload a case roster to SurveyCTO case management via the HTTP API."""
-    url = f"https://{server}.surveycto.com/api/v2/cases/upload"
+    host = _normalize_server(server)
+    url = f"https://{host}/api/v2/cases/upload"
     data = {"form_id": form_id} if form_id else {}
     auth = (username, password)
     with open(csv_path, "rb") as handle:

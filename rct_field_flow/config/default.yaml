@@ -49,7 +49,7 @@ surveycto:
 
 monitoring:
   submissions_path: "examples/dummy_submissions.csv"
-  submission_timestamp_column: "submission_date"
+  submission_timestamp_column: "SubmissionDate"
   enumerator_column: "enumerator"
   treatment_column: "treatment"
   community_column: "community"
@@ -74,6 +74,8 @@ backcheck:
 
 reports:
   weekly_template: "templates/weekly_report.html"
+  render_pdf: false
+  render_html: true
 
 analysis:
   outcome_columns: ["income", "consumption"]
