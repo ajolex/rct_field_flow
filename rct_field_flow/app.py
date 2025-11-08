@@ -971,6 +971,7 @@ def render_case_assignment() -> None:
     st.title("📋 Case Assignment")
     st.markdown("Assign interview cases to SurveyCTO teams and produce upload-ready rosters.")
 
+    # Data source selection
     df = st.session_state.case_data
     upload = st.file_uploader("Upload randomized data (CSV)", type="csv", key="case_upload")
     if upload:
@@ -979,38 +980,254 @@ def render_case_assignment() -> None:
         st.success(f"Loaded {len(df):,} rows for case assignment.")
 
     if df is None:
-        st.info("Provide randomized data via the previous tab or upload a CSV here.")
+        st.info("💡 Provide randomized data via the Randomization tab or upload a CSV here.")
         return
 
+    st.markdown("#### 📊 Data Preview")
     st.dataframe(df.head(10), use_container_width=True)
-
-    default_case_cfg = load_default_config().get("case_assignment", {})
-    config_text = st.text_area(
-        "Case assignment configuration (YAML)",
-        value=yaml_dump(default_case_cfg),
-        height=260,
-        key="case_config_text",
+    
+    available_cols = df.columns.tolist()
+    
+    # Configuration mode selector
+    st.markdown("---")
+    config_mode = st.radio(
+        "Configuration mode",
+        ["Interactive (Recommended)", "YAML (Advanced)"],
+        key="case_config_mode",
+        help="Interactive mode provides forms for easy configuration. YAML mode is for advanced users."
     )
-
-    if st.button("Generate SurveyCTO roster", type="primary"):
-        try:
-            config = yaml_load(config_text)
-            roster = assign_cases(df, config)
-        except Exception as exc:
-            st.error(f"Assignment failed: {exc}")
-            return
-
-        st.success(f"Generated roster with {len(roster):,} cases.")
-        st.dataframe(roster.head(20), use_container_width=True)
-
-        csv_buffer = io.StringIO()
-        roster.to_csv(csv_buffer, index=False)
-        st.download_button(
-            "Download roster CSV",
-            data=csv_buffer.getvalue(),
-            file_name="surveycto_case_roster.csv",
-            mime="text/csv",
+    
+    if config_mode == "YAML (Advanced)":
+        st.markdown("#### ⚙️ Configuration (YAML)")
+        default_case_cfg = load_default_config().get("case_assignment", {})
+        config_text = st.text_area(
+            "Case assignment configuration",
+            value=yaml_dump(default_case_cfg),
+            height=400,
+            key="case_config_text",
         )
+
+        if st.button("Generate SurveyCTO roster", type="primary"):
+            try:
+                config = yaml_load(config_text)
+                roster = assign_cases(df, config)
+            except Exception as exc:
+                st.error(f"Assignment failed: {exc}")
+                return
+
+            st.success(f"✅ Generated roster with {len(roster):,} cases.")
+            st.dataframe(roster.head(20), use_container_width=True)
+
+            csv_buffer = io.StringIO()
+            roster.to_csv(csv_buffer, index=False)
+            st.download_button(
+                "Download roster CSV",
+                data=csv_buffer.getvalue(),
+                file_name="surveycto_case_roster.csv",
+                mime="text/csv",
+            )
+    else:
+        # Interactive configuration form
+        st.markdown("#### ⚙️ Case Assignment Configuration")
+        
+        with st.form("case_assignment_form"):
+            st.markdown("##### Basic Settings")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                case_id_column = st.selectbox(
+                    "Case ID column",
+                    available_cols,
+                    index=available_cols.index("participant_id") if "participant_id" in available_cols else 0,
+                    key="case_id_column",
+                    help="Column containing unique case identifiers"
+                )
+                
+                treatment_column = st.selectbox(
+                    "Treatment column",
+                    available_cols,
+                    index=available_cols.index("treatment") if "treatment" in available_cols else 0,
+                    key="case_treatment_column",
+                    help="Column containing treatment assignment"
+                )
+            
+            with col2:
+                team_column = st.selectbox(
+                    "Team column (optional)",
+                    ["None"] + available_cols,
+                    key="case_team_column",
+                    help="Existing column with team assignments (if any)"
+                )
+                team_column = None if team_column == "None" else team_column
+                
+                default_team = st.text_input(
+                    "Default team name",
+                    value="unassigned",
+                    key="case_default_team",
+                    help="Team name for cases not matching any rule"
+                )
+            
+            # Label template
+            st.markdown("##### Case Label Template")
+            label_template = st.text_input(
+                "Label template",
+                value="{" + case_id_column + "}",
+                key="case_label_template",
+                help=f"Use {{column_name}} to reference columns. Example: {{{case_id_column}}} - {{community}}"
+            )
+            
+            # Team rules
+            st.markdown("##### Team Assignment Rules")
+            st.markdown("Define rules to automatically assign cases to teams based on data values.")
+            
+            num_rules = st.number_input(
+                "Number of team rules",
+                min_value=0,
+                max_value=10,
+                value=0,
+                step=1,
+                key="case_num_rules",
+                help="Rules are evaluated in order. First matching rule wins."
+            )
+            
+            team_rules = []
+            for i in range(int(num_rules)):
+                st.markdown(f"**Rule {i+1}**")
+                rule_col1, rule_col2, rule_col3 = st.columns([2, 2, 1])
+                
+                with rule_col1:
+                    rule_name = st.text_input(
+                        f"Team name for rule {i+1}",
+                        key=f"rule_name_{i}",
+                        placeholder=f"team_{chr(97+i)}"
+                    )
+                
+                with rule_col2:
+                    match_column = st.selectbox(
+                        "Match on column",
+                        available_cols,
+                        key=f"rule_match_col_{i}"
+                    )
+                
+                with rule_col3:
+                    # Show unique values for the selected column
+                    unique_vals = df[match_column].dropna().unique().tolist()
+                    
+                match_values = st.multiselect(
+                    "Match these values",
+                    unique_vals,
+                    key=f"rule_match_vals_{i}",
+                    help=f"Cases with {match_column} in this list will be assigned to {rule_name or 'this team'}"
+                )
+                
+                if rule_name and match_values:
+                    team_rules.append({
+                        "name": rule_name,
+                        "match": {match_column: match_values}
+                    })
+            
+            # Form IDs by treatment arm
+            st.markdown("##### SurveyCTO Form IDs")
+            st.markdown("Specify which form(s) each treatment arm should use.")
+            
+            treatment_arms = df[treatment_column].dropna().unique().tolist()
+            form_ids = {}
+            
+            form_col1, form_col2 = st.columns(2)
+            with form_col1:
+                default_forms = st.text_input(
+                    "Default form ID(s)",
+                    value="follow_up",
+                    key="case_default_forms",
+                    help="Comma-separated form IDs for cases not matching specific treatments"
+                )
+                form_ids["default"] = [f.strip() for f in default_forms.split(",") if f.strip()]
+            
+            with form_col2:
+                form_separator = st.text_input(
+                    "Form ID separator",
+                    value=",",
+                    key="case_form_separator",
+                    help="Character to separate multiple form IDs"
+                )
+            
+            for arm in treatment_arms:
+                arm_forms = st.text_input(
+                    f"Form ID(s) for '{arm}'",
+                    key=f"case_forms_{arm}",
+                    placeholder="leave blank to use default",
+                    help=f"Comma-separated form IDs for {arm} cases"
+                )
+                if arm_forms:
+                    form_ids[str(arm)] = [f.strip() for f in arm_forms.split(",") if f.strip()]
+            
+            # Additional columns
+            st.markdown("##### Additional Roster Columns")
+            additional_columns = st.multiselect(
+                "Include these columns in the roster",
+                [col for col in available_cols if col not in [case_id_column, treatment_column]],
+                key="case_additional_columns",
+                help="Extra columns to include in the SurveyCTO case roster"
+            )
+            
+            # Submit button
+            submitted = st.form_submit_button("Generate SurveyCTO Roster", type="primary")
+        
+        if submitted:
+            # Build configuration
+            config = {
+                "case_id_column": case_id_column,
+                "label_template": label_template,
+                "team_column": team_column,
+                "default_team": default_team,
+                "team_rules": team_rules,
+                "form_ids": form_ids,
+                "additional_columns": additional_columns,
+                "treatment_column": treatment_column,
+                "form_separator": form_separator
+            }
+            
+            try:
+                roster = assign_cases(df, config)
+                
+                st.success(f"✅ Generated roster with {len(roster):,} cases!")
+                
+                # Show team distribution
+                st.markdown("#### Team Distribution")
+                team_counts = roster['users'].value_counts()
+                team_dist = pd.DataFrame({
+                    'Team': team_counts.index,
+                    'Cases': team_counts.values,
+                    'Percentage': (team_counts.values / len(roster) * 100).round(1).astype(str) + '%'
+                })
+                st.dataframe(team_dist, use_container_width=True, hide_index=True)
+                
+                # Show form distribution
+                st.markdown("#### Form Assignment Distribution")
+                form_counts = roster['formids'].value_counts()
+                form_dist = pd.DataFrame({
+                    'Form ID(s)': form_counts.index,
+                    'Cases': form_counts.values
+                })
+                st.dataframe(form_dist, use_container_width=True, hide_index=True)
+                
+                st.markdown("#### Roster Preview")
+                st.dataframe(roster.head(20), use_container_width=True)
+                
+                # Download button
+                csv_buffer = io.StringIO()
+                roster.to_csv(csv_buffer, index=False)
+                st.download_button(
+                    "📥 Download Roster CSV",
+                    data=csv_buffer.getvalue(),
+                    file_name="surveycto_case_roster.csv",
+                    mime="text/csv",
+                )
+                
+            except Exception as exc:
+                st.error(f"❌ Assignment failed: {exc}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 # ----------------------------------------------------------------------------- #
