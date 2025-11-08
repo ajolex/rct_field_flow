@@ -1,10 +1,10 @@
 # RCT Field Flow
 
-Python toolkit for managing field operations in randomized controlled trials—covering randomization, SurveyCTO case assignment, live monitoring, quality control, backchecks, and one-click analysis.
+A Python based toolkit for managing the entire field operations in randomized controlled trials survey projects—covering randomization, SurveyCTO case assignment, live monitoring, quality control, backchecks, and one-click analysis.
 
 ## Workflow Overview
 
-- **Randomize participants** using four methods: simple, stratified, cluster, or combined stratified+cluster designs with optional rerandomization (up to 10,000 iterations). A positive integer seed is required so results are fully reproducible. Existing treatment assignments (e.g., follow-up rounds) are ingested for balance checks without reassigning. See [Randomization Guide](docs/RANDOMIZATION.md) for details.
+- **Randomize participants** using four methods: simple, stratified, cluster, or combined stratified+cluster designs with optional rerandomization (up to 10,000 iterations) to pick a random assigment that achieves the most balance on the selected covariates. A positive integer seed is required so results are fully reproducible. Existing treatment assignments (e.g., follow-up rounds) are retained for balance checks without reassigning. See [Randomization Guide](docs/RANDOMIZATION.md) for details.
 - **Assign SurveyCTO cases** to enumerator teams based on configurable rules (community, strata, quotas) and produce upload-ready CSVs.
 - **Upload cases** directly to SurveyCTO via the API.
 - **Monitor progress** in Streamlit with productivity tables, progress-by-arm, per-arm targets/completion, and projected end dates that use configurable workdays.
@@ -69,12 +69,14 @@ No configuration file editing required—the UI provides forms for all settings.
 ### Configuration Methods
 
 **Interactive UI (Recommended)**: Configure all settings through the web interface with no YAML editing required. The UI provides:
+
 - Form-based input with validation
 - Real-time preview of settings
 - Helpful tooltips and examples
 - Automatic error checking
 
 **YAML Configuration (Advanced)**: For power users and automation pipelines:
+
 - `randomization`: id column, arms & proportions, method (`simple`, `stratified`, `cluster`, `stratified_cluster`), strata, cluster column, covariates for balance checks, iteration count, and base seed.
 - `case_assignment`: case ID, label template, team rules, form IDs, and additional columns for the SurveyCTO case upload.
 - `monitoring`: column names for submissions, rest days, and work-week assumptions used in projections.
@@ -116,17 +118,18 @@ The dashboard automatically pulls from SurveyCTO when credentials are available;
 
 ### Key Features
 
-- Enumerator Productivity table  
-  - Columns: total submissions per enumerator, running average duration (minutes, auto-converts from seconds), and one column per submission date with that day’s counts.  
-  - Summary rows: “Avg per Enumerator” (green, two-decimal averages across enumerators) and “Total” (integer counts per day).  
-  - Optional supervisor roll-ups (yellow “SUP: …” rows) plus per-enumerator detail lines.  
-  - Styling highlights: average-duration column in blue, <60 minute averages highlighted red.  
-  - CSV export button: “Download Productivity CSV”.
+- Enumerator Productivity table
 
-- Targets and Timeline panel  
-  - Manually enter per-arm targets; the dashboard computes completed counts, %age completed, and a “Total” summary row.  
-  - Adjustable timeline inputs: start date, today’s date, and a weekday multiselect to exclude rest days (defaults Mon–Sat, i.e., Sunday off).  
-  - Outputs: field collection days, projected end date (business-day aware), average productivity per day, days/weeks remaining.  
+  - Columns: total submissions per enumerator, running average duration (minutes, auto-converts from seconds), and one column per submission date with that day’s counts.
+  - Summary rows: “Avg per Enumerator” (green, two-decimal averages across enumerators) and “Total” (integer counts per day).
+  - Optional supervisor roll-ups (yellow “SUP: …” rows) plus per-enumerator detail lines.
+  - Styling highlights: average-duration column in blue, <60 minute averages highlighted red.
+  - CSV export button: “Download Productivity CSV”.
+- Targets and Timeline panel
+
+  - Manually enter per-arm targets; the dashboard computes completed counts, %age completed, and a “Total” summary row.
+  - Adjustable timeline inputs: start date, today’s date, and a weekday multiselect to exclude rest days (defaults Mon–Sat, i.e., Sunday off).
+  - Outputs: field collection days, projected end date (business-day aware), average productivity per day, days/weeks remaining.
   - CSV export button: “Download Targets CSV”.
 
 ### Tips
@@ -141,12 +144,14 @@ The dashboard automatically pulls from SurveyCTO when credentials are available;
 For complete transparency and reproducibility, RCT Field Flow automatically generates downloadable code (both Python and Stata) that exactly replicates your randomization with all parameters embedded.
 
 **Why This Matters:**
+
 - **Transparency**: Share the exact randomization procedure with Principal Investigators, collaborators, and reviewers
 - **Reproducibility**: Anyone can verify and replicate your randomization using the provided code
 - **Documentation**: Keep a permanent record of the exact randomization method and parameters used
 - **Compliance**: Meet pre-registration and reporting requirements that mandate sharing randomization code
 
 **What's Included:**
+
 - Complete Python script using the `rct_field_flow` package
 - Equivalent Stata do-file with identical logic
 - All your specific parameters embedded:
@@ -161,6 +166,7 @@ For complete transparency and reproducibility, RCT Field Flow automatically gene
 - Instructions for running the code
 
 **How to Use:**
+
 1. Configure and run your randomization in the UI
 2. After successful randomization, click "📄 Download Python Code" or "📄 Download Stata Code"
 3. Share the code file with collaborators or include in your project repository
@@ -169,6 +175,7 @@ For complete transparency and reproducibility, RCT Field Flow automatically gene
 **Example Output:**
 
 *Python code includes:*
+
 ```python
 config = RandomizationConfig(
     id_column="caseid",
@@ -186,6 +193,7 @@ config = RandomizationConfig(
 ```
 
 *Stata code includes:*
+
 ```stata
 set seed 12345
 bysort region gender: gen double random_draw = runiform()
@@ -202,6 +210,7 @@ The quality checks module provides comprehensive field data validation with an i
 ### Key Features
 
 **🔄 Data Reshaping for Repeated Measures**
+
 - Automatically detect and reshape wide-format repeated measures (e.g., `icm_hr_worked_7d_1`, `icm_hr_worked_7d_2`, `icm_hr_worked_7d_3`)
 - Convert to long format (`icm_hr_worked_7d`) for proper analysis
 - Handles SurveyCTO repeat groups seamlessly
@@ -209,6 +218,7 @@ The quality checks module provides comprehensive field data validation with an i
 - Preview reshaped data before running checks
 
 **🔢 Outlier Detection**
+
 - Two methods: IQR (Interquartile Range) or Standard Deviation
 - Adjustable thresholds (IQR: 0.5-3.0 multiplier, SD: 1.0-5.0 standard deviations)
 - Group-based detection (analyze by enumerator, treatment, date, etc.)
@@ -216,6 +226,7 @@ The quality checks module provides comprehensive field data validation with an i
 - Highlights reshaped variables in selection dropdown
 
 **⏱️ Duration Checks**
+
 - Flag surveys that are too fast or too slow
 - Two detection methods:
   - Quantile-based: Flag fastest/slowest X percentile
@@ -224,11 +235,13 @@ The quality checks module provides comprehensive field data validation with an i
 - Useful for identifying speeders or incomplete surveys
 
 **👥 Duplicate Detection**
+
 - Identify duplicates by key columns (caseid, enumerator, etc.)
 - Optional GPS-based duplicate detection with proximity threshold
 - Helpful for catching data entry errors or fraudulent submissions
 
 **✅ Intervention Fidelity**
+
 - Verify treatment assignments match expected values
 - Flag unexpected treatment codes
 - Ensure intervention delivery as designed
@@ -236,14 +249,14 @@ The quality checks module provides comprehensive field data validation with an i
 ### Usage Workflow
 
 1. **Load Data**: Choose from project config, CSV upload, or SurveyCTO API
-2. **Configure Reshape** (if needed): 
+2. **Configure Reshape** (if needed):
    - Expand "Reshape repeated measures" section
    - Select patterns or enter manually (e.g., `icm_hr_worked_7d_*`)
    - Choose ID columns
    - Click "Apply Reshape"
 3. **Configure Checks**: Use tabs to set up outlier detection, duration checks, etc.
 4. **Run Checks**: Click "Run Quality Checks" to analyze data
-5. **Review Results**: 
+5. **Review Results**:
    - See summary statistics by check type
    - Group results by enumerator, date, or custom variables
    - View detailed flagged cases
@@ -252,12 +265,14 @@ The quality checks module provides comprehensive field data validation with an i
 ### Configuration Modes
 
 **Interactive Mode (Recommended)**
+
 - No YAML editing required
 - Visual configuration with forms and dropdowns
 - Real-time validation and helpful tooltips
 - Preview results before downloading
 
 **YAML Mode (Advanced)**
+
 - For automation pipelines and batch processing
 - Backward compatible with existing configurations
 - Suitable for scheduled quality checks
@@ -276,6 +291,6 @@ The `examples/` directory contains miniature baseline and submission datasets pl
 
 ## Documentation
 
-- **[UI Quick Start Guide](docs/UI_GUIDE.md)** – Step-by-step guide for the integrated web interface  
-- **[Randomization Guide](docs/RANDOMIZATION.md)** – Detailed randomization methodology and best practices  
+- **[UI Quick Start Guide](docs/UI_GUIDE.md)** – Step-by-step guide for the integrated web interface
+- **[Randomization Guide](docs/RANDOMIZATION.md)** – Detailed randomization methodology and best practices
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** – Common issues and solutions
