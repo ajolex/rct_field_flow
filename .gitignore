@@ -1,7 +1,9 @@
 __pycache__
 *.pyc
 .env
+.env.local
 .streamlit/secrets.toml
+.streamlit/secrets.toml.local
 .DS_Store
 *.log
 data/
@@ -12,3 +14,34 @@ data/
 # Fix scripts
 *fix.py
 *_fix.py
+
+# Deployment & Docker files (local use only)
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Package/build artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS files
+Thumbs.db
+.DS_Store
