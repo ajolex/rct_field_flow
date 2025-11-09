@@ -1,0 +1,193 @@
+# 🚀 Streamlit Cloud Deployment - Quick Visual Guide
+
+## 5 Steps to Live in 5 Minutes ⏱️
+
+---
+
+## ✅ Step 1: Verify Your Code is on GitHub
+
+```powershell
+# In terminal, run:
+git status
+# Should show: "nothing to commit, working tree clean"
+
+# If not, push your changes:
+git add .
+git commit -m "Ready for Streamlit Cloud"
+git push origin master
+```
+
+**Status:** ✓ All code on GitHub master branch
+
+---
+
+## ✅ Step 2: Go to Streamlit Cloud
+
+**In your web browser:**
+
+1. Open: https://streamlit.io/cloud
+2. Click **"Sign in"**
+3. Click **"Continue with GitHub"**
+4. Authorize Streamlit
+
+**Status:** ✓ Logged into Streamlit Cloud
+
+---
+
+## ✅ Step 3: Create New App
+
+After logging in:
+
+1. Click **"New app"** button (top right)
+
+2. Fill in the form:
+
+```
+Repository:     ajolex/rct_field_flow
+Branch:         master
+Main file path: rct_field_flow/app.py
+```
+
+3. Click **"Deploy"**
+
+**Status:** ✓ Deployment started (2-5 minutes)
+
+---
+
+## ✅ Step 4: Wait for Deployment to Complete
+
+You'll see a progress bar. When it says "App is ready", you're done!
+
+Your app URL will be something like:
+```
+https://share.streamlit.io/ajolex/rct_field_flow/master
+```
+
+**Status:** ✓ App deployed!
+
+---
+
+## ✅ Step 5: Add Your SurveyCTO Credentials
+
+1. Click the **≡ menu** (three lines, top right)
+
+2. Select **"Settings"**
+
+3. On left side, find **"Secrets"**
+
+4. Paste your credentials:
+
+```toml
+scto_server = "https://your-instance.surveycto.com"
+scto_user = "your-username"
+scto_pass = "your-api-token"
+```
+
+5. Click **"Save"**
+
+6. Your app will restart automatically
+
+**Status:** ✓ Secrets configured!
+
+---
+
+## 🎉 You're Done!
+
+Your app is now:
+- ✅ **Live on the internet**
+- ✅ **Accessible to your team**
+- ✅ **Production-ready**
+
+### Share This URL With Your Team:
+```
+https://share.streamlit.io/ajolex/rct_field_flow/master
+```
+
+---
+
+## 🧪 Quick Test
+
+1. Open your app URL
+2. Try these features:
+   - Upload a CSV file
+   - Test randomization
+   - Try case assignment
+   - Check monitoring dashboard
+
+If everything works → **You're all set!** ✅
+
+---
+
+## 🆘 Quick Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| "Module not found" | Usually fixes itself, refresh page |
+| "Can't connect to SurveyCTO" | Add secrets (Step 5) |
+| App is slow | First load takes ~30 seconds |
+| App not updating | Go to App Settings → Reboot app |
+
+---
+
+## 📝 Important Notes
+
+✅ **Your app auto-deploys** when you push to GitHub:
+```powershell
+git push origin master
+# App automatically updates!
+```
+
+✅ **Your secrets are secure:**
+- Stored encrypted on Streamlit servers
+- Never shown in logs
+- Never pushed to GitHub
+
+✅ **You can manage your app:**
+- View logs: Settings → Logs
+- Reboot app: Settings → Reboot
+- Delete app: Settings → Delete
+
+---
+
+## 📖 Full Guide
+
+For more details, see:
+- `STREAMLIT_CLOUD_SETUP.md` - Complete step-by-step guide
+- `DEPLOYMENT.md` - Detailed deployment guide
+
+---
+
+## 🎯 Next Steps
+
+1. **Today:**
+   - Follow the 5 steps above
+   - Test your app
+   - Share URL with team
+
+2. **This Week:**
+   - Train team on using the app
+   - Gather feedback
+   - Monitor performance
+
+3. **Ongoing:**
+   - Update code as needed
+   - Monitor logs
+   - Keep improving
+
+---
+
+## 💡 Pro Tips
+
+1. **Share your URL** with the team so they can access it
+2. **Bookmark it** for easy access later
+3. **Test features** to make sure everything works
+4. **Check logs** if something goes wrong
+5. **Update code** by pushing to GitHub (auto-deploys!)
+
+---
+
+## ✨ That's It!
+
+You now have a professional, production-ready RCT field operations app live on the internet! 🚀
+
+**Questions?** Check `STREAMLIT_CLOUD_SETUP.md` for detailed troubleshooting.
