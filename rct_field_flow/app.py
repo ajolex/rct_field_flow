@@ -1216,20 +1216,21 @@ def render_case_assignment() -> None:
                         "match": {match_column: match_values}
                     })
             
-            # Form IDs by treatment arm
+            # Form IDs configuration - improved interface
             st.markdown("##### SurveyCTO Form IDs")
-            st.markdown("Specify which form(s) each treatment arm should use.")
+            st.markdown("Specify form IDs for each treatment arm or case criteria.")
             
             treatment_arms = df[treatment_column].dropna().unique().tolist()
             form_ids = {}
             
+            # Default form ID
             form_col1, form_col2 = st.columns(2)
             with form_col1:
                 default_forms = st.text_input(
                     "Default form ID(s)",
                     value="follow_up",
                     key="case_default_forms",
-                    help="Comma-separated form IDs for cases not matching specific treatments"
+                    help="Comma-separated form IDs for cases not matching specific criteria"
                 )
                 form_ids["default"] = [f.strip() for f in default_forms.split(",") if f.strip()]
             
@@ -1238,18 +1239,74 @@ def render_case_assignment() -> None:
                     "Form ID separator",
                     value=",",
                     key="case_form_separator",
-                    help="Character to separate multiple form IDs"
+                    help="Character to separate multiple form IDs in roster"
                 )
             
-            for arm in treatment_arms:
-                arm_forms = st.text_input(
-                    f"Form ID(s) for '{arm}'",
-                    key=f"case_forms_{arm}",
-                    placeholder="leave blank to use default",
-                    help=f"Comma-separated form IDs for {arm} cases"
+            # Form ID assignment with search/filter
+            st.markdown("**Treatment-Specific Form IDs**")
+            st.markdown("Click to expand and assign form IDs to treatment arms or use search")
+            
+            # Create a more efficient interface with expanders or search
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                form_search = st.text_input(
+                    "🔍 Search or filter treatment arms",
+                    value="",
+                    key="case_form_search",
+                    placeholder="Type to search treatment arms...",
+                    help="Start typing to filter the list of treatment arms"
                 )
-                if arm_forms:
-                    form_ids[str(arm)] = [f.strip() for f in arm_forms.split(",") if f.strip()]
+            
+            with col2:
+                add_form_id = st.checkbox(
+                    "Add custom form IDs",
+                    value=False,
+                    key="case_add_custom_forms",
+                    help="Click to add treatment-specific form IDs"
+                )
+            
+            if add_form_id:
+                # Filter treatment arms based on search
+                filtered_arms = [arm for arm in treatment_arms 
+                                if form_search.lower() in str(arm).lower()] if form_search else treatment_arms
+                
+                if not filtered_arms and form_search:
+                    st.info(f"No treatment arms match '{form_search}'. Showing all arms below.")
+                    filtered_arms = treatment_arms
+                
+                # Show expandable sections for each arm
+                for i, arm in enumerate(filtered_arms):
+                    with st.expander(f"📋 {arm} - Form IDs", expanded=False):
+                        arm_forms = st.text_input(
+                            f"Form ID(s) for '{arm}'",
+                            key=f"case_forms_{arm}",
+                            placeholder="e.g., form_1, form_2",
+                            help=f"Comma-separated form IDs for {arm} cases. Leave blank to use default."
+                        )
+                        if arm_forms:
+                            form_ids[str(arm)] = [f.strip() for f in arm_forms.split(",") if f.strip()]
+                    
+                    # Show count of cases for this arm
+                    arm_count = len(df[df[treatment_column] == arm])
+                    st.caption(f"  └─ {arm_count:,} cases in this arm")
+            else:
+                # Show summary without expansion
+                st.info("💡 Check 'Add custom form IDs' above to assign specific forms to each treatment arm")
+                st.markdown(f"**Treatment Arms in Data ({len(treatment_arms)} total):**")
+                
+                # Show arms in a compact table format
+                arms_data = []
+                for arm in treatment_arms:
+                    count = len(df[df[treatment_column] == arm])
+                    arms_data.append({
+                        "Treatment Arm": arm,
+                        "Cases": count,
+                        "Form IDs": form_ids.get(str(arm), ["(using default)"])[0] if str(arm) in form_ids else "(using default)"
+                    })
+                
+                arms_df = pd.DataFrame(arms_data)
+                st.dataframe(arms_df, use_container_width=True, hide_index=True)
             
             # Additional columns
             st.markdown("##### Additional Roster Columns")
