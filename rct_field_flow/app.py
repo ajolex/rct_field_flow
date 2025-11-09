@@ -761,7 +761,7 @@ def render_home() -> None:
         **Workflow overview**
 
         1. 🎲 Randomization – configure arms, strata, and rerandomization.
-        2. 📋 Case Assignment – build SurveyCTO-ready case rosters.
+        2. 📋 Case Assignment – build SurveyCTO-ready cases dataset.
         3. ✅ Quality Checks – apply speed/outlier/duplicate checks.
         4. 📈 Monitoring Dashboard – track productivity, supervisor roll-ups, and projected timelines.
         """
@@ -1059,7 +1059,7 @@ def render_randomization() -> None:
 
 def render_case_assignment() -> None:
     st.title("📋 Case Assignment")
-    st.markdown("Assign interview cases to SurveyCTO teams and produce upload-ready rosters.")
+    st.markdown("Assign interview cases to SurveyCTO teams and produce upload-ready cases dataset.")
 
     # Data source selection
     df = st.session_state.case_data
@@ -1097,7 +1097,7 @@ def render_case_assignment() -> None:
             key="case_config_text",
         )
 
-        if st.button("Generate SurveyCTO roster", type="primary"):
+        if st.button("Generate SurveyCTO cases dataset", type="primary"):
             try:
                 config = yaml_load(config_text)
                 roster = assign_cases(df, config)
@@ -1105,7 +1105,7 @@ def render_case_assignment() -> None:
                 st.error(f"Assignment failed: {exc}")
                 return
 
-            st.success(f"✅ Generated roster with {len(roster):,} cases.")
+            st.success(f"✅ Generated cases with {len(roster):,} cases.")
             st.dataframe(roster.head(20), use_container_width=True)
 
             csv_buffer = io.StringIO()
@@ -1239,7 +1239,7 @@ def render_case_assignment() -> None:
                     "Form ID separator",
                     value=",",
                     key="case_form_separator",
-                    help="Character to separate multiple form IDs in roster"
+                    help="Character to separate multiple form IDs in cases"
                 )
             
             # Form ID assignment with search/filter
@@ -1318,7 +1318,7 @@ def render_case_assignment() -> None:
             )
             
             # Submit button
-            submitted = st.form_submit_button("Generate SurveyCTO Roster", type="primary")
+            submitted = st.form_submit_button("Generate SurveyCTO Cases", type="primary")
         
         if submitted:
             # Build configuration
@@ -1337,7 +1337,7 @@ def render_case_assignment() -> None:
             try:
                 roster = assign_cases(df, config)
                 
-                st.success(f"✅ Generated roster with {len(roster):,} cases!")
+                st.success(f"✅ Generated cases with {len(roster):,} cases!")
                 
                 # Show team distribution
                 st.markdown("#### Team Distribution")
@@ -1358,7 +1358,7 @@ def render_case_assignment() -> None:
                 })
                 st.dataframe(form_dist, use_container_width=True, hide_index=True)
                 
-                st.markdown("#### Roster Preview")
+                st.markdown("#### Cases Preview")
                 st.dataframe(roster.head(20), use_container_width=True)
                 
                 # Store roster in session state for upload
@@ -1371,7 +1371,7 @@ def render_case_assignment() -> None:
                     csv_buffer = io.StringIO()
                     roster.to_csv(csv_buffer, index=False)
                     st.download_button(
-                        "📥 Download Roster CSV",
+                        "📥 Download cases CSV",
                         data=csv_buffer.getvalue(),
                         file_name="surveycto_case_roster.csv",
                         mime="text/csv",
@@ -1398,7 +1398,7 @@ def render_case_assignment() -> None:
         missing_cols = [col for col in required_cols if col not in roster.columns]
         
         if missing_cols:
-            st.error(f"❌ Roster missing required columns: {missing_cols}")
+            st.error(f"❌ Cases missing required columns: {missing_cols}")
             st.info("Required columns: id (or caseid), label, users, formids")
         else:
             # Rename 'id' to 'caseid' if needed (SurveyCTO expects 'caseid')
