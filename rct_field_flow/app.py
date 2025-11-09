@@ -546,10 +546,88 @@ di "============================================================================
 
 '''
 
-    if cluster_code:
-        code += cluster_code
+    # Add rerandomization loop if iterations > 1
+    if config.iterations > 1 and config.balance_covariates:
+        balance_vars = " ".join(config.balance_covariates)
+        
+        code += f'''
+* RERANDOMIZATION WITH BALANCE OPTIMIZATION
+* Initialize tracking variables
+gen mostbalanced_{config.treatment_column} = .
+local minp = 1           // Track minimum p-value across covariates in each iteration
+local bestp = 0          // Track best (highest) minimum p-value across all iterations
+local best_iter = 0      // Track which iteration gave best balance
+
+di _n "================================================================================"
+di "RUNNING {config.iterations:,} RANDOMIZATION ITERATIONS"
+di "================================================================================"
+di "Finding assignment with best balance across covariates..."
+di "Balance covariates: {', '.join(config.balance_covariates)}" _n
+
+* Run {config.iterations:,} randomization iterations
+forvalues i = 1/{config.iterations} {{
+    * Display progress every 1000 iterations
+    if mod(`i', 1000) == 0 {{
+        di "  Iteration " %6.0f `i' " / {config.iterations:,} (best p-value so far: " %6.4f `bestp' ")"
+    }}
+    
+    * Generate random numbers and sort within strata
+    gen rand = runiform()
+    {f'sort {" ".join(config.strata)} rand, stable' if config.strata else 'sort rand'}
+    
+    * Assign treatments{' within strata' if config.strata else ''}
+    gen {config.treatment_column}_temp = ""
+{chr(10).join([f'    {"bysort " + " ".join(config.strata) + ": " if config.strata else ""}replace {config.treatment_column}_temp = "{arm.name}" if _n <= {sum([a.proportion for a in config.arms[:idx+1]]):.6f} * _N' if idx < len(config.arms) - 1 else f'    replace {config.treatment_column}_temp = "{arm.name}" if {config.treatment_column}_temp == ""' for idx, arm in enumerate(config.arms)])}
+    
+    * Reset minimum p-value for this iteration
+    local minp = 1
+    
+    * Check balance across all specified covariates
+    foreach var of varlist {balance_vars} {{
+        qui reg `var' i.{config.treatment_column}_temp, robust
+        qui test {' '.join([f'{idx}.{config.treatment_column}_temp' for idx in range(1, len(config.arms))])}
+        local pvalue = r(p)
+        
+        * Track the minimum p-value across all covariates in this iteration
+        if `pvalue' < `minp' {{
+            local minp = `pvalue'
+        }}
+    }}
+    
+    * Update if this randomization has better (higher) minimum p-value
+    if `minp' > `bestp' {{
+        local bestp = `minp'
+        local best_iter = `i'
+        replace mostbalanced_{config.treatment_column} = {config.treatment_column}_temp
+    }}
+    
+    * Clean up temporary variables
+    drop rand {config.treatment_column}_temp
+}}
+
+di _n "================================================================================"
+di "RERANDOMIZATION COMPLETE"
+di "================================================================================"
+di "Best iteration: " `best_iter' " out of {config.iterations:,}"
+di "Best min p-value: " %6.4f `bestp'
+di "  → Higher p-values indicate better balance"
+di "  → This is the MINIMUM p-value across all tested covariates"
+di "  → Selected assignment has best overall balance" _n
+
+* Use the best balanced assignment
+gen {config.treatment_column} = mostbalanced_{config.treatment_column}
+drop mostbalanced_{config.treatment_column}
+
+* Label treatment arms
+label define {config.treatment_column}_lbl {' '.join([f'{idx} "{arm.name}"' for idx, arm in enumerate(config.arms)])}
+label values {config.treatment_column} {config.treatment_column}_lbl
+'''
     else:
-        code += f"* Generate random treatment assignment\n{strata_prefix}{treatment_code}"
+        # Single randomization (no rerandomization)
+        if cluster_code:
+            code += cluster_code
+        else:
+            code += f"* Generate random treatment assignment\n{strata_prefix}{treatment_code}"
     
     code += f'''
 * Treatment distribution
