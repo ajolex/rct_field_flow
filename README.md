@@ -1,14 +1,14 @@
 # RCT Field Flow
 
-A Python based toolkit for managing the entire field operations in randomized controlled trials survey projects—covering randomization, SurveyCTO case assignment, live monitoring, quality control, backchecks, and one-click analysis.
+A Python based toolkit for managing the entire field operations in randomized controlled trials survey projects—covering randomization, SurveyCTO case assignment, live monitoring, quality control, analysis, backchecks, and report generation.
 
 ## Workflow Overview
 
-- **Randomize participants** using four methods: simple, stratified, cluster, or combined stratified+cluster designs with optional rerandomization (up to 10,000 iterations) to pick a random assigment that achieves the most balance on the selected covariates. A positive integer seed is required so results are fully reproducible. Existing treatment assignments (e.g., follow-up rounds) are retained for balance checks without reassigning. See [Randomization Guide](docs/RANDOMIZATION.md) for details.
-- **Assign SurveyCTO cases** to enumerator teams based on configurable rules (community, strata, quotas) and produce upload-ready CSVs.
-- **Upload cases** directly to SurveyCTO via the API.
-- **Monitor progress** in Streamlit with productivity tables, progress-by-arm, per-arm targets/completion, and projected end dates that use configurable workdays.
-- **Automate advanced quality checks** with interactive configuration:
+- **🎲 Randomize participants** using four methods: simple, stratified, cluster, or combined stratified+cluster designs with optional rerandomization (up to 10,000 iterations) to pick a random assignment that achieves the most balance on the selected covariates. A positive integer seed is required so results are fully reproducible. Existing treatment assignments (e.g., follow-up rounds) are retained for balance checks without reassigning. See [Randomization Guide](docs/RANDOMIZATION.md) for details.
+- **📋 Assign SurveyCTO cases** to enumerator teams based on configurable rules (community, strata, quotas) and produce upload-ready CSVs with team distribution validation.
+- **📤 Upload cases** directly to SurveyCTO via the API with merge/append/replace modes.
+- **📈 Monitor progress** in real-time with interactive dashboards, productivity tables, progress-by-arm, per-arm targets, completion projections, and enumerator performance tracking.
+- **✅ Automate advanced quality checks** with interactive configuration:
   - Flexible outlier detection (IQR or Standard Deviation methods)
   - Duration checks with quantile or absolute thresholds
   - Duplicate detection by keys or GPS proximity
@@ -16,9 +16,14 @@ A Python based toolkit for managing the entire field operations in randomized co
   - Wide-to-long reshaping for repeated measures (e.g., SurveyCTO repeat groups)
   - Group-based analysis (by enumerator, date, treatment, etc.)
   - Visual results with filtering and export
-- **Select backchecks** with configurable high-risk quotas and random draws.
-- **Generate weekly reports** (HTML/PDF) summarising key metrics, flag counts, and backcheck rosters.
-- **Run one-click analytics** for ATEs, heterogeneity, and attrition summaries.
+- **📊 Run statistical analysis** with interactive configuration:
+  - Average Treatment Effects (ATE) with OLS regression
+  - Heterogeneity analysis by subgroups
+  - Balance verification across treatment arms
+  - Attrition analysis and rates by treatment
+  - Export results to CSV/Excel
+- **🔍 Select backchecks** with configurable high-risk quotas, random sampling, and risk scoring.
+- **📄 Generate weekly reports** (HTML/PDF) summarizing key metrics, quality flags, and monitoring statistics.
 
 ## Installation
 
@@ -40,29 +45,66 @@ python -m streamlit run rct_field_flow/app.py
 
 Or simply double-click `launch_ui.bat` (Windows) or `launch_ui.sh` (Mac/Linux).
 
-This launches a comprehensive interface where you can:
+This launches a comprehensive interface with eight interactive modules:
 
-- 🎲 **Configure and run randomization** interactively with 4 methods:
-  - Simple randomization
-  - Stratified randomization
-  - Cluster randomization
-  - Stratified + Cluster randomization (combined)
-  - Seed required for reproducibility; defaults to 12345 but editable
-  - Balance checks with automatic diagnostics and treatment distribution tables
-  - **📥 Download randomization code**: Export Python and Stata code with your exact parameters for full transparency and sharing with PIs
-- 📋 **Assign cases to teams** with configuration helpers
-- ✅ **Run advanced quality checks** with interactive configuration:
-  - **Outlier Detection**: IQR or Standard Deviation methods with adjustable thresholds
-  - **Duration Checks**: Flag surveys that are too fast/slow (quantile or absolute thresholds)
-  - **Duplicate Detection**: By key columns or GPS proximity
-  - **Intervention Fidelity**: Verify treatment assignments and expected values
-  - **Wide-to-Long Reshaping**: Handle repeated measures from SurveyCTO (e.g., `var_1`, `var_2`, `var_3` → `var`)
-  - Group-based analysis (by enumerator, date, treatment, etc.)
-  - Interactive results with filtering and export
-- 📈 **Monitor real-time progress** with interactive dashboards
-- 💾 **Download results** at each step
+### � **Home**
+Overview and quick-start guide with links to documentation
 
-No configuration file editing required—the UI provides forms for all settings. Sample defaults are loaded from `rct_field_flow/config/default.yaml`.
+### 🎲 **Randomization**
+- Interactive configuration for 4 randomization methods (simple, stratified, cluster, combined)
+- Seed configuration for reproducibility  
+- Balance checks with automatic diagnostics
+- **📥 Download code**: Export Python and Stata code with exact parameters
+- **⭐ Rerandomization**: Optional 1-10,000 iterations with full transparency
+
+### 📋 **Case Assignment**
+- Interactive team rule builder and configuration
+- Treatment-specific form IDs
+- **👥 Distribution visualization** and validation checks
+- Direct SurveyCTO upload with merge/append/replace modes
+
+### ✅ **Quality Checks**
+- Flexible outlier detection (IQR/SD methods)
+- Duration checks with quantile or absolute thresholds
+- Duplicate detection by keys or GPS
+- Intervention fidelity verification
+- Wide-to-long reshaping for repeated measures
+- Group-based analysis
+- Interactive filtering and export
+
+### 📊 **Analysis & Results**
+- **Average Treatment Effects (ATE)** with OLS regression
+- **Heterogeneity analysis** by subgroups
+- **Balance verification** across treatment arms
+- **Attrition analysis** with rates by treatment
+- Multiple data sources (CSV or SurveyCTO API)
+- Export to CSV/Excel with confidence intervals
+
+### 🔍 **Backcheck Selection**
+- Interactive roster generation
+- High-risk case prioritization
+- Random sampling for quality assessment
+- Risk score distributions
+- Flexible column selection
+- CSV/Excel export
+
+### � **Report Generation**
+- Combine submissions and quality data
+- Treatment progress summaries
+- Enumerator productivity tables
+- Quality issue summaries
+- HTML/PDF export
+
+### � **Monitoring Dashboard**
+- Multiple data sources (config/CSV/SurveyCTO API)
+- **Interactive configuration**: Column mapping, work week settings
+- **Real-time statistics**: Submissions, enumerators, survey days
+- **Productivity tables**: Per-enumerator surveys and daily averages
+- **Progress by arm**: Treatment distribution charts
+- **Completion projections**: Days to target
+- **Enumerator details**: Individual performance tracking
+
+All modules include form-based input, validation, preview, helpful tooltips, and download capabilities. No YAML editing required.
 
 ## Configuration
 

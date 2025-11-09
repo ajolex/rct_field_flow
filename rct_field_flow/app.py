@@ -20,6 +20,9 @@ try:
         prepare_data as mon_prepare_data,
         render_dashboard as mon_render_dashboard,
     )
+    from .analyze import AnalysisConfig, estimate_ate, heterogeneity_analysis, attrition_table
+    from .backcheck import BackcheckConfig, sample_backchecks
+    from .report import generate_weekly_report
     from .surveycto import SurveyCTO
 except ImportError:  # pragma: no cover
     PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +42,14 @@ except ImportError:  # pragma: no cover
         prepare_data as mon_prepare_data,
         render_dashboard as mon_render_dashboard,
     )
+    from rct_field_flow.analyze import (  # type: ignore
+        AnalysisConfig,
+        estimate_ate,
+        heterogeneity_analysis,
+        attrition_table,
+    )
+    from rct_field_flow.backcheck import BackcheckConfig, sample_backchecks  # type: ignore
+    from rct_field_flow.report import generate_weekly_report  # type: ignore
     from rct_field_flow.surveycto import SurveyCTO  # type: ignore
 
 # ----------------------------------------------------------------------------- #
@@ -1427,6 +1438,82 @@ def render_case_assignment() -> None:
                         st.error(f"❌ Upload failed: {exc}")
                         import traceback
                         st.code(traceback.format_exc())
+            
+            # Add visualizations and validation
+            st.markdown("---")
+            st.markdown("### 📊 Roster Validation & Visualizations")
+            
+            if upload_roster is not None and not upload_roster.empty:
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Cases", len(upload_roster))
+                
+                with col2:
+                    if 'team' in upload_roster.columns:
+                        unique_teams = upload_roster['team'].nunique()
+                        st.metric("Teams", unique_teams)
+                
+                with col3:
+                    if treatment_column in upload_roster.columns:
+                        unique_arms = upload_roster[treatment_column].nunique()
+                        st.metric("Treatment Arms", unique_arms)
+                
+                with col4:
+                    st.metric("Status", "✅ Ready to upload")
+                
+                # Team distribution
+                if 'team' in upload_roster.columns:
+                    st.markdown("#### 👥 Distribution by Team")
+                    team_dist = upload_roster['team'].value_counts().reset_index()
+                    team_dist.columns = ['Team', 'Cases']
+                    st.dataframe(team_dist, use_container_width=True)
+                    
+                    # Visualize
+                    st.bar_chart(team_dist.set_index('Team')['Cases'])
+                
+                # Treatment arm distribution
+                if treatment_column in upload_roster.columns:
+                    st.markdown("#### 🎯 Distribution by Treatment Arm")
+                    arm_dist = upload_roster[treatment_column].value_counts().reset_index()
+                    arm_dist.columns = ['Treatment Arm', 'Cases']
+                    arm_dist['Percentage'] = (arm_dist['Cases'] / arm_dist['Cases'].sum() * 100).round(1)
+                    st.dataframe(arm_dist, use_container_width=True)
+                
+                # Validation checks
+                st.markdown("#### ✓ Validation Checks")
+                
+                validation_passed = True
+                
+                # Check for duplicates
+                if case_id_column in upload_roster.columns:
+                    duplicates = upload_roster[case_id_column].duplicated().sum()
+                    if duplicates > 0:
+                        st.warning(f"⚠️ {duplicates} duplicate case IDs found")
+                        validation_passed = False
+                    else:
+                        st.success("✓ No duplicate case IDs")
+                
+                # Check for missing values
+                missing = upload_roster.isnull().sum()
+                if missing.sum() > 0:
+                    st.warning(f"⚠️ {missing.sum()} missing values found")
+                    validation_passed = False
+                else:
+                    st.success("✓ No missing values")
+                
+                # Check treatment distribution
+                if treatment_column in upload_roster.columns:
+                    arm_counts = upload_roster[treatment_column].value_counts()
+                    if len(arm_counts) > 1:
+                        imbalance = (arm_counts.max() - arm_counts.min()) / len(upload_roster) * 100
+                        if imbalance > 20:
+                            st.info(f"ℹ️ Moderate distribution imbalance ({imbalance:.1f}%)")
+                        else:
+                            st.success("✓ Treatment arm distribution balanced")
+                
+                if validation_passed:
+                    st.success("✅ All validation checks passed!")
 
 
 # ----------------------------------------------------------------------------- #
@@ -2108,18 +2195,1019 @@ def render_quality_checks() -> None:
 
 
 # ----------------------------------------------------------------------------- #
+# ANALYSIS & RESULTS                                                            #
+# ----------------------------------------------------------------------------- #
+
+
+def render_analysis() -> None:
+    st.title("📊 Analysis & Results")
+    st.markdown("Run statistical analysis on your endline data with interactive configuration.")
+    
+    # Initialize session state for analysis
+    if "analysis_data" not in st.session_state:
+        st.session_state.analysis_data: pd.DataFrame | None = None
+    if "baseline_for_attrition" not in st.session_state:
+        st.session_state.baseline_for_attrition: pd.DataFrame | None = None
+    
+    # Data source tabs
+    tab1, tab2, tab3 = st.tabs(["📁 Upload Endline Data", "📊 Attrition Analysis", "ℹ️ Help"])
+    
+    with tab1:
+        st.markdown("#### Load Endline/Follow-up Data")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            data_source = st.radio(
+                "Data source",
+                ["Upload CSV", "SurveyCTO API"],
+                key="analysis_data_source",
+                horizontal=True
+            )
+        
+        if data_source == "Upload CSV":
+            upload = st.file_uploader(
+                "Upload endline data (CSV)",
+                type="csv",
+                key="analysis_upload",
+                help="Upload your follow-up/endline survey data"
+            )
+            if upload:
+                df = pd.read_csv(upload)
+                st.session_state.analysis_data = df
+                st.success(f"✅ Loaded {len(df):,} observations with {len(df.columns)} variables.")
+        else:
+            # SurveyCTO API
+            col1, col2 = st.columns(2)
+            with col1:
+                server = st.text_input("SurveyCTO server", key="analysis_api_server", placeholder="myproject")
+                username = st.text_input("Username", key="analysis_api_user")
+            with col2:
+                password = st.text_input("Password", type="password", key="analysis_api_pass")
+                form_id = st.text_input("Form ID", key="analysis_api_form")
+            
+            if st.button("📥 Fetch from SurveyCTO", key="analysis_fetch"):
+                if not all([server, username, password, form_id]):
+                    st.error("All fields are required.")
+                else:
+                    try:
+                        client = SurveyCTO(server=server, username=username, password=password)
+                        df = client.get_submissions(form_id)
+                        st.session_state.analysis_data = df
+                        st.success(f"✅ Fetched {len(df):,} observations from SurveyCTO.")
+                    except Exception as exc:
+                        st.error(f"Failed to fetch data: {exc}")
+        
+        df = st.session_state.analysis_data
+        
+        if df is not None and not df.empty:
+            st.markdown("#### 📊 Data Preview")
+            st.dataframe(df.head(10), use_container_width=True)
+            st.caption(f"Showing 10 of {len(df):,} rows • {len(df.columns)} columns")
+            
+            # Analysis configuration
+            st.markdown("---")
+            st.markdown("### ⚙️ Analysis Configuration")
+            
+            available_cols = df.columns.tolist()
+            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+            
+            with st.form("analysis_config_form"):
+                st.markdown("#### Basic Settings")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    treatment_col = st.selectbox(
+                        "Treatment column",
+                        available_cols,
+                        index=available_cols.index("treatment") if "treatment" in available_cols else 0,
+                        key="analysis_treatment_col",
+                        help="Column containing treatment assignment"
+                    )
+                
+                with col2:
+                    cluster_col = st.selectbox(
+                        "Cluster column (optional)",
+                        ["None"] + available_cols,
+                        key="analysis_cluster_col",
+                        help="For cluster-robust standard errors"
+                    )
+                    cluster_col = None if cluster_col == "None" else cluster_col
+                
+                with col3:
+                    weight_col = st.selectbox(
+                        "Weight column (optional)",
+                        ["None"] + numeric_cols,
+                        key="analysis_weight_col",
+                        help="For weighted least squares"
+                    )
+                    weight_col = None if weight_col == "None" else weight_col
+                
+                st.markdown("#### Outcome Variables")
+                outcomes = st.multiselect(
+                    "Select outcome variables",
+                    numeric_cols,
+                    key="analysis_outcomes",
+                    help="Numeric variables to analyze as dependent variables"
+                )
+                
+                st.markdown("#### Control Variables (Optional)")
+                potential_controls = [col for col in available_cols if col not in [treatment_col] + (outcomes or [])]
+                covariates = st.multiselect(
+                    "Select covariates for adjustment",
+                    potential_controls,
+                    key="analysis_covariates",
+                    help="Variables to include as controls in the regression"
+                )
+                
+                st.markdown("#### Analysis Options")
+                col1, col2 = st.columns(2)
+                with col1:
+                    run_ate = st.checkbox("Average Treatment Effects (ATE)", value=True, key="run_ate")
+                    run_balance = st.checkbox("Balance Table", value=True, key="run_balance")
+                
+                with col2:
+                    run_heterogeneity = st.checkbox("Heterogeneity Analysis", value=False, key="run_het")
+                    if run_heterogeneity:
+                        moderator = st.selectbox(
+                            "Moderator variable",
+                            potential_controls,
+                            key="analysis_moderator",
+                            help="Variable to interact with treatment"
+                        )
+                    else:
+                        moderator = None
+                
+                submit = st.form_submit_button("🔬 Run Analysis", type="primary", use_container_width=True)
+            
+            if submit:
+                if not outcomes:
+                    st.error("Please select at least one outcome variable.")
+                else:
+                    # Create analysis config
+                    config = AnalysisConfig(
+                        treatment_column=treatment_col,
+                        weight_column=weight_col,
+                        cluster_column=cluster_col
+                    )
+                    
+                    st.markdown("---")
+                    st.markdown("## 📈 Results")
+                    
+                    # Balance table
+                    if run_balance and covariates:
+                        st.markdown("### ⚖️ Balance Table")
+                        st.markdown("Check if covariates are balanced across treatment arms.")
+                        
+                        balance_results = []
+                        for cov in covariates:
+                            if cov in numeric_cols:
+                                try:
+                                    # Run regression of covariate on treatment
+                                    result = estimate_ate(df, cov, config=config)
+                                    
+                                    # Extract treatment arms and p-values
+                                    for param in result.params.index:
+                                        if param.startswith(f"C({treatment_col})"):
+                                            p_value = result.pvalues[param]
+                                            balance_results.append({
+                                                "Covariate": cov,
+                                                "Parameter": param,
+                                                "Coefficient": result.params[param],
+                                                "P-value": p_value,
+                                                "Balanced": "✓" if p_value > 0.05 else "✗"
+                                            })
+                                except Exception as e:
+                                    st.warning(f"Could not test balance for {cov}: {e}")
+                        
+                        if balance_results:
+                            balance_df = pd.DataFrame(balance_results)
+                            st.dataframe(balance_df, use_container_width=True)
+                            
+                            imbalanced = balance_df[balance_df["Balanced"] == "✗"]
+                            if len(imbalanced) > 0:
+                                st.warning(f"⚠️ {len(imbalanced)} covariate(s) show significant imbalance (p < 0.05)")
+                            else:
+                                st.success("✅ All covariates are balanced across treatment arms")
+                    
+                    # Average Treatment Effects
+                    if run_ate:
+                        st.markdown("### 📊 Average Treatment Effects (ATE)")
+                        
+                        all_results = []
+                        
+                        for outcome in outcomes:
+                            st.markdown(f"#### {outcome}")
+                            
+                            try:
+                                result = estimate_ate(df, outcome, covariates=covariates, config=config)
+                                
+                                # Extract results
+                                st.markdown("**Regression Output:**")
+                                
+                                # Create results table
+                                results_data = []
+                                for param in result.params.index:
+                                    results_data.append({
+                                        "Parameter": param,
+                                        "Coefficient": f"{result.params[param]:.4f}",
+                                        "Std Error": f"{result.bse[param]:.4f}",
+                                        "t-statistic": f"{result.tvalues[param]:.3f}",
+                                        "P-value": f"{result.pvalues[param]:.4f}",
+                                        "Significance": "***" if result.pvalues[param] < 0.01 else 
+                                                       "**" if result.pvalues[param] < 0.05 else 
+                                                       "*" if result.pvalues[param] < 0.10 else ""
+                                    })
+                                
+                                results_df = pd.DataFrame(results_data)
+                                st.dataframe(results_df, use_container_width=True)
+                                st.caption("Significance: *** p<0.01, ** p<0.05, * p<0.10")
+                                
+                                # Model statistics
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("R-squared", f"{result.rsquared:.4f}")
+                                with col2:
+                                    st.metric("Observations", f"{int(result.nobs):,}")
+                                with col3:
+                                    st.metric("F-statistic", f"{result.fvalue:.2f}")
+                                
+                                # Store for export
+                                for param in result.params.index:
+                                    if param.startswith(f"C({treatment_col})"):
+                                        all_results.append({
+                                            "Outcome": outcome,
+                                            "Treatment": param,
+                                            "Coefficient": result.params[param],
+                                            "Std_Error": result.bse[param],
+                                            "P_value": result.pvalues[param],
+                                            "CI_Lower": result.conf_int().loc[param, 0],
+                                            "CI_Upper": result.conf_int().loc[param, 1],
+                                            "R_squared": result.rsquared,
+                                            "N_obs": int(result.nobs)
+                                        })
+                                
+                            except Exception as e:
+                                st.error(f"Error analyzing {outcome}: {e}")
+                        
+                        # Export all results
+                        if all_results:
+                            st.markdown("---")
+                            st.markdown("### 📥 Download Results")
+                            
+                            results_export = pd.DataFrame(all_results)
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                csv = results_export.to_csv(index=False)
+                                st.download_button(
+                                    "📥 Download as CSV",
+                                    csv,
+                                    "ate_results.csv",
+                                    "text/csv",
+                                    use_container_width=True
+                                )
+                            
+                            with col2:
+                                # Excel export
+                                buffer = io.BytesIO()
+                                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                    results_export.to_excel(writer, index=False, sheet_name='ATE Results')
+                                st.download_button(
+                                    "📥 Download as Excel",
+                                    buffer.getvalue(),
+                                    "ate_results.xlsx",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                    
+                    # Heterogeneity Analysis
+                    if run_heterogeneity and moderator:
+                        st.markdown("### 🔍 Heterogeneity Analysis")
+                        st.markdown(f"Treatment effects by **{moderator}**")
+                        
+                        for outcome in outcomes:
+                            st.markdown(f"#### {outcome}")
+                            
+                            try:
+                                result = heterogeneity_analysis(
+                                    df, outcome, moderator, covariates=covariates, config=config
+                                )
+                                
+                                # Show interaction effects
+                                interaction_params = [p for p in result.params.index 
+                                                     if f"C({treatment_col})" in p and f"C({moderator})" in p]
+                                
+                                if interaction_params:
+                                    st.markdown("**Interaction Effects:**")
+                                    
+                                    interaction_data = []
+                                    for param in interaction_params:
+                                        interaction_data.append({
+                                            "Interaction": param,
+                                            "Coefficient": f"{result.params[param]:.4f}",
+                                            "Std Error": f"{result.bse[param]:.4f}",
+                                            "P-value": f"{result.pvalues[param]:.4f}",
+                                            "Significance": "***" if result.pvalues[param] < 0.01 else 
+                                                           "**" if result.pvalues[param] < 0.05 else 
+                                                           "*" if result.pvalues[param] < 0.10 else ""
+                                        })
+                                    
+                                    interaction_df = pd.DataFrame(interaction_data)
+                                    st.dataframe(interaction_df, use_container_width=True)
+                                    
+                                    # Interpretation
+                                    sig_interactions = [d for d in interaction_data if d["Significance"]]
+                                    if sig_interactions:
+                                        st.info(f"💡 Found {len(sig_interactions)} significant interaction effect(s). "
+                                               f"Treatment effects differ by {moderator}.")
+                                    else:
+                                        st.info(f"No significant heterogeneity found by {moderator}.")
+                                else:
+                                    st.warning("No interaction terms found in the model.")
+                                
+                            except Exception as e:
+                                st.error(f"Error in heterogeneity analysis for {outcome}: {e}")
+        
+        else:
+            st.info("👆 Upload endline data or fetch from SurveyCTO to begin analysis.")
+    
+    with tab2:
+        st.markdown("### 📉 Attrition Analysis")
+        st.markdown("Compare baseline enrollment with endline completion to calculate attrition rates.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Baseline Data")
+            baseline_upload = st.file_uploader(
+                "Upload baseline data (CSV)",
+                type="csv",
+                key="attrition_baseline",
+                help="Data with randomized participants"
+            )
+            if baseline_upload:
+                baseline = pd.read_csv(baseline_upload)
+                st.session_state.baseline_for_attrition = baseline
+                st.success(f"✅ Loaded {len(baseline):,} baseline observations")
+        
+        with col2:
+            st.markdown("#### Endline Data")
+            if st.session_state.analysis_data is not None:
+                st.success(f"✅ Using loaded endline data ({len(st.session_state.analysis_data):,} obs)")
+            else:
+                st.info("Load endline data in the first tab")
+        
+        baseline = st.session_state.baseline_for_attrition
+        endline = st.session_state.analysis_data
+        
+        if baseline is not None and endline is not None:
+            st.markdown("---")
+            st.markdown("#### Configuration")
+            
+            baseline_cols = baseline.columns.tolist()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                id_col = st.selectbox(
+                    "ID column",
+                    baseline_cols,
+                    index=baseline_cols.index("participant_id") if "participant_id" in baseline_cols else 0,
+                    key="attrition_id_col"
+                )
+            
+            with col2:
+                treatment_col = st.selectbox(
+                    "Treatment column",
+                    baseline_cols,
+                    index=baseline_cols.index("treatment") if "treatment" in baseline_cols else 0,
+                    key="attrition_treatment_col"
+                )
+            
+            if st.button("📊 Calculate Attrition", type="primary"):
+                try:
+                    attrition_df = attrition_table(baseline, endline, id_col, treatment_col)
+                    
+                    st.markdown("---")
+                    st.markdown("### 📊 Attrition Results")
+                    
+                    # Format the table
+                    attrition_df['attrition_rate'] = (attrition_df['rate'] * 100).round(2).astype(str) + '%'
+                    attrition_df['followed_up'] = attrition_df['count'] - (attrition_df['rate'] * attrition_df['count']).astype(int)
+                    attrition_df['attrited'] = (attrition_df['rate'] * attrition_df['count']).astype(int)
+                    
+                    display_df = attrition_df[[treatment_col, 'count', 'followed_up', 'attrited', 'attrition_rate']]
+                    display_df.columns = ['Treatment Arm', 'Baseline N', 'Followed Up', 'Attrited', 'Attrition Rate']
+                    
+                    st.dataframe(display_df, use_container_width=True)
+                    
+                    # Summary statistics
+                    overall_attrition = attrition_df['rate'].mean() * 100
+                    max_attrition = attrition_df['rate'].max() * 100
+                    min_attrition = attrition_df['rate'].min() * 100
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Overall Attrition", f"{overall_attrition:.2f}%")
+                    with col2:
+                        st.metric("Highest Attrition", f"{max_attrition:.2f}%")
+                    with col3:
+                        st.metric("Lowest Attrition", f"{min_attrition:.2f}%")
+                    
+                    # Interpretation
+                    if overall_attrition > 20:
+                        st.warning(f"⚠️ High attrition rate ({overall_attrition:.1f}%). Consider sensitivity analyses.")
+                    elif overall_attrition > 10:
+                        st.info(f"ℹ️ Moderate attrition rate ({overall_attrition:.1f}%). Check for differential attrition.")
+                    else:
+                        st.success(f"✅ Low attrition rate ({overall_attrition:.1f}%).")
+                    
+                    # Check differential attrition
+                    if len(attrition_df) > 1:
+                        diff = max_attrition - min_attrition
+                        if diff > 5:
+                            st.warning(f"⚠️ Differential attrition detected: {diff:.1f} percentage point difference between arms.")
+                    
+                    # Download
+                    csv = display_df.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download Attrition Table",
+                        csv,
+                        "attrition_analysis.csv",
+                        "text/csv"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"Error calculating attrition: {e}")
+        else:
+            st.info("💡 Upload both baseline and endline data to calculate attrition rates.")
+    
+    with tab3:
+        st.markdown("### ℹ️ Analysis Guide")
+        
+        st.markdown("""
+        #### Average Treatment Effects (ATE)
+        
+        Estimates the causal effect of treatment assignment on outcomes using OLS regression:
+        
+        - **Simple ATE**: `outcome ~ treatment`
+        - **With covariates**: `outcome ~ treatment + covariates`
+        - **Clustered SEs**: Account for within-cluster correlation
+        - **Weighted**: Use sampling or inverse probability weights
+        
+        **Interpretation**: The coefficient on treatment represents the average difference in outcomes 
+        between treatment and control groups.
+        
+        #### Heterogeneity Analysis
+        
+        Tests whether treatment effects vary by subgroups using interaction terms:
+        
+        - Model: `outcome ~ treatment * moderator + covariates`
+        - Significant interactions indicate effect heterogeneity
+        - Common moderators: gender, age groups, baseline levels
+        
+        #### Balance Table
+        
+        Verifies that baseline covariates are balanced across treatment arms:
+        
+        - Tests: `covariate ~ treatment` for each covariate
+        - P-value > 0.05 indicates good balance
+        - Imbalanced covariates should be included as controls
+        
+        #### Attrition Analysis
+        
+        Compares baseline enrollment with endline completion:
+        
+        - Calculates attrition rate by treatment arm
+        - High attrition (>20%) may threaten validity
+        - Differential attrition requires sensitivity analysis
+        
+        #### Tips
+        
+        - Always check balance before estimating ATEs
+        - Include pre-specified covariates to increase precision
+        - Use cluster-robust SEs for cluster-randomized designs
+        - Report both unadjusted and adjusted estimates
+        - Account for multiple testing if analyzing many outcomes
+        """)
+
+
+# ----------------------------------------------------------------------------- #
+# BACKCHECK SELECTION                                                           #
+# ----------------------------------------------------------------------------- #
+
+
+def render_backcheck() -> None:
+    st.title("🔍 Backcheck Selection")
+    st.markdown("Select cases for quality backcheck interviews using stratified sampling.")
+    
+    # Initialize session state
+    if "backcheck_data" not in st.session_state:
+        st.session_state.backcheck_data: pd.DataFrame | None = None
+    if "backcheck_flags" not in st.session_state:
+        st.session_state.backcheck_flags: pd.DataFrame | None = None
+    
+    # Data loading
+    st.markdown("### 📁 Load Data")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Submissions Data")
+        submissions_upload = st.file_uploader(
+            "Upload submissions (CSV)",
+            type="csv",
+            key="backcheck_submissions",
+            help="Survey submissions for backcheck selection"
+        )
+        if submissions_upload:
+            df = pd.read_csv(submissions_upload)
+            st.session_state.backcheck_data = df
+            st.success(f"✅ Loaded {len(df):,} submissions")
+    
+    with col2:
+        st.markdown("#### Quality Flags (Optional)")
+        flags_upload = st.file_uploader(
+            "Upload quality flags (CSV)",
+            type="csv",
+            key="backcheck_flags",
+            help="Output from Quality Checks module (optional but recommended)"
+        )
+        if flags_upload:
+            flags = pd.read_csv(flags_upload)
+            st.session_state.backcheck_flags = flags
+            st.success(f"✅ Loaded flags for {len(flags):,} submissions")
+        else:
+            st.info("💡 Upload quality flags to prioritize high-risk cases for backchecks")
+    
+    df = st.session_state.backcheck_data
+    flags = st.session_state.backcheck_flags
+    
+    if df is None:
+        st.info("👆 Upload submissions data to begin backcheck selection.")
+        return
+    
+    st.markdown("---")
+    st.markdown("### ⚙️ Backcheck Configuration")
+    
+    available_cols = df.columns.tolist()
+    
+    with st.form("backcheck_config_form"):
+        st.markdown("#### Sample Settings")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            sample_size = st.number_input(
+                "Total backcheck sample size",
+                min_value=1,
+                max_value=len(df),
+                value=min(50, len(df)),
+                step=1,
+                key="backcheck_sample_size",
+                help="Number of cases to select for backchecks"
+            )
+        
+        with col2:
+            high_risk_quota = st.slider(
+                "High-risk quota",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.6,
+                step=0.05,
+                key="backcheck_high_risk_quota",
+                help="Proportion of sample from flagged cases (if flags provided)"
+            )
+        
+        with col3:
+            random_seed = st.number_input(
+                "Random seed",
+                min_value=1,
+                value=42,
+                step=1,
+                key="backcheck_seed",
+                help="For reproducible selection"
+            )
+        
+        st.markdown("#### Columns to Include")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            id_column = st.selectbox(
+                "ID column",
+                available_cols,
+                index=available_cols.index("participant_id") if "participant_id" in available_cols else 0,
+                key="backcheck_id_col",
+                help="Unique identifier for each case"
+            )
+        
+        with col2:
+            contact_columns = st.multiselect(
+                "Contact information columns",
+                available_cols,
+                default=[col for col in ["phone", "phone_number", "contact"] if col in available_cols],
+                key="backcheck_contact_cols",
+                help="Phone numbers or other contact details"
+            )
+        
+        location_columns = st.multiselect(
+            "Location columns",
+            available_cols,
+            default=[col for col in ["village", "community", "district", "gps_latitude", "gps_longitude"] 
+                     if col in available_cols],
+            key="backcheck_location_cols",
+            help="Geographic information for field logistics"
+        )
+        
+        additional_columns = st.multiselect(
+            "Additional columns",
+            [col for col in available_cols if col not in [id_column] + contact_columns + location_columns],
+            key="backcheck_additional_cols",
+            help="Other columns to include (e.g., enumerator, date, treatment)"
+        )
+        
+        submit = st.form_submit_button("🎲 Generate Backcheck Roster", type="primary", use_container_width=True)
+    
+    if submit:
+        # Create configuration
+        config = {
+            "sample_size": int(sample_size),
+            "high_risk_quota": high_risk_quota,
+            "random_seed": int(random_seed),
+            "id_column": id_column,
+            "contact_columns": contact_columns,
+            "location_columns": location_columns,
+        }
+        
+        try:
+            # If no flags provided, create empty flags dataframe
+            if flags is None:
+                flags = pd.DataFrame(0, index=df.index, columns=['no_flags'])
+            
+            # Select backcheck sample
+            backcheck_roster = sample_backchecks(df, flags, config)
+            
+            # Add additional columns if requested
+            if additional_columns:
+                for col in additional_columns:
+                    if col in df.columns and col not in backcheck_roster.columns:
+                        backcheck_roster = backcheck_roster.merge(
+                            df[[id_column, col]],
+                            on=id_column,
+                            how='left'
+                        )
+            
+            st.markdown("---")
+            st.markdown("### ✅ Backcheck Roster Generated")
+            
+            # Summary statistics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Selected", len(backcheck_roster))
+            with col2:
+                high_risk_count = len(backcheck_roster[backcheck_roster['risk_score'] > 0])
+                st.metric("High-Risk Cases", high_risk_count)
+            with col3:
+                random_count = len(backcheck_roster[backcheck_roster['risk_score'] == 0])
+                st.metric("Random Cases", random_count)
+            
+            # Show roster
+            st.markdown("#### 📋 Backcheck Roster")
+            st.dataframe(backcheck_roster, use_container_width=True)
+            
+            # Risk score distribution
+            if 'risk_score' in backcheck_roster.columns:
+                st.markdown("#### 📊 Risk Score Distribution")
+                risk_summary = backcheck_roster['risk_score'].describe()
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Mean Risk Score", f"{risk_summary['mean']:.2f}")
+                with col2:
+                    st.metric("Max Risk Score", f"{risk_summary['max']:.0f}")
+                with col3:
+                    st.metric("Median Risk Score", f"{risk_summary['50%']:.1f}")
+                with col4:
+                    pct_flagged = (backcheck_roster['risk_score'] > 0).mean() * 100
+                    st.metric("% Flagged", f"{pct_flagged:.1f}%")
+            
+            # Download options
+            st.markdown("---")
+            st.markdown("### 📥 Download Roster")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                csv = backcheck_roster.to_csv(index=False)
+                st.download_button(
+                    "📥 Download as CSV",
+                    csv,
+                    "backcheck_roster.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Excel export
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    backcheck_roster.to_excel(writer, index=False, sheet_name='Backcheck Roster')
+                st.download_button(
+                    "📥 Download as Excel",
+                    buffer.getvalue(),
+                    "backcheck_roster.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            # Instructions
+            st.markdown("---")
+            st.markdown("### 📝 Next Steps")
+            st.info("""
+            **Using the Backcheck Roster:**
+            
+            1. **Review the roster** to ensure it includes all necessary contact and location information
+            2. **Assign to backcheck team** for re-interviews
+            3. **Upload to SurveyCTO** as a case list (if using digital backchecks)
+            4. **Compare results** between original and backcheck interviews to assess data quality
+            5. **Take action** on enumerators with high discrepancy rates
+            
+            **High-risk cases** are prioritized based on quality flags (outliers, short duration, etc.).
+            **Random cases** provide an unbiased sample for overall quality assessment.
+            """)
+            
+        except Exception as e:
+            st.error(f"Error generating backcheck roster: {e}")
+
+
+# ----------------------------------------------------------------------------- #
+# REPORT GENERATION                                                             #
+# ----------------------------------------------------------------------------- #
+
+
+def render_reports() -> None:
+    st.title("📄 Report Generation")
+    st.markdown("Generate formatted weekly reports with monitoring statistics and quality summaries.")
+    
+    st.markdown("### 📊 Report Data Sources")
+    st.info("""
+    **Required Data:**
+    - Submissions data (from monitoring or upload)
+    - Quality flags (from quality checks module)
+    - Backcheck roster (optional)
+    
+    Reports include:
+    - Survey progress by treatment arm
+    - Productivity statistics by enumerator
+    - Quality flag summaries
+    - Backcheck roster (if provided)
+    """)
+    
+    # Data collection
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Submissions Data")
+        submissions_upload = st.file_uploader(
+            "Upload submissions (CSV)",
+            type="csv",
+            key="report_submissions",
+            help="Survey submissions for the reporting period"
+        )
+        
+        if submissions_upload:
+            submissions_df = pd.read_csv(submissions_upload)
+            st.success(f"✅ Loaded {len(submissions_df):,} submissions")
+        else:
+            submissions_df = None
+            st.info("Upload submissions data")
+    
+    with col2:
+        st.markdown("#### Quality Flags")
+        flags_upload = st.file_uploader(
+            "Upload quality flags (CSV)",
+            type="csv",
+            key="report_flags",
+            help="Quality check results"
+        )
+        
+        if flags_upload:
+            flags_df = pd.read_csv(flags_upload)
+            st.success(f"✅ Loaded {len(flags_df):,} flag records")
+        else:
+            flags_df = None
+            st.info("Upload quality flags")
+    
+    if submissions_df is None:
+        st.warning("⚠️ Upload submissions data to continue.")
+        return
+    
+    st.markdown("---")
+    st.markdown("### ⚙️ Report Configuration")
+    
+    with st.form("report_config_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            report_title = st.text_input(
+                "Report title",
+                value="Weekly Field Monitoring Report",
+                key="report_title"
+            )
+            
+            report_period = st.text_input(
+                "Reporting period",
+                value="Week of [DATE]",
+                key="report_period",
+                help="e.g., 'Week of January 15-21, 2025'"
+            )
+        
+        with col2:
+            project_name = st.text_input(
+                "Project name",
+                value="RCT Field Project",
+                key="report_project"
+            )
+            
+            format_option = st.radio(
+                "Output format",
+                ["HTML only", "HTML + PDF"],
+                key="report_format",
+                help="PDF requires WeasyPrint with native dependencies"
+            )
+        
+        # Column mapping
+        st.markdown("#### Column Mapping")
+        available_cols = submissions_df.columns.tolist()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            date_col = st.selectbox(
+                "Date column",
+                available_cols,
+                index=available_cols.index("SubmissionDate") if "SubmissionDate" in available_cols else 0,
+                key="report_date_col"
+            )
+        
+        with col2:
+            enumerator_col = st.selectbox(
+                "Enumerator column",
+                available_cols,
+                index=available_cols.index("enumerator") if "enumerator" in available_cols else 0,
+                key="report_enum_col"
+            )
+        
+        with col3:
+            treatment_col = st.selectbox(
+                "Treatment column",
+                available_cols,
+                index=available_cols.index("treatment") if "treatment" in available_cols else 0,
+                key="report_treatment_col"
+            )
+        
+        submit = st.form_submit_button("📄 Generate Report", type="primary", use_container_width=True)
+    
+    if submit:
+        try:
+            st.markdown("---")
+            st.markdown("### 📄 Report Preview")
+            
+            # Calculate statistics
+            st.markdown("#### Summary Statistics")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Submissions", f"{len(submissions_df):,}")
+            with col2:
+                if date_col in submissions_df.columns:
+                    unique_dates = submissions_df[date_col].nunique()
+                    st.metric("Survey Days", unique_dates)
+            with col3:
+                if enumerator_col in submissions_df.columns:
+                    unique_enums = submissions_df[enumerator_col].nunique()
+                    st.metric("Enumerators", unique_enums)
+            with col4:
+                if flags_df is not None:
+                    total_flags = len(flags_df)
+                    st.metric("Quality Flags", f"{total_flags:,}")
+            
+            # Progress by treatment
+            if treatment_col in submissions_df.columns:
+                st.markdown("#### Progress by Treatment Arm")
+                progress = submissions_df[treatment_col].value_counts().reset_index()
+                progress.columns = ['Treatment Arm', 'Count']
+                progress['Percentage'] = (progress['Count'] / progress['Count'].sum() * 100).round(1)
+                st.dataframe(progress, use_container_width=True)
+            
+            # Productivity
+            if enumerator_col in submissions_df.columns:
+                st.markdown("#### Enumerator Productivity")
+                productivity = submissions_df[enumerator_col].value_counts().reset_index()
+                productivity.columns = ['Enumerator', 'Surveys Completed']
+                productivity['Average per Day'] = (
+                    productivity['Surveys Completed'] / unique_dates
+                ).round(1) if date_col in submissions_df.columns else None
+                st.dataframe(productivity.head(10), use_container_width=True)
+            
+            # Quality flags summary
+            if flags_df is not None:
+                st.markdown("#### Quality Issues")
+                flag_summary = flags_df.sum().sort_values(ascending=False).head(10)
+                if not flag_summary.empty:
+                    flag_df = pd.DataFrame({
+                        'Issue Type': flag_summary.index,
+                        'Count': flag_summary.values
+                    })
+                    st.dataframe(flag_df, use_container_width=True)
+            
+            # Generate HTML report
+            st.markdown("---")
+            st.markdown("### 📥 Download Report")
+            
+            # Create simple HTML report
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>{report_title}</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                    h1 {{ color: #2c3e50; }}
+                    h2 {{ color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+                    table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+                    th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+                    th {{ background-color: #3498db; color: white; }}
+                    tr:nth-child(even) {{ background-color: #f2f2f2; }}
+                    .metric {{ display: inline-block; margin: 10px 20px; }}
+                    .metric-value {{ font-size: 24px; font-weight: bold; color: #3498db; }}
+                    .metric-label {{ font-size: 14px; color: #7f8c8d; }}
+                </style>
+            </head>
+            <body>
+                <h1>{report_title}</h1>
+                <p><strong>Project:</strong> {project_name}</p>
+                <p><strong>Period:</strong> {report_period}</p>
+                
+                <h2>Summary Statistics</h2>
+                <div class="metric">
+                    <div class="metric-value">{len(submissions_df):,}</div>
+                    <div class="metric-label">Total Submissions</div>
+                </div>
+                
+                <h2>Data Tables</h2>
+                {submissions_df.head(20).to_html(index=False)}
+                
+                <p style="margin-top: 40px; color: #7f8c8d; font-size: 12px;">
+                    Generated by RCT Field Flow on {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
+                </p>
+            </body>
+            </html>
+            """
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.download_button(
+                    "📥 Download HTML Report",
+                    html_content,
+                    "weekly_report.html",
+                    "text/html",
+                    use_container_width=True
+                )
+            
+            with col2:
+                if format_option == "HTML + PDF":
+                    st.info("💡 PDF generation requires WeasyPrint. Download HTML and convert externally if needed.")
+            
+            st.success("✅ Report generated successfully!")
+            
+        except Exception as e:
+            st.error(f"Error generating report: {e}")
+
+
+# ----------------------------------------------------------------------------- #
 # MONITORING DASHBOARD                                                          #
 # ----------------------------------------------------------------------------- #
 
 
 def render_monitoring() -> None:
     st.title("📈 Monitoring Dashboard")
+    st.markdown("Real-time progress monitoring with interactive configuration.")
+    
+    # Initialize session state
+    if "monitor_data" not in st.session_state:
+        st.session_state.monitor_data: pd.DataFrame | None = None
+    if "monitor_config" not in st.session_state:
+        st.session_state.monitor_config = {}
+    
     cfg = mon_load_config()
 
+    # Data source selection
+    st.markdown("### 📁 Data Source")
     source = st.radio(
-        "Data source",
+        "Load data from",
         ["Use project config", "Upload CSV", "SurveyCTO API"],
         key="monitor_data_source",
+        horizontal=True
     )
 
     data: pd.DataFrame | None = None
@@ -2128,6 +3216,7 @@ def render_monitoring() -> None:
         try:
             submissions = mon_load_submissions(cfg)
             data = mon_prepare_data(submissions, cfg)
+            st.session_state.monitor_data = data
         except Exception as exc:  # pragma: no cover
             st.error(f"Couldn't load monitoring components using project config: {exc}")
             return
@@ -2135,11 +3224,12 @@ def render_monitoring() -> None:
         upload = st.file_uploader("Upload submissions CSV", type="csv", key="monitor_csv_upload")
         if upload:
             data = pd.read_csv(upload, sep=None, engine="python")
-            st.session_state["monitor_upload_df"] = data
+            st.session_state.monitor_data = data
+            st.success(f"✅ Loaded {len(data):,} submissions")
         else:
-            data = st.session_state.get("monitor_upload_df")
+            data = st.session_state.get("monitor_data")
         if data is None:
-            st.info("Upload a CSV file to continue.")
+            st.info("📤 Upload a CSV file to continue.")
             return
     else:  # SurveyCTO API
         col1, col2 = st.columns(2)
@@ -2169,27 +3259,261 @@ def render_monitoring() -> None:
                 key="monitor_api_form",
             )
 
-        if st.button("Fetch SurveyCTO submissions", key="monitor_fetch_api"):
+        if st.button("📥 Fetch SurveyCTO submissions", key="monitor_fetch_api"):
             if not all([server, username, password, form_id]):
                 st.error("Server, username, password, and form ID are required.")
             else:
                 try:
                     client = SurveyCTO(server=server, username=username, password=password)
                     api_df = client.get_submissions(form_id)
-                    st.session_state["monitor_api_df"] = api_df
-                    st.success(f"Fetched {len(api_df):,} submissions from SurveyCTO.")
+                    st.session_state.monitor_data = api_df
+                    st.success(f"✅ Fetched {len(api_df):,} submissions from SurveyCTO.")
                 except Exception as exc:
                     st.error(f"Failed to fetch SurveyCTO submissions: {exc}")
-        data = st.session_state.get("monitor_api_df")
+        data = st.session_state.get("monitor_data")
         if data is None:
-            st.info("Enter credentials and click the fetch button to load live data.")
+            st.info("💡 Enter credentials and click the fetch button to load live data.")
             return
 
     if data is None or data.empty:
-        st.warning("No submissions available. Check your data source.")
+        st.warning("⚠️ No submissions available. Check your data source.")
         return
 
-    mon_render_dashboard(data, cfg)
+    # Data preview
+    st.markdown("---")
+    st.markdown("#### 📊 Data Preview")
+    st.dataframe(data.head(10), use_container_width=True)
+    st.caption(f"Showing 10 of {len(data):,} rows")
+
+    # Interactive configuration
+    st.markdown("---")
+    st.markdown("### ⚙️ Dashboard Configuration")
+    
+    available_cols = data.columns.tolist()
+    
+    with st.form("monitor_config_form"):
+        st.markdown("#### Column Mapping")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            date_col = st.selectbox(
+                "Date column",
+                available_cols,
+                index=available_cols.index("SubmissionDate") if "SubmissionDate" in available_cols else 0,
+                key="monitor_date_col",
+                help="When the submission was made"
+            )
+        
+        with col2:
+            enumerator_col = st.selectbox(
+                "Enumerator column",
+                available_cols,
+                index=available_cols.index("enumerator") if "enumerator" in available_cols else 0,
+                key="monitor_enum_col",
+                help="Who conducted the survey"
+            )
+        
+        with col3:
+            treatment_col = st.selectbox(
+                "Treatment column",
+                available_cols,
+                index=available_cols.index("treatment") if "treatment" in available_cols else 0,
+                key="monitor_treatment_col",
+                help="Treatment assignment"
+            )
+        
+        st.markdown("#### Work Week Configuration")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            work_start = st.time_input(
+                "Work start time",
+                value=pd.Timestamp("08:00").time(),
+                key="monitor_work_start",
+                help="Time enumerators start work each day"
+            )
+        
+        with col2:
+            work_end = st.time_input(
+                "Work end time",
+                value=pd.Timestamp("17:00").time(),
+                key="monitor_work_end",
+                help="Time enumerators end work each day"
+            )
+        
+        with col3:
+            rest_days = st.multiselect(
+                "Rest days",
+                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                default=["Sunday"],
+                key="monitor_rest_days",
+                help="Days when no surveying occurs"
+            )
+        
+        st.markdown("#### Dashboard Display Options")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            show_productivity = st.checkbox("Show productivity table", value=True, key="monitor_show_prod")
+            show_by_arm = st.checkbox("Show progress by treatment arm", value=True, key="monitor_show_arm")
+        
+        with col2:
+            show_projections = st.checkbox("Show completion projections", value=True, key="monitor_show_proj")
+            show_enumerators = st.checkbox("Show enumerator details", value=True, key="monitor_show_enum")
+        
+        st.markdown("#### Target Configuration (Optional)")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            target_total = st.number_input(
+                "Target total surveys",
+                min_value=0,
+                value=0,
+                step=10,
+                key="monitor_target_total",
+                help="Leave as 0 to skip target visualization"
+            )
+        
+        with col2:
+            if target_total > 0:
+                target_per_arm = st.text_input(
+                    "Target per treatment arm (comma-separated)",
+                    value="",
+                    key="monitor_target_per_arm",
+                    help="e.g., '100,100,100' for three equal arms"
+                )
+        
+        submit = st.form_submit_button("📊 Generate Dashboard", type="primary", use_container_width=True)
+    
+    if submit:
+        st.markdown("---")
+        st.markdown("## 📊 Monitoring Dashboard")
+        
+        # Summary statistics
+        st.markdown("### 📈 Summary Statistics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Submissions", f"{len(data):,}")
+        with col2:
+            if date_col in data.columns:
+                unique_dates = data[date_col].nunique()
+                st.metric("Survey Days", unique_dates)
+        with col3:
+            if enumerator_col in data.columns:
+                unique_enums = data[enumerator_col].nunique()
+                st.metric("Active Enumerators", unique_enums)
+        with col4:
+            if treatment_col in data.columns:
+                unique_arms = data[treatment_col].nunique()
+                st.metric("Treatment Arms", unique_arms)
+        
+        # Productivity table
+        if show_productivity and enumerator_col in data.columns:
+            st.markdown("### 👤 Enumerator Productivity")
+            productivity = data[enumerator_col].value_counts().reset_index()
+            productivity.columns = ['Enumerator', 'Surveys']
+            
+            if date_col in data.columns:
+                unique_dates = data[date_col].nunique()
+                productivity['Avg/Day'] = (productivity['Surveys'] / unique_dates).round(1)
+            
+            st.dataframe(productivity.head(20), use_container_width=True)
+        
+        # Progress by treatment arm
+        if show_by_arm and treatment_col in data.columns:
+            st.markdown("### 🎯 Progress by Treatment Arm")
+            
+            arm_progress = data[treatment_col].value_counts().reset_index()
+            arm_progress.columns = ['Treatment Arm', 'Count']
+            arm_progress['Percentage'] = (arm_progress['Count'] / arm_progress['Count'].sum() * 100).round(1)
+            
+            st.dataframe(arm_progress, use_container_width=True)
+            
+            # Visualize as bar chart
+            chart_data = arm_progress.set_index('Treatment Arm')['Count']
+            st.bar_chart(chart_data)
+        
+        # Projections
+        if show_projections and date_col in data.columns and target_total > 0:
+            st.markdown("### 📅 Completion Projection")
+            
+            # Calculate daily submission rate
+            if date_col in data.columns:
+                try:
+                    # Convert to datetime if needed
+                    dates = pd.to_datetime(data[date_col], errors='coerce')
+                    daily_counts = dates.dt.date.value_counts().sort_index()
+                    
+                    if len(daily_counts) > 1:
+                        avg_daily_rate = daily_counts.mean()
+                        current_total = len(data)
+                        remaining = target_total - current_total
+                        
+                        if remaining > 0 and avg_daily_rate > 0:
+                            days_needed = remaining / avg_daily_rate
+                            
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("Current Progress", f"{current_total:,} / {target_total:,}")
+                            with col2:
+                                pct_complete = (current_total / target_total * 100)
+                                st.metric("% Complete", f"{pct_complete:.1f}%")
+                            with col3:
+                                st.metric("Daily Average", f"{avg_daily_rate:.1f}")
+                            with col4:
+                                st.metric("Days to Target", f"{days_needed:.0f}")
+                        elif current_total >= target_total:
+                            st.success(f"✅ Target reached! ({current_total:,}/{target_total:,})")
+                except Exception:
+                    st.info("Could not calculate projections for this date format.")
+        
+        # Enumerator details
+        if show_enumerators and enumerator_col in data.columns:
+            st.markdown("### 📋 Enumerator Details")
+            
+            selected_enum = st.selectbox(
+                "Select enumerator to view details",
+                sorted(data[enumerator_col].unique()),
+                key="monitor_selected_enum"
+            )
+            
+            enum_data = data[data[enumerator_col] == selected_enum]
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Surveys", len(enum_data))
+            with col2:
+                if date_col in data.columns:
+                    enum_dates = enum_data[date_col].nunique()
+                    st.metric("Days Active", enum_dates)
+            with col3:
+                if treatment_col in data.columns and date_col in data.columns:
+                    try:
+                        dates = pd.to_datetime(enum_data[date_col], errors='coerce')
+                        last_submission = dates.max()
+                        st.metric("Last Submission", last_submission.strftime("%Y-%m-%d") if pd.notna(last_submission) else "N/A")
+                    except:
+                        pass
+            
+            if treatment_col in data.columns:
+                st.markdown("#### Surveys by Arm")
+                arm_dist = enum_data[treatment_col].value_counts().reset_index()
+                arm_dist.columns = ['Treatment Arm', 'Count']
+                st.dataframe(arm_dist, use_container_width=True)
+        
+        # Export data
+        st.markdown("---")
+        st.markdown("### 📥 Download Data")
+        
+        csv = data.to_csv(index=False)
+        st.download_button(
+            "📥 Download submissions",
+            csv,
+            "submissions_export.csv",
+            "text/csv",
+            use_container_width=True
+        )
 
 
 # ----------------------------------------------------------------------------- #
@@ -2203,6 +3527,9 @@ def main() -> None:
         "random": "🎲 Randomization",
         "cases": "📋 Case Assignment",
         "quality": "✅ Quality Checks",
+        "analysis": "📊 Analysis & Results",
+        "backcheck": "🔍 Backcheck Selection",
+        "reports": "📄 Report Generation",
         "monitor": "📈 Monitoring Dashboard",
     }
     page = st.sidebar.radio(
@@ -2214,7 +3541,8 @@ def main() -> None:
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🗑️ Clear cached data"):
-        for key in ["baseline_data", "randomization_result", "case_data", "quality_data"]:
+        for key in ["baseline_data", "randomization_result", "case_data", "quality_data", 
+                    "analysis_data", "baseline_for_attrition", "backcheck_data", "backcheck_flags"]:
             st.session_state.pop(key, None)
         st.experimental_rerun()
 
@@ -2226,6 +3554,12 @@ def main() -> None:
         render_case_assignment()
     elif page == "quality":
         render_quality_checks()
+    elif page == "analysis":
+        render_analysis()
+    elif page == "backcheck":
+        render_backcheck()
+    elif page == "reports":
+        render_reports()
     elif page == "monitor":
         render_monitoring()
 
