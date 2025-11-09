@@ -3621,5 +3621,26 @@ def main() -> None:
         render_monitoring()
 
 
+def render_footer():
+    """Render app footer with developer info"""
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown(
+            """
+            <div style="text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;">
+            <p style="margin: 0;">
+            <strong>RCT Field Flow</strong> | Developed by <strong>Aubrey Jolex</strong><br>
+            📧 <a href="mailto:aubreyjolex@gmail.com">aubreyjolex@gmail.com</a><br>
+            <a href="https://github.com/ajolex/rct_field_flow" target="_blank">View on GitHub</a>
+            </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
 if __name__ == "__main__":
     main()
+    render_footer()
