@@ -3603,6 +3603,22 @@ def main() -> None:
             st.session_state.pop(key, None)
         st.experimental_rerun()
 
+    # Add developer watermark to sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        """
+        <div style="text-align: center; color: #888; font-size: 0.75rem; padding: 0.5rem 0;">
+        <p style="margin: 0.3rem 0;"><strong>RCT Field Flow</strong></p>
+        <p style="margin: 0.3rem 0; font-size: 0.7rem;">by <strong>Aubrey Jolex</strong></p>
+        <p style="margin: 0.3rem 0; font-size: 0.65rem;">
+        <a href="mailto:aubreyjolex@gmail.com" style="color: #888; text-decoration: none;">📧 Email</a> | 
+        <a href="https://github.com/ajolex/rct_field_flow" target="_blank" style="color: #888; text-decoration: none;">GitHub</a>
+        </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
     if page == "home":
         render_home()
     elif page == "random":
