@@ -37,6 +37,11 @@ STREAMLIT_CLOUD*.txt
 00_START_HERE.txt
 WHY_DOCKERFILE_REMOVED.md
 
+# All markdown files except README and docs/
+*.md
+!README.md
+!docs/*.md
+
 # Setup files (not needed for Streamlit Cloud deployment)
 setup.py
 pyproject.toml
