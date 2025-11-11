@@ -2,8 +2,6 @@ __pycache__
 *.pyc
 .env
 .env.local
-.streamlit/secrets.toml
-.streamlit/secrets.toml.local
 .DS_Store
 *.log
 data/
@@ -20,6 +18,35 @@ data/
 Dockerfile
 docker-compose.yml
 docker-compose.*.yml
+.devcontainer/
+.github/
+deploy.ps1
+deploy.sh
+launch_ui.bat
+launch_ui.sh
+
+# Streamlit config (keep only what's needed for Streamlit Cloud)
+.streamlit/
+.env.example
+
+# Deployment documentation (keep locally, not in public repo)
+DEPLOYMENT*.md
+DEPLOYMENT*.txt
+STREAMLIT_CLOUD*.md
+STREAMLIT_CLOUD*.txt
+00_START_HERE.txt
+WHY_DOCKERFILE_REMOVED.md
+
+# Setup files (not needed for Streamlit Cloud deployment)
+setup.py
+pyproject.toml
+
+# Example configs (not needed in public repo)
+examples/config_example.yaml
+
+# Auto-generated images
+rct_field_flow/config/image/
+rct_field_flow/image/
 
 # IDE & Editor files
 .vscode/
