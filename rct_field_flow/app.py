@@ -2773,7 +2773,7 @@ def render_backcheck() -> None:
         submissions_upload = st.file_uploader(
             "Upload submissions (CSV)",
             type="csv",
-            key="backcheck_submissions",
+            key="backcheck_submissions_file",
             help="Survey submissions for backcheck selection"
         )
         if submissions_upload:
@@ -2786,7 +2786,7 @@ def render_backcheck() -> None:
         flags_upload = st.file_uploader(
             "Upload quality flags (CSV)",
             type="csv",
-            key="backcheck_flags",
+            key="backcheck_flags_file",
             help="Output from Quality Checks module (optional but recommended)"
         )
         if flags_upload:
