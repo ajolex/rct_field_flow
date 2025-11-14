@@ -11,3 +11,9 @@ linearmodels>=7.0
 scipy>=1.11
 python-dotenv>=1.0
 pyyaml>=6.0
+
+# RCT Design Activity dependencies
+pydantic>=2.0.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+streamlit-authenticator>=0.2.3

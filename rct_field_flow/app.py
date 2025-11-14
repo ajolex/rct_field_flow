@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -66,6 +67,16 @@ if "case_data" not in st.session_state:
     st.session_state.case_data: pd.DataFrame | None = None
 if "quality_data" not in st.session_state:
     st.session_state.quality_data: pd.DataFrame | None = None
+
+# ===== RCT DESIGN SESSION STATE =====
+if "design_data" not in st.session_state:
+    st.session_state.design_data: Dict | None = None
+if "design_team_name" not in st.session_state:
+    st.session_state.design_team_name: str | None = None
+if "design_program_card" not in st.session_state:
+    st.session_state.design_program_card: str | None = None
+if "design_workbook_responses" not in st.session_state:
+    st.session_state.design_workbook_responses: Dict = {}
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "default.yaml"
 
@@ -775,7 +786,695 @@ def render_home() -> None:
 
 
 # ----------------------------------------------------------------------------- #
-# RANDOMIZATION                                                                 #
+# RCT DESIGN                                                                    #
+# ----------------------------------------------------------------------------- #
+
+
+def render_rct_design() -> None:
+    """
+    Render the RCT Design Activity page following original architecture.
+    Displays program card with full context, allows design sprint or program card view.
+    """
+    try:
+        # Import rct-design components
+        sys.path.insert(0, str(Path(__file__).parent / "rct-design" / "app"))
+        from config import (
+            APP_TITLE, APP_SUBTITLE, APP_DESCRIPTION,
+            DEFAULT_SESSION_STATE as DESIGN_DEFAULT_STATE,
+            WORKBOOK_STEPS, PARTICIPANT_GUIDANCE, SPRINT_CHECKLIST
+        )
+        from utils.program_cards import get_all_program_cards, get_program_card, format_card_for_display
+        
+        # Page header
+        st.markdown("<div style='font-size: 2.5rem; font-weight: 700; color: #164a7f; margin-bottom: 0.5rem;'>🎯 Design an RCT</div>", unsafe_allow_html=True)
+        st.markdown(f"### Transform program concepts into rigorous randomized evaluations")
+        
+        # Initialize design-specific session state
+        for key, value in DESIGN_DEFAULT_STATE.items():
+            design_key = f"design_{key}"
+            if design_key not in st.session_state:
+                st.session_state[design_key] = value
+        
+        # Initialize navigation and workbook state
+        # design_current_step: 0=program card view, 1=welcome page, 2-7=workbook steps 1-6
+        if 'design_current_step' not in st.session_state:
+            st.session_state.design_current_step = 1  # Start at welcome page
+        if 'design_workbook_responses' not in st.session_state or st.session_state.design_workbook_responses is None:
+            st.session_state.design_workbook_responses = {}
+        
+        # Main content area: Team name and program selection
+        st.markdown("---")
+        st.markdown("### Get Started")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            team_name = st.text_input(
+                "Team Name:",
+                value=st.session_state.get("design_team_name", ""),
+                key="design_team_name_input",
+                placeholder="Enter your team name..."
+            )
+            if team_name:
+                st.session_state.design_team_name = team_name
+        
+        with col2:
+            cards = get_all_program_cards()
+            card_options = {card_id: card["title"] for card_id, card in cards.items()}
+            
+            selected_card_id = st.selectbox(
+                "Choose or select program:",
+                options=list(card_options.keys()),
+                format_func=lambda x: card_options[x],
+                key="design_card_select",
+            )
+            if selected_card_id:
+                st.session_state.design_program_card = selected_card_id
+        
+        st.markdown("---")
+        
+        # Validation check
+        if not team_name:
+            st.warning("Please enter your team name to get started.")
+            return
+        
+        if not st.session_state.design_program_card:
+            st.warning("Please select a program to get started.")
+            return
+        
+        # Get selected program card
+        card = get_program_card(st.session_state.design_program_card)
+        if not card:
+            st.error("Program card not found. Please select a valid program.")
+            return
+        
+        formatted = format_card_for_display(card)
+        if not formatted:
+            st.error("Error formatting program card.")
+            return
+        
+        # Page routing based on current_step
+        current_step = st.session_state.design_current_step
+        
+        # Route to appropriate page
+        if current_step == 0:
+            # Full program card display page
+            render_program_card_full(card, formatted, team_name)
+        elif current_step == 1:
+            # Welcome/home page with About expander
+            render_design_welcome(card, formatted, team_name)
+        elif current_step == 8:
+            # Report generation page
+            render_design_report_generation(team_name)
+        else:
+            # Workbook steps (2-7 = steps 1-6)
+            render_design_workbook(team_name, WORKBOOK_STEPS)
+    
+    except Exception as e:
+        import traceback
+        st.error(f"Error loading RCT Design module: {str(e)}")
+        st.code(traceback.format_exc())
+
+
+def render_design_welcome(card, formatted, team_name):
+    """Render the welcome/home page matching original rct-design architecture."""
+    # Import config items - use absolute import
+    rct_design_path = Path(__file__).parent / "rct-design" / "app"
+    if str(rct_design_path) not in sys.path:
+        sys.path.insert(0, str(rct_design_path))
+    
+    try:
+        import config as rct_config
+        APP_DESCRIPTION = getattr(rct_config, 'APP_DESCRIPTION', "This workshop guides you through designing an RCT.")
+        PARTICIPANT_GUIDANCE = getattr(rct_config, 'PARTICIPANT_GUIDANCE', [])
+        SPRINT_CHECKLIST = getattr(rct_config, 'SPRINT_CHECKLIST', [])
+    except:
+        APP_DESCRIPTION = "This workshop guides you through designing an RCT."
+        PARTICIPANT_GUIDANCE = []
+        SPRINT_CHECKLIST = []
+    
+    # About This Activity expander
+    with st.expander("📖 About This Activity", expanded=False):
+        st.markdown(APP_DESCRIPTION if APP_DESCRIPTION else "This workshop guides you through designing an RCT.")
+        st.markdown("---")
+        st.markdown("**How to Use This Workbook:**")
+        guidance_list = PARTICIPANT_GUIDANCE if PARTICIPANT_GUIDANCE else []
+        for i, guidance in enumerate(guidance_list, 1):
+            st.markdown(f"**{i}.** {guidance}")
+    
+    st.markdown("---")
+    
+    # Main content in two columns
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("""
+        ## 🚀 Ready to Design Your RCT?
+        
+        This workshop will guide you through key steps to turn your program concept into 
+        a rigorous randomized controlled trial (RCT) design. You'll work as a team to:
+        
+        1. **Frame the Challenge** – Clarify your core problem and success vision
+        2. **Map the Theory of Change** – Connect your activities to outcomes 
+        3. **Design Measurement** – Choose indicators and instruments
+        4. **Plan Randomization** – Select your random assignment approach
+        5. **Safeguard Implementation** – Set up monitoring and adaptation mechanisms
+        6. **Decide and Commit** – Record your decision trigger and next steps
+        
+        **Each section takes 3 minutes.** Work through in order, capture decisions, 
+        and mark any items [ ] you'll revisit during the gallery walk.
+        """)
+        
+        st.markdown("### ✅ Sprint Checklist")
+        checklist = SPRINT_CHECKLIST if SPRINT_CHECKLIST else []
+        for item in checklist:
+            st.markdown(f"- [ ] {item}")
+    
+    with col2:
+        st.info("""
+        ### 📍 Session Snapshot
+        
+        **Duration:** 30 min
+        
+        **Format:**
+        - 4 min: Welcome
+        - 18 min: Design Sprint
+        - 5 min: Gallery
+        - 3 min: Commit
+        
+        **Deliverables:**
+        - Theory of Change
+        - Measurement Plan
+        - Randomization Design
+        - Decision Trigger
+        """)
+    
+    st.markdown("---")
+    
+    # Context Snapshot section
+    st.subheader("📍 Context Snapshot")
+    col1, col2, col3 = st.columns(3)
+    
+    context_sections = formatted.get('context_sections', [])
+    if len(context_sections) >= 3:
+        with col1:
+            st.markdown("**Problem**")
+            st.write(context_sections[0][1])
+        with col2:
+            st.markdown("**Resources**")
+            st.write(context_sections[1][1])
+        with col3:
+            st.markdown("**Logistics**")
+            st.write(context_sections[2][1])
+    
+    st.divider()
+    
+    # Program Concept section
+    st.subheader("🎯 Program Concept")
+    col1, col2, col3 = st.columns(3)
+    
+    concept_sections = formatted.get('concept_sections', [])
+    if len(concept_sections) >= 3:
+        with col1:
+            st.markdown("**Activities**")
+            st.write(concept_sections[0][1])
+        with col2:
+            st.markdown("**Approach**")
+            st.write(concept_sections[1][1])
+        with col3:
+            st.markdown("**Engagement**")
+            st.write(concept_sections[2][1])
+    
+    st.divider()
+    
+    # Decision Horizon & Metrics section
+    st.subheader("� Decision Horizon & Metrics")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**Decision Trigger**")
+        st.info(formatted.get('decision_horizon', 'N/A'))
+    with col2:
+        st.metric("Reach", formatted.get('reach', 'N/A'))
+    with col3:
+        st.metric("Budget", formatted.get('budget', 'N/A'))
+    
+    st.divider()
+    
+    # Design Considerations
+    st.subheader("⚠️ Design Considerations")
+    st.warning(formatted.get('considerations', 'N/A'))
+    
+    st.divider()
+    
+    # Baseline Data section
+    st.subheader("📊 Baseline Data for Randomization")
+    
+    data_file_map = {
+        "education_bridge_to_basics": "data/sample_data/education_bridge_to_basics.csv",
+        "health_community_care_loop": "data/sample_data/health_community_care_loop.csv",
+        "agriculture_smart_water_boost": "data/sample_data/agriculture_smart_water_boost.csv"
+    }
+    
+    card_id = st.session_state.design_program_card
+    if card_id in data_file_map:
+        data_path = Path(__file__).parent / "rct-design" / data_file_map[card_id]
+        
+        if data_path.exists():
+            df = pd.read_csv(data_path)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.info(f"""
+                **Sample Data Available:**
+                - {len(df):,} records
+                - {df.shape[1]} variables
+                - Ready for randomization practice
+                
+                Download this baseline data to use with the RCT Field Flow randomization tool.
+                """)
+            
+            with col2:
+                csv_data = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Baseline Data",
+                    data=csv_data,
+                    file_name=data_path.name,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with st.expander("👁️ Preview Data (first 10 rows)"):
+                st.dataframe(df.head(10), use_container_width=True)
+    
+    st.divider()
+    
+    # Call to action
+    st.success("✓ You've reviewed your program card. Ready to start the design sprint?")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📄 View Program Card", use_container_width=True):
+            st.session_state.design_current_step = 0
+            st.rerun()
+    
+    with col2:
+        if st.button("▶️ Begin Design Sprint", type="primary", use_container_width=True):
+            st.session_state.design_current_step = 2  # Start at first workbook step
+            st.rerun()
+
+
+def render_program_card_full(card, formatted, team_name):
+    """Render full program card display page."""
+    st.markdown(f"## 🎴 {formatted.get('title', 'N/A')}")
+    st.markdown(f"**Sector:** {formatted.get('sector', 'N/A')} | **Theme:** {formatted.get('theme', 'N/A')}")
+    
+    st.divider()
+    
+    # Context section - render full sections same as welcome page
+    st.subheader("📍 Context Snapshot")
+    col1, col2, col3 = st.columns(3)
+    
+    context_sections = formatted.get('context_sections', [])
+    if len(context_sections) >= 3:
+        with col1:
+            st.markdown("**Problem**")
+            st.write(context_sections[0][1])
+        with col2:
+            st.markdown("**Resources**")
+            st.write(context_sections[1][1])
+        with col3:
+            st.markdown("**Logistics**")
+            st.write(context_sections[2][1])
+    
+    st.divider()
+    
+    # Program concept
+    st.subheader("🎯 Program Concept")
+    col1, col2, col3 = st.columns(3)
+    
+    concept_sections = formatted.get('concept_sections', [])
+    if len(concept_sections) >= 3:
+        with col1:
+            st.markdown("**Activities**")
+            st.write(concept_sections[0][1])
+        with col2:
+            st.markdown("**Approach**")
+            st.write(concept_sections[1][1])
+        with col3:
+            st.markdown("**Engagement**")
+            st.write(concept_sections[2][1])
+    
+    st.divider()
+    
+    # Decision horizon and metrics
+    st.subheader("📊 Decision Horizon & Metrics")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**Decision Trigger**")
+        st.info(formatted.get('decision_horizon', 'N/A'))
+    with col2:
+        st.metric("Reach", formatted.get('reach', 'N/A'))
+    with col3:
+        st.metric("Budget", formatted.get('budget', 'N/A'))
+    
+    st.divider()
+    
+    # Considerations
+    st.subheader("⚠️ Design Considerations")
+    st.warning(formatted.get('considerations', 'N/A'))
+    
+    st.divider()
+    
+    # Baseline Data section
+    st.subheader("📊 Baseline Data for Randomization")
+    
+    data_file_map = {
+        "education_bridge_to_basics": "data/sample_data/education_bridge_to_basics.csv",
+        "health_community_care_loop": "data/sample_data/health_community_care_loop.csv",
+        "agriculture_smart_water_boost": "data/sample_data/agriculture_smart_water_boost.csv"
+    }
+    
+    card_id = st.session_state.design_program_card
+    if card_id in data_file_map:
+        data_path = Path(__file__).parent / "rct-design" / data_file_map[card_id]
+        
+        if data_path.exists():
+            df = pd.read_csv(data_path)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.info(f"""
+                **Sample Data Available:**
+                - {len(df):,} records
+                - {df.shape[1]} variables
+                - Ready for randomization practice
+                
+                Download this baseline data to use with the RCT Field Flow randomization tool.
+                """)
+            
+            with col2:
+                csv_data = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Baseline Data",
+                    data=csv_data,
+                    file_name=data_path.name,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with st.expander("👁️ Preview Data (first 10 rows)"):
+                st.dataframe(df.head(10), use_container_width=True)
+    
+    st.divider()
+    
+    # Navigation buttons
+    st.success("✓ You've reviewed your program card. Ready to start the design sprint?")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("▶️ Begin Design Sprint", type="primary", use_container_width=True):
+            st.session_state.design_current_step = 2
+            st.rerun()
+    
+    with col2:
+        if st.button("← Back to Welcome", use_container_width=True):
+            st.session_state.design_current_step = 1
+            st.rerun()
+
+
+def render_design_workbook(team_name, WORKBOOK_STEPS):
+    """Render the design workbook steps interface."""
+    # Workbook step is design_current_step - 2 (step 2 = workbook 0)
+    current_step = st.session_state.design_current_step - 2
+    
+    if current_step < len(WORKBOOK_STEPS):
+                step = WORKBOOK_STEPS[current_step]
+                
+                # Step header
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #164a7f 0%, #2fa6dc 100%); 
+                            color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem;">
+                    <div style="font-size: 0.85rem; text-transform: uppercase; opacity: 0.9;">
+                        Step {step['number']} of {len(WORKBOOK_STEPS)}
+                    </div>
+                    <div style="font-size: 1.75rem; font-weight: 600; margin: 0.5rem 0;">
+                        {step['title']}
+                    </div>
+                    <div style="font-size: 1.05rem; opacity: 0.95;">
+                        {step['goal']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Progress dots
+                progress_html = '<div style="display: flex; justify-content: center; gap: 0.5rem; margin: 1.5rem 0;">'
+                for i in range(len(WORKBOOK_STEPS)):
+                    if i < current_step:
+                        progress_html += '<div style="width: 12px; height: 12px; border-radius: 50%; background: #4caf50;"></div>'
+                    elif i == current_step:
+                        progress_html += '<div style="width: 12px; height: 12px; border-radius: 50%; background: #164a7f; box-shadow: 0 0 8px rgba(22, 74, 127, 0.5);"></div>'
+                    else:
+                        progress_html += '<div style="width: 12px; height: 12px; border-radius: 50%; background: #ddd;"></div>'
+                progress_html += '</div>'
+                st.markdown(progress_html, unsafe_allow_html=True)
+                
+                # Two column layout
+                col1, col2 = st.columns([1, 1.2])
+                
+                with col1:
+                    # Actions section
+                    st.markdown('<div style="background: rgba(22, 74, 127, 0.06); border-left: 4px solid #2fa6dc; border-radius: 8px; padding: 1.25rem; margin: 1rem 0;">', unsafe_allow_html=True)
+                    st.markdown("**Actions:**")
+                    for action in step['actions']:
+                        st.markdown(f"• {action}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Tip
+                    st.markdown(f'<div style="background: rgba(47, 166, 220, 0.12); border-left: 4px solid #2fa6dc; border-radius: 8px; padding: 1rem; margin: 1rem 0;"><strong>💡 Tip:</strong> {step["tip"]}</div>', unsafe_allow_html=True)
+                
+                with col2:
+                    # Note fields
+                    st.markdown("**Your Responses:**")
+                    for field in step['fields']:
+                        field_key = f"design_step{step['number']}_{field['key']}"
+                        label = field.get('label', '')
+                        placeholder = field.get('placeholder', '')
+                        
+                        if field['type'] == 'text':
+                            value = st.text_input(
+                                label,
+                                value=st.session_state.design_workbook_responses.get(field_key, ''),
+                                placeholder=placeholder,
+                                key=field_key,
+                                label_visibility="visible"
+                            )
+                        elif field['type'] == 'textarea':
+                            rows = field.get('rows', 3)
+                            value = st.text_area(
+                                label,
+                                value=st.session_state.design_workbook_responses.get(field_key, ''),
+                                placeholder=placeholder,
+                                key=field_key,
+                                height=rows * 35,
+                                label_visibility="visible"
+                            )
+                        
+                        st.session_state.design_workbook_responses[field_key] = value
+                
+                # Navigation buttons
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if current_step > 0:
+                        if st.button("← Previous Step", use_container_width=True):
+                            st.session_state.design_current_step -= 1
+                            st.rerun()
+                
+                with col2:
+                    if current_step < len(WORKBOOK_STEPS) - 1:
+                        if st.button("Next Step →", type="primary", use_container_width=True):
+                            st.session_state.design_current_step += 1
+                            st.rerun()
+                    else:
+                        if st.button("Complete & Generate Report →", type="primary", use_container_width=True):
+                            # Save design data to session state
+                            st.session_state.design_data = {
+                                "team_name": team_name,
+                                "program_card": st.session_state.design_program_card,
+                                "timestamp": str(datetime.now()),
+                                "responses": dict(st.session_state.design_workbook_responses)
+                            }
+                            # Navigate to RCT Design report generation (step 8)
+                            st.session_state.design_current_step = 8  # Report generation step
+                            st.rerun()
+    else:
+        st.success("✅ All steps completed!")
+
+
+def render_design_report_generation(team_name):
+    """Render the RCT Design sprint report generation page."""
+    st.title("📄 Generate Final Report")
+    
+    # Get design data
+    program_card = st.session_state.design_program_card
+    workbook_responses = st.session_state.design_workbook_responses
+    
+    st.markdown(f"""
+    ### 🎉 {team_name} - Complete Your RCT Design Activity
+    
+    **Program Card:** {program_card}
+    
+    You've worked through the complete RCT design process:
+    1. ✅ Selected a program
+    2. ✅ Designed your RCT (Step 1-6)
+    3. ✅ Documented your design decisions
+    
+    Now let's generate your final design report!
+    """)
+    
+    st.markdown("---")
+    
+    # Report summary
+    st.markdown("### 📋 Report Summary")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        **Report Includes:**
+        - Program selection and context
+        - All 6 design sprint steps
+        - Your team's responses
+        - Key design decisions
+        - Next steps for implementation
+        """)
+    
+    with col2:
+        st.markdown("""
+        **Export Options:**
+        - 📄 HTML (view in browser)
+        - 📊 Full design workbook
+        - 🎯 Ready for randomization
+        """)
+    
+    st.markdown("---")
+    
+    # Preview responses
+    st.markdown("### 👁️ Preview Your Responses")
+    
+    with st.expander("View All Workbook Responses", expanded=False):
+        if workbook_responses:
+            for key, value in workbook_responses.items():
+                if value:
+                    st.markdown(f"**{key}:** {value}")
+        else:
+            st.info("No responses captured yet")
+    
+    st.markdown("---")
+    
+    # Generate report button
+    st.markdown("### 📝 Generate Your Report")
+    
+    if st.button("📄 Generate HTML Report", use_container_width=True, type="primary"):
+        # Generate simple HTML report
+        timestamp = datetime.now().strftime("%B %d, %Y at %H:%M:%S")
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>RCT Design Report - {team_name}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; max-width: 960px; margin: 40px auto; padding: 20px; line-height: 1.6; }}
+                h1 {{ color: #164a7f; border-bottom: 3px solid #2fa6dc; padding-bottom: 10px; }}
+                h2 {{ color: #2fa6dc; margin-top: 30px; }}
+                .header {{ background: #e8f4f8; padding: 20px; border-radius: 8px; margin-bottom: 30px; }}
+                .section {{ margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2fa6dc; }}
+                .response {{ margin: 10px 0; }}
+                .label {{ font-weight: bold; color: #164a7f; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🎯 RCT Design Activity Report</h1>
+                <p><strong>Team:</strong> {team_name}</p>
+                <p><strong>Program:</strong> {program_card}</p>
+                <p><strong>Generated:</strong> {timestamp}</p>
+            </div>
+            
+            <h2>📋 Design Sprint Responses</h2>
+        """
+        
+        # Add responses
+        if workbook_responses:
+            for key, value in workbook_responses.items():
+                if value:
+                    clean_key = key.replace("step", "Step ").replace("_", " ").title()
+                    html_content += f"""
+                    <div class="response">
+                        <span class="label">{clean_key}:</span><br>
+                        {value}
+                    </div>
+                    """
+        
+        html_content += """
+            <hr style="margin: 40px 0;">
+            <p style="text-align: center; color: #666;">
+                Generated by RCT Field Flow | Developed by Aubrey Jolex<br>
+                <a href="mailto:aubreyjolex@gmail.com">aubreyjolex@gmail.com</a>
+            </p>
+        </body>
+        </html>
+        """
+        
+        st.success("✅ Report generated successfully!")
+        
+        # Download button
+        st.download_button(
+            label="📥 Download HTML Report",
+            data=html_content,
+            file_name=f"RCT_Design_Report_{team_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            mime="text/html",
+            use_container_width=True
+        )
+        
+        # Preview
+        with st.expander("👁️ Preview Report", expanded=False):
+            st.components.v1.html(html_content, height=600, scrolling=True)
+    
+    st.markdown("---")
+    
+    # Next steps
+    st.markdown("### 🎲 Next Step: Randomization")
+    st.info("With your design sprint complete and report generated, you're ready to randomize your baseline data.")
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col1:
+        if st.button("← Back to Workbook", use_container_width=True):
+            st.session_state.design_current_step = 7  # Last workbook step
+            st.rerun()
+    
+    with col2:
+        if st.button("🏠 Back to Welcome", use_container_width=True):
+            st.session_state.design_current_step = 1
+            st.rerun()
+    
+    with col3:
+        if st.button("▶️ Proceed to Randomization", type="primary", use_container_width=True):
+            st.session_state.current_page = "random"
+            st.session_state.selected_page = "random"
+            st.rerun()
+
+
+# ----------------------------------------------------------------------------- #
+# HOME                                                                          #
 # ----------------------------------------------------------------------------- #
 
 
@@ -784,6 +1483,15 @@ def render_randomization() -> None:
     st.markdown(
         "Upload randomization data, configure treatment arms, and run rerandomization with balance checks."
     )
+    
+    # Display design data if coming from RCT Design
+    if st.session_state.design_data:
+        with st.info(f"🎯 **Design loaded:** Team {st.session_state.design_data.get('team_name')}", icon="ℹ️"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Program:** {st.session_state.design_data.get('program_card', 'N/A')}")
+            with col2:
+                st.markdown(f"**Started:** {st.session_state.design_data.get('timestamp', 'N/A')}")
 
     default_config = load_default_config().get("randomization", {})
     df = st.session_state.baseline_data
@@ -3237,6 +3945,18 @@ def render_reports() -> None:
             
             st.success("✅ Report generated successfully!")
             
+            # Add button to proceed to randomization
+            st.markdown("---")
+            st.markdown("### 🎲 Next Step: Randomization")
+            st.info("With your design sprint complete and report generated, you're ready to randomize your baseline data.")
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("▶️ Proceed to Randomization", type="primary", use_container_width=True, key="proceed_to_random"):
+                    st.session_state.current_page = "random"
+                    st.session_state.selected_page = "random"
+                    st.rerun()
+            
         except Exception as e:
             st.error(f"Error generating report: {e}")
 
@@ -3574,6 +4294,184 @@ def render_monitoring() -> None:
 
 
 # ----------------------------------------------------------------------------- #
+# FACILITATOR DASHBOARD                                                         #
+# ----------------------------------------------------------------------------- #
+
+
+def render_facilitator_dashboard() -> None:
+    """Render the facilitator dashboard for monitoring team progress."""
+    st.title("👨‍🏫 Facilitator Dashboard")
+    st.markdown("Monitor team progress and provide guidance during the RCT Design Activity workshop.")
+    
+    # Password protection
+    if 'facilitator_authenticated' not in st.session_state:
+        st.session_state.facilitator_authenticated = False
+    
+    if not st.session_state.facilitator_authenticated:
+        st.markdown("### 🔐 Authentication Required")
+        st.info("This dashboard is password-protected for facilitators only.")
+        
+        password = st.text_input("Enter facilitator password:", type="password", key="facilitator_pwd")
+        
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔓 Login", use_container_width=True):
+                # Simple password check - in production, use proper authentication
+                if password == "facilitator2025":  # Default password
+                    st.session_state.facilitator_authenticated = True
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid password")
+        
+        st.markdown("---")
+        st.caption("💡 **Default password:** facilitator2025")
+        return
+    
+    # Authenticated - show dashboard
+    st.success("✅ Authenticated as facilitator")
+    
+    if st.button("🔒 Logout", key="facilitator_logout"):
+        st.session_state.facilitator_authenticated = False
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Load team progress data
+    progress_file = Path(__file__).parent / "rct-design" / "data" / "team_progress.json"
+    
+    if not progress_file.exists():
+        st.warning("📊 No team progress data yet. Teams will appear here once they start the activity.")
+        st.info("**Instructions:**\n- Teams enter their names in the sidebar\n- Progress is automatically tracked\n- Refresh this page to see updates")
+        return
+    
+    try:
+        with open(progress_file, "r") as f:
+            team_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        st.error("Error loading team progress data")
+        return
+    
+    if not team_data:
+        st.warning("📊 No teams have started yet.")
+        return
+    
+    # Summary metrics
+    st.markdown("### 📊 Workshop Summary")
+    
+    teams_started = sum(1 for team in team_data.values() if team.get("started"))
+    teams_completed = sum(1 for team in team_data.values() if team.get("completed"))
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Teams", len(team_data))
+    with col2:
+        st.metric("Teams Started", teams_started)
+    with col3:
+        st.metric("Teams Completed", teams_completed)
+    with col4:
+        completion_rate = (teams_completed / len(team_data) * 100) if len(team_data) > 0 else 0
+        st.metric("Completion Rate", f"{completion_rate:.1f}%")
+    
+    st.markdown("---")
+    
+    # Team progress table
+    st.markdown("### 📋 Team Progress")
+    
+    # Create progress dataframe
+    progress_list = []
+    for team_name, data in team_data.items():
+        progress_list.append({
+            "Team": team_name,
+            "Program Card": data.get("program_card", "N/A"),
+            "Started": "✅" if data.get("started") else "❌",
+            "Current Step": data.get("current_step", 0),
+            "Completed": "✅" if data.get("completed") else "⏳",
+            "Started At": data.get("started_at", "N/A"),
+            "Completed At": data.get("completed_at", "N/A")
+        })
+    
+    progress_df = pd.DataFrame(progress_list)
+    st.dataframe(progress_df, use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    
+    # Individual team details
+    st.markdown("### 🔍 Team Details")
+    
+    selected_team = st.selectbox("Select team to view details:", list(team_data.keys()))
+    
+    if selected_team:
+        team_info = team_data[selected_team]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Team Information:**")
+            st.write(f"- **Program Card:** {team_info.get('program_card', 'N/A')}")
+            st.write(f"- **Current Step:** {team_info.get('current_step', 0)}")
+            st.write(f"- **Started:** {team_info.get('started_at', 'N/A')}")
+            st.write(f"- **Completed:** {team_info.get('completed_at', 'N/A')}")
+        
+        with col2:
+            # Load workbook responses if available
+            workbook_dir = Path(__file__).parent / "rct-design" / "data" / "workbooks"
+            safe_name = "".join(c for c in selected_team if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+            workbook_file = workbook_dir / f"{safe_name}_workbook.json"
+            
+            if workbook_file.exists():
+                try:
+                    with open(workbook_file, "r") as f:
+                        responses = json.load(f)
+                    
+                    st.markdown("**Workbook Progress:**")
+                    filled_fields = sum(1 for v in responses.values() if v)
+                    st.progress(filled_fields / max(len(responses), 1))
+                    st.caption(f"{filled_fields}/{len(responses)} fields completed")
+                except:
+                    st.warning("Could not load workbook data")
+            else:
+                st.info("No workbook data saved yet")
+    
+    st.markdown("---")
+    
+    # Coaching tips
+    st.markdown("### 💡 Facilitator Tips")
+    
+    with st.expander("🎯 Common Challenges & Interventions"):
+        st.markdown("""
+        **If teams are stuck on Step 1 (Frame the Challenge):**
+        - Ask: "Who exactly will benefit from this program?"
+        - Prompt: "What does success look like in 6 months?"
+        
+        **If teams struggle with Theory of Change (Step 2):**
+        - Use the "If-Then" framework: "If we do X, then Y will happen because..."
+        - Draw the connection visually on a whiteboard
+        
+        **For Measurement issues (Step 3):**
+        - Start with outcomes, work backwards to indicators
+        - Ask: "How will you know if it's working?"
+        
+        **Randomization confusion (Step 4):**
+        - Use simple examples (coin flip, lottery)
+        - Emphasize fairness and statistical power
+        """)
+    
+    # Download progress report
+    st.markdown("---")
+    st.markdown("### 📥 Export Progress Report")
+    
+    csv_data = progress_df.to_csv(index=False)
+    st.download_button(
+        "📥 Download Progress Report (CSV)",
+        csv_data,
+        f"workshop_progress_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        "text/csv",
+        use_container_width=True
+    )
+
+
+# ----------------------------------------------------------------------------- #
 # MAIN                                                                          #
 # ----------------------------------------------------------------------------- #
 
@@ -3581,6 +4479,7 @@ def render_monitoring() -> None:
 def main() -> None:
     nav = {
         "home": "🏠 Home",
+        "design": "🎯 RCT Design",
         "random": "🎲 Randomization",
         "cases": "📋 Case Assignment",
         "quality": "✅ Quality Checks",
@@ -3588,20 +4487,41 @@ def main() -> None:
         "backcheck": "🔍 Backcheck Selection",
         "reports": "📄 Report Generation",
         "monitor": "📈 Monitoring Dashboard",
+        "facilitator": "👨‍🏫 Facilitator Dashboard",
     }
-    page = st.sidebar.radio(
-        "Navigation",
-        options=list(nav.keys()),
-        format_func=lambda key: nav[key],
-        label_visibility="collapsed",
-    )
+    
+    # Determine which page to show
+    # Priority: programmatically set current_page > sidebar selection
+    if 'current_page' in st.session_state and st.session_state.current_page:
+        page = st.session_state.current_page
+    else:
+        # Use sidebar for navigation
+        nav_keys = list(nav.keys())
+        
+        # Get the default selection (use 'home' if nothing is set)
+        if 'selected_page' not in st.session_state:
+            st.session_state.selected_page = "home"
+        
+        default_index = nav_keys.index(st.session_state.selected_page) if st.session_state.selected_page in nav_keys else 0
+        
+        page = st.sidebar.radio(
+            "Navigation",
+            options=nav_keys,
+            format_func=lambda key: nav[key],
+            label_visibility="collapsed",
+            index=default_index,
+            key="nav_radio"
+        )
+        
+        # Update selected_page
+        st.session_state.selected_page = page
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🗑️ Clear cached data"):
         for key in ["baseline_data", "randomization_result", "case_data", "quality_data", 
                     "analysis_data", "baseline_for_attrition", "backcheck_data", "backcheck_flags"]:
             st.session_state.pop(key, None)
-        st.experimental_rerun()
+        st.rerun()
 
     # Add developer watermark to sidebar
     st.sidebar.markdown("---")
@@ -3621,6 +4541,8 @@ def main() -> None:
 
     if page == "home":
         render_home()
+    elif page == "design":
+        render_rct_design()
     elif page == "random":
         render_randomization()
     elif page == "cases":
@@ -3635,6 +4557,12 @@ def main() -> None:
         render_reports()
     elif page == "monitor":
         render_monitoring()
+    elif page == "facilitator":
+        render_facilitator_dashboard()
+    
+    # Clear the programmatic navigation flag after rendering
+    if 'current_page' in st.session_state and st.session_state.current_page:
+        st.session_state.current_page = None
 
 
 def render_footer():
