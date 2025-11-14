@@ -1309,6 +1309,11 @@ def render_design_workbook(team_name, WORKBOOK_STEPS):
                                 "timestamp": str(datetime.now()),
                                 "responses": dict(st.session_state.design_workbook_responses)
                             }
+                            # Log workbook completion
+                            log_activity('rct_design_workbook_completed', {
+                                'team_name': team_name,
+                                'program_card': st.session_state.design_program_card
+                            })
                             # Navigate to RCT Design report generation (step 8)
                             st.session_state.design_current_step = 8  # Report generation step
                             st.rerun()
@@ -4308,23 +4313,20 @@ def render_facilitator_dashboard() -> None:
         st.session_state.facilitator_authenticated = False
     
     if not st.session_state.facilitator_authenticated:
-        st.markdown("### 🔐 Authentication Required")
-        st.info("This dashboard is password-protected for facilitators only.")
+        st.markdown("<br><br>", unsafe_allow_html=True)
         
-        password = st.text_input("Enter facilitator password:", type="password", key="facilitator_pwd")
-        
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            if st.button("🔓 Login", use_container_width=True):
-                # Simple password check - in production, use proper authentication
+        with st.form("facilitator_password_form"):
+            st.markdown("### Enter Facilitator Password")
+            password = st.text_input("Password", type="password", key="facilitator_pwd", label_visibility="collapsed", placeholder="Enter facilitator password")
+            submit = st.form_submit_button("Unlock", use_container_width=True, type="primary")
+            
+            if submit:
                 if password == "facilitator2025":  # Default password
                     st.session_state.facilitator_authenticated = True
+                    st.success("✅ Access granted!")
                     st.rerun()
                 else:
-                    st.error("❌ Invalid password")
-        
-        st.markdown("---")
-        st.caption("💡 **Default password:** facilitator2025")
+                    st.error("❌ Incorrect password")
         return
     
     # Authenticated - show dashboard
@@ -4472,16 +4474,373 @@ def render_facilitator_dashboard() -> None:
 
 
 # ----------------------------------------------------------------------------- #
-# TEMPORARY ACCESS SYSTEM                                                       #
+# USER INFORMATION PAGE (ADMIN ONLY)                                            #
 # ----------------------------------------------------------------------------- #
 
+
+def render_user_information():
+    """Render the User Information page - admin only with password protection."""
+    
+    st.title("👥 User Information")
+    st.markdown("---")
+    
+    # Password protection
+    if 'userinfo_authenticated' not in st.session_state:
+        st.session_state.userinfo_authenticated = False
+    
+    if not st.session_state.userinfo_authenticated:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        with st.form("userinfo_password_form"):
+            st.markdown("### Enter Admin Password")
+            password = st.text_input("Password", type="password", key="userinfo_pwd", label_visibility="collapsed", placeholder="Enter admin password")
+            submit = st.form_submit_button("Unlock", use_container_width=True, type="primary")
+            
+            if submit:
+                if password == "admin2025":  # Admin password
+                    st.session_state.userinfo_authenticated = True
+                    st.success("✅ Access granted!")
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect password")
+        return
+    
+    # Logout button for admin
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔓 Lock Page", use_container_width=True):
+            st.session_state.userinfo_authenticated = False
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Check if user has an active session
+    if 'temp_user' not in st.session_state:
+        st.warning("⚠️ No active session data found. Users must be logged in for their data to appear here.")
+        return
+    
+    username = st.session_state.temp_user
+    org_type = st.session_state.get('temp_organization', 'Not specified')
+    access_time = st.session_state.get('temp_access_time', datetime.now())
+    duration = datetime.now() - access_time
+    
+    # Session Summary
+    st.markdown("### 👤 Session Summary")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Username", username)
+    with col2:
+        st.metric("Organization", org_type if org_type else "Not specified")
+    with col3:
+        hours = int(duration.total_seconds() // 3600)
+        minutes = int((duration.total_seconds() % 3600) // 60)
+        duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+        st.metric("Session Duration", duration_str)
+    
+    st.markdown("---")
+    
+    # Activity Log
+    st.markdown("### 📊 Activity Log")
+    activity_log = st.session_state.get('activity_log', [])
+    
+    if activity_log:
+        st.info(f"📝 Total activities logged: **{len(activity_log)}**")
+        
+        # Convert to DataFrame for display
+        df_activity = pd.DataFrame(activity_log)
+        
+        # Format timestamp
+        if 'timestamp' in df_activity.columns:
+            df_activity['timestamp'] = pd.to_datetime(df_activity['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Show in expander
+        with st.expander("View Activity Log Details", expanded=False):
+            st.dataframe(df_activity, use_container_width=True)
+        
+        # Activity summary
+        if 'action' in df_activity.columns:
+            action_counts = df_activity['action'].value_counts()
+            st.markdown("#### Activity Summary")
+            for action, count in action_counts.items():
+                st.markdown(f"- **{action}**: {count} time(s)")
+    else:
+        st.info("No activities logged yet.")
+    
+    st.markdown("---")
+    
+    # RCT Design Data
+    st.markdown("### 🎯 RCT Design Data")
+    has_design_data = False
+    
+    if 'design_team_name' in st.session_state:
+        has_design_data = True
+        st.markdown(f"**Team Name:** {st.session_state.design_team_name}")
+    
+    if 'design_program_card' in st.session_state:
+        has_design_data = True
+        st.markdown(f"**Program Card:** {st.session_state.design_program_card}")
+    
+    if 'design_workbook_responses' in st.session_state:
+        has_design_data = True
+        responses = st.session_state.design_workbook_responses
+        completed_steps = sum(1 for v in responses.values() if v)
+        st.markdown(f"**Workbook Progress:** {completed_steps}/6 steps completed")
+        
+        with st.expander("View Workbook Responses"):
+            for step, response in responses.items():
+                if response:
+                    st.markdown(f"**{step}:**")
+                    st.write(response)
+                    st.markdown("---")
+    
+    if not has_design_data:
+        st.info("No RCT Design data available.")
+    
+    st.markdown("---")
+    
+    # Download Options
+    st.markdown("### 💾 Download Options")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 📄 Complete Session Data (JSON)")
+        st.caption("Includes all session info, activity log, and RCT design data")
+        
+        session_data = get_session_data()
+        json_str = json.dumps(session_data, indent=2, default=str)
+        
+        st.download_button(
+            label="📥 Download JSON",
+            data=json_str,
+            file_name=f"session_data_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col2:
+        st.markdown("#### 📊 Activity Log (CSV)")
+        st.caption("Spreadsheet-friendly format of your activities")
+        
+        if activity_log:
+            # Flatten activity log for CSV
+            csv_data_list = []
+            for log in activity_log:
+                row = {
+                    'timestamp': log['timestamp'],
+                    'action': log['action'],
+                    'page': log.get('page', ''),
+                    'username': log.get('username', ''),
+                    'organization': log.get('organization', '')
+                }
+                # Add details if present
+                if 'details' in log:
+                    for key, value in log['details'].items():
+                        row[f'detail_{key}'] = value
+                csv_data_list.append(row)
+            
+            df_csv = pd.DataFrame(csv_data_list)
+            csv_buffer = BytesIO()
+            df_csv.to_csv(csv_buffer, index=False)
+            csv_buffer.seek(0)
+            
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"activity_log_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.button("📥 Download CSV", disabled=True, use_container_width=True)
+            st.caption("No activity data to download")
+    
+    st.markdown("---")
+    
+    # Data Privacy Notice
+    with st.expander("ℹ️ About User Data"):
+        st.markdown("""
+        **What's included in downloads:**
+        - Session information (username, organization type, timestamps)
+        - Activity log (pages visited, actions taken)
+        - RCT Design responses (if user completed the design feature)
+        - Randomization data (if user performed randomization)
+        
+        **Data retention:**
+        - All data is stored only in the user's current browser session
+        - Data is automatically cleared when user ends session or closes browser
+        - No data is stored on servers permanently
+        - Downloads are generated on-demand from session state
+        
+        **Administrator access:**
+        - This page is password-protected for administrators only
+        - Used for monitoring user activity and generating reports
+        - All user data remains private and temporary
+        """)
+    
+    st.markdown("---")
+    st.caption("🔒 Administrator Access Only | Password: admin2025")
+
+
+# ----------------------------------------------------------------------------- #
+# TEMPORARY ACCESS SYSTEM & ACTIVITY LOGGING                                    #
+# ----------------------------------------------------------------------------- #
+
+import json
+from io import BytesIO
 
 # Pages that don't require access credentials
 PUBLIC_PAGES = ["home"]
 
-# Pages that require temporary access
+# Pages that require temporary access (excludes admin pages with their own auth)
 PROTECTED_PAGES = ["design", "random", "cases", "quality", "analysis", 
-                   "backcheck", "reports", "monitor", "facilitator"]
+                   "backcheck", "reports", "monitor"]
+
+# Admin pages with their own password protection (skip temporary access)
+ADMIN_PAGES = ["facilitator", "userinfo"]
+
+
+def init_activity_log():
+    """Initialize activity log in session state"""
+    if 'activity_log' not in st.session_state:
+        st.session_state.activity_log = []
+
+
+def log_activity(action: str, details: dict = None):
+    """Log user activity with timestamp"""
+    init_activity_log()
+    
+    log_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'action': action,
+        'page': st.session_state.get('current_page', 'unknown'),
+    }
+    
+    # Add user info if available
+    if 'temp_user' in st.session_state:
+        log_entry['username'] = st.session_state.temp_user
+        log_entry['organization'] = st.session_state.temp_organization
+    
+    # Add additional details
+    if details:
+        log_entry['details'] = details
+    
+    st.session_state.activity_log.append(log_entry)
+    
+    # Auto-save session data after logging activity
+    save_session_snapshot()
+
+
+def save_session_snapshot():
+    """Save a snapshot of current session data to session state for persistence"""
+    if 'temp_user' not in st.session_state:
+        return
+    
+    # Create a comprehensive snapshot
+    snapshot = {
+        'user_info': {
+            'username': st.session_state.get('temp_user'),
+            'organization': st.session_state.get('temp_organization'),
+            'access_time': st.session_state.get('temp_access_time', datetime.now()).isoformat() if hasattr(st.session_state.get('temp_access_time', None), 'isoformat') else str(st.session_state.get('temp_access_time')),
+            'last_activity': datetime.now().isoformat(),
+        },
+        'design_data': {
+            'team_name': st.session_state.get('design_team_name'),
+            'program_card': st.session_state.get('design_program_card'),
+            'current_step': st.session_state.get('design_current_step', 1),
+            'workbook_responses': dict(st.session_state.get('design_workbook_responses', {})),
+        },
+        'activity_summary': {
+            'total_actions': len(st.session_state.get('activity_log', [])),
+            'last_page': st.session_state.get('current_page', 'home'),
+        }
+    }
+    
+    # Store snapshot in session state (persists during browser session)
+    st.session_state.session_snapshot = snapshot
+    st.session_state.last_save_time = datetime.now()
+
+
+def restore_session_if_available():
+    """Restore session data from snapshot if available (after page reload)"""
+    # Check if we have a saved snapshot but missing active session keys
+    if 'session_snapshot' in st.session_state and 'temp_user' not in st.session_state:
+        snapshot = st.session_state.session_snapshot
+        
+        # Restore user info
+        if 'user_info' in snapshot:
+            st.session_state.temp_user = snapshot['user_info'].get('username')
+            st.session_state.temp_organization = snapshot['user_info'].get('organization')
+            # Restore access time if available
+            try:
+                from dateutil import parser
+                st.session_state.temp_access_time = parser.parse(snapshot['user_info'].get('access_time'))
+            except:
+                st.session_state.temp_access_time = datetime.now()
+        
+        # Restore design data
+        if 'design_data' in snapshot:
+            design_data = snapshot['design_data']
+            if design_data.get('team_name'):
+                st.session_state.design_team_name = design_data.get('team_name')
+            if design_data.get('program_card'):
+                st.session_state.design_program_card = design_data.get('program_card')
+            if design_data.get('current_step'):
+                st.session_state.design_current_step = design_data.get('current_step')
+            if design_data.get('workbook_responses'):
+                st.session_state.design_workbook_responses = design_data.get('workbook_responses')
+        
+        # Log session restoration
+        init_activity_log()
+        st.session_state.activity_log.append({
+            'timestamp': datetime.now().isoformat(),
+            'action': 'session_restored_from_snapshot',
+            'page': 'system',
+            'username': st.session_state.get('temp_user'),
+        })
+
+
+def get_session_data() -> dict:
+    """Compile all session data for download"""
+    data = {
+        'session_info': {
+            'username': st.session_state.get('temp_user', 'Anonymous'),
+            'organization': st.session_state.get('temp_organization', 'Not specified'),
+            'access_time': st.session_state.get('temp_access_time', datetime.now()).isoformat(),
+            'export_time': datetime.now().isoformat(),
+        },
+        'activity_log': st.session_state.get('activity_log', []),
+        'rct_design_data': {},
+        'randomization_data': {},
+        'other_data': {}
+    }
+    
+    # Collect RCT Design data
+    if 'design_team_name' in st.session_state:
+        data['rct_design_data']['team_name'] = st.session_state.design_team_name
+    if 'design_program_card' in st.session_state:
+        data['rct_design_data']['program_card'] = st.session_state.design_program_card
+    if 'design_workbook_responses' in st.session_state:
+        data['rct_design_data']['workbook_responses'] = st.session_state.design_workbook_responses
+    if 'design_current_step' in st.session_state:
+        data['rct_design_data']['current_step'] = st.session_state.design_current_step
+    
+    # Collect randomization data
+    if 'randomization_result' in st.session_state:
+        result = st.session_state.randomization_result
+        data['randomization_data'] = {
+            'total_units': result.total_units,
+            'treatment_arms': [{'name': arm.name, 'size': arm.size} for arm in result.treatment_arms],
+            'timestamp': result.timestamp.isoformat() if hasattr(result, 'timestamp') else None
+        }
+    
+    # Collect other relevant data
+    data['other_data'] = {
+        'current_page': st.session_state.get('current_page', 'unknown'),
+        'pages_visited': list(set([log['page'] for log in st.session_state.get('activity_log', [])]))
+    }
+    
+    return data
 
 
 def require_temp_access(page_name: str) -> bool:
@@ -4495,6 +4854,9 @@ def require_temp_access(page_name: str) -> bool:
     
     # Check if user already has temporary access
     if 'temp_user' in st.session_state and st.session_state.temp_user:
+        # Log page visit (except admin pages)
+        if page_name not in ['userinfo', 'facilitator']:
+            log_activity(f'visited_{page_name}_page')
         return True
     
     # Show temporary access form
@@ -4584,6 +4946,14 @@ def show_temp_access_form(page_name: str):
                 st.session_state.temp_organization = org_type if org_type != "Select..." else None
                 st.session_state.temp_access_time = datetime.now()
                 
+                # Initialize activity log and log access
+                init_activity_log()
+                log_activity('user_access_granted', {
+                    'username': username.strip(),
+                    'organization': org_type,
+                    'target_page': page_name
+                })
+                
                 st.success(f"✅ Welcome, {username}! Redirecting...")
                 st.rerun()
             else:
@@ -4639,14 +5009,29 @@ def show_user_info_sidebar():
             minutes = int(duration.total_seconds() / 60)
             st.sidebar.caption(f"⏱️ Session: {minutes} min")
         
+        # Show last save time
+        if 'last_save_time' in st.session_state:
+            last_save = st.session_state.last_save_time
+            seconds_ago = int((datetime.now() - last_save).total_seconds())
+            if seconds_ago < 60:
+                st.sidebar.caption(f"💾 Auto-saved: {seconds_ago}s ago")
+            else:
+                minutes_ago = seconds_ago // 60
+                st.sidebar.caption(f"💾 Auto-saved: {minutes_ago}m ago")
+        
         # Logout button
         if st.sidebar.button("� End Session", use_container_width=True):
-            # Clear temporary access
+            # Log session end before clearing
+            if 'activity_log' in st.session_state:
+                log_activity('user_session_ended')
+            
+            # Clear temporary access and all session data
             keys_to_clear = [
                 'temp_user', 'temp_organization', 'temp_code', 'temp_access_time',
                 'baseline_data', 'randomization_result', 'case_data', 
                 'quality_data', 'analysis_data', 'design_data',
-                'design_workbook_responses', 'design_program_card'
+                'design_workbook_responses', 'design_program_card', 'activity_log',
+                'session_snapshot', 'last_save_time'
             ]
             for key in keys_to_clear:
                 st.session_state.pop(key, None)
@@ -4661,6 +5046,10 @@ def show_user_info_sidebar():
 
 
 def main() -> None:
+    # Initialize and recover session if available
+    restore_session_if_available()
+    
+    # Visible navigation menu for users
     nav = {
         "home": "🏠 Home",
         "design": "🎯 RCT Design",
@@ -4671,12 +5060,27 @@ def main() -> None:
         "backcheck": "🔍 Backcheck Selection",
         "reports": "📄 Report Generation",
         "monitor": "📈 Monitoring Dashboard",
-        "facilitator": "👨‍🏫 Facilitator Dashboard",
     }
     
+    # Hidden admin pages (not in menu, accessible via URL):
+    # - ?page=userinfo - User Information (admin password: admin2025)
+    # - ?page=facilitator - Facilitator Dashboard (facilitator password: facilitator2025)
+    
+    # All valid pages (including hidden ones)
+    all_valid_pages = list(nav.keys()) + ["userinfo", "facilitator"]
+    
     # Determine which page to show
-    # Priority: programmatically set current_page > sidebar selection
-    if 'current_page' in st.session_state and st.session_state.current_page:
+    # Priority: URL parameter > programmatically set current_page > sidebar selection
+    
+    # Check URL parameters first
+    query_params = st.query_params
+    url_page = query_params.get("page", None)
+    
+    if url_page and url_page in all_valid_pages:
+        # URL parameter takes highest priority
+        page = url_page
+    elif 'current_page' in st.session_state and st.session_state.current_page:
+        # Programmatically set page
         page = st.session_state.current_page
     else:
         # Use sidebar for navigation
@@ -4699,6 +5103,10 @@ def main() -> None:
         
         # Update selected_page
         st.session_state.selected_page = page
+    
+    # Auto-save session data periodically
+    if 'temp_user' in st.session_state:
+        save_session_snapshot()
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🗑️ Clear cached data"):
@@ -4726,8 +5134,8 @@ def main() -> None:
         unsafe_allow_html=True
     )
 
-    # Check temporary access for protected pages
-    if page in PROTECTED_PAGES:
+    # Check temporary access for protected pages (skip admin pages)
+    if page in PROTECTED_PAGES and page not in ADMIN_PAGES:
         if not require_temp_access(page):
             return  # Show access form, don't render page
     
@@ -4750,6 +5158,8 @@ def main() -> None:
         render_reports()
     elif page == "monitor":
         render_monitoring()
+    elif page == "userinfo":
+        render_user_information()
     elif page == "facilitator":
         render_facilitator_dashboard()
     
