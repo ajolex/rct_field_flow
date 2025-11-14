@@ -4472,6 +4472,190 @@ def render_facilitator_dashboard() -> None:
 
 
 # ----------------------------------------------------------------------------- #
+# TEMPORARY ACCESS SYSTEM                                                       #
+# ----------------------------------------------------------------------------- #
+
+
+# Pages that don't require access credentials
+PUBLIC_PAGES = ["home"]
+
+# Pages that require temporary access
+PROTECTED_PAGES = ["design", "random", "cases", "quality", "analysis", 
+                   "backcheck", "reports", "monitor", "facilitator"]
+
+
+def require_temp_access(page_name: str) -> bool:
+    """
+    Check if page requires temporary access and if user has it.
+    Returns True if access is granted, False if access form should be shown.
+    """
+    # Public pages don't need access
+    if page_name in PUBLIC_PAGES:
+        return True
+    
+    # Check if user already has temporary access
+    if 'temp_user' in st.session_state and st.session_state.temp_user:
+        return True
+    
+    # Show temporary access form
+    show_temp_access_form(page_name)
+    return False
+
+
+def show_temp_access_form(page_name: str):
+    """Display temporary access form for protected pages."""
+    
+    st.markdown("""
+    <style>
+    .access-container {
+        max-width: 500px;
+        margin: 80px auto;
+        padding: 40px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .access-title {
+        color: #164a7f;
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 2em;
+    }
+    .access-subtitle {
+        color: #2fa6dc;
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 1.1em;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="access-container">', unsafe_allow_html=True)
+    
+    st.markdown('<h1 class="access-title">🎯 RCT Field Flow</h1>', unsafe_allow_html=True)
+    st.markdown(f'<p class="access-subtitle">Access Required: {page_name.replace("_", " ").title()}</p>', 
+                unsafe_allow_html=True)
+    
+    st.info("👤 Please provide your details to access this feature. No registration required!")
+    
+    # Temporary access form
+    with st.form("temp_access_form", clear_on_submit=False):
+        st.markdown("##### 📝 Your Information")
+        
+        username = st.text_input(
+            "Username *",
+            placeholder="e.g., johndoe or jane.smith",
+            help="Enter a username to identify your session",
+            key="temp_name_input"
+        )
+        
+        # Organization type selector
+        org_type = st.selectbox(
+            "Organization Type",
+            options=[
+                "Select...",
+                "University/Academic Institution",
+                "Research Organization",
+                "NGO/Non-Profit",
+                "Government Agency",
+                "Private Company",
+                "Independent Researcher",
+                "Student",
+                "Other"
+            ],
+            help="Select your organization type",
+            key="temp_org_input"
+        )
+        
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            submit = st.form_submit_button(
+                "✅ Continue to App",
+                use_container_width=True,
+                type="primary"
+            )
+        
+        if submit:
+            if username and username.strip():
+                # Store temporary access credentials
+                st.session_state.temp_user = username.strip()
+                st.session_state.temp_organization = org_type if org_type != "Select..." else None
+                st.session_state.temp_access_time = datetime.now()
+                
+                st.success(f"✅ Welcome, {username}! Redirecting...")
+                st.rerun()
+            else:
+                st.error("⚠️ Please enter a username to continue")
+    
+    st.markdown("---")
+    
+    # Information box
+    with st.expander("ℹ️ About Temporary Access"):
+        st.markdown("""
+        **How it works:**
+        - No registration or account creation required
+        - Enter a username to create a temporary session
+        - Your session lasts until you close your browser
+        - No passwords required or stored
+        
+        **Your privacy:**
+        - We only store your username and organization type for the current session
+        - No personal data is saved permanently
+        - Session data is cleared when you end session or close browser
+        - Organization type helps us understand our user community
+        """)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown("""
+    <div style='text-align: center; margin-top: 50px; color: #666; font-size: 0.85rem;'>
+        <p>RCT Field Flow | Developed by <strong>Aubrey Jolex</strong></p>
+        <p>📧 <a href='mailto:aubreyjolex@gmail.com'>aubreyjolex@gmail.com</a></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def show_user_info_sidebar():
+    """Display current user info and logout button in sidebar."""
+    if 'temp_user' in st.session_state and st.session_state.temp_user:
+        st.sidebar.markdown("---")
+        
+        # Show current user
+        user_name = st.session_state.temp_user
+        user_org = st.session_state.get('temp_organization', None)
+        
+        st.sidebar.markdown("### 👤 Current Session")
+        st.sidebar.markdown(f"**Name:** {user_name}")
+        if user_org:
+            st.sidebar.markdown(f"**Org:** {user_org}")
+        
+        # Show session time
+        if 'temp_access_time' in st.session_state:
+            access_time = st.session_state.temp_access_time
+            duration = datetime.now() - access_time
+            minutes = int(duration.total_seconds() / 60)
+            st.sidebar.caption(f"⏱️ Session: {minutes} min")
+        
+        # Logout button
+        if st.sidebar.button("� End Session", use_container_width=True):
+            # Clear temporary access
+            keys_to_clear = [
+                'temp_user', 'temp_organization', 'temp_code', 'temp_access_time',
+                'baseline_data', 'randomization_result', 'case_data', 
+                'quality_data', 'analysis_data', 'design_data',
+                'design_workbook_responses', 'design_program_card'
+            ]
+            for key in keys_to_clear:
+                st.session_state.pop(key, None)
+            
+            st.success("👋 Session ended. Redirecting to home...")
+            st.rerun()
+
+
+# ----------------------------------------------------------------------------- #
 # MAIN                                                                          #
 # ----------------------------------------------------------------------------- #
 
@@ -4522,6 +4706,9 @@ def main() -> None:
                     "analysis_data", "baseline_for_attrition", "backcheck_data", "backcheck_flags"]:
             st.session_state.pop(key, None)
         st.rerun()
+    
+    # Show user info and session controls
+    show_user_info_sidebar()
 
     # Add developer watermark to sidebar
     st.sidebar.markdown("---")
@@ -4539,6 +4726,12 @@ def main() -> None:
         unsafe_allow_html=True
     )
 
+    # Check temporary access for protected pages
+    if page in PROTECTED_PAGES:
+        if not require_temp_access(page):
+            return  # Show access form, don't render page
+    
+    # Render the selected page
     if page == "home":
         render_home()
     elif page == "design":
