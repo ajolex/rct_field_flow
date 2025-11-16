@@ -42,6 +42,9 @@ WHY_DOCKERFILE_REMOVED.md
 !README.md
 !docs/*.md
 
+# Developer documentation (local only)
+developer-docs/
+
 # Setup files (not needed for Streamlit Cloud deployment)
 setup.py
 pyproject.toml

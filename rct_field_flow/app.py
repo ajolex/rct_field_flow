@@ -814,25 +814,141 @@ def render_home() -> None:
     st.title("📊 RCT Field Flow")
     st.markdown(
         """
-        Integrated toolkit for randomization, SurveyCTO cases assignement,
-        data quality checks, and live monitoring.
+        **Integrated toolkit** for designing RCTs, conducting randomization, managing cases, 
+        quality assurance, analysis, and live monitoring.
         """
     )
 
-    st.markdown(
-        """
-        **Workflow overview**
-
-        1. 🎲 Randomization – configure arms, strata, and rerandomization.
-        2. 📋 Case Assignment – build SurveyCTO-ready cases dataset.
-        3. ✅ Quality Checks – apply speed/outlier/duplicate checks.
-        4. 📈 Monitoring Dashboard – track productivity, supervisor roll-ups, and projected timelines.
-        """
-    )
+    # New workflow overview with RCT Design Wizard
+    st.markdown("## 📋 Complete RCT Workflow")
+    
+    col1, col2 = st.columns([1.5, 1])
+    
+    with col1:
+        st.markdown("""
+        ### Phase 1: Design & Planning
+        1. **🎯 RCT Design** – Build your concept note with 15 sections
+           - Create comprehensive designs for education, health, agriculture projects
+           - View realistic sample concept notes from different sectors
+           - Export in multiple formats (Markdown, DOCX, PDF)
+        
+        ### Phase 2: Technical Setup
+        2. **⚡ Power Calculations** – Determine sample size and power
+           - Calculate minimum detectable effects (MDE)
+           - Run power simulations with custom assumptions
+           - Generate analysis code (Stata/Python)
+        
+        3. **🎲 Randomization** – Configure arms, strata, rerandomization
+           - Set up treatment arms and stratification variables
+           - Support for clustered and cross-clustered designs
+           - Real-time balance checking
+        
+        ### Phase 3: Implementation
+        4. **📋 Case Assignment** – Build SurveyCTO-ready cases dataset
+           - Assign treatment groups to beneficiaries
+           - Create tracking spreadsheets
+           - Prepare for field deployment
+        
+        5. **🔍 Quality Checks** – Apply speed, outlier, duplicate checks
+           - Monitor data quality during collection
+           - Flag and resolve issues in real-time
+           - Generate quality reports
+        
+        6. **📈 Monitoring Dashboard** – Track live productivity
+           - Monitor survey completion rates
+           - Track supervisor performance
+           - Project timelines and resource needs
+        
+        ### Phase 4: Analysis & Reporting
+        7. **📊 Analysis & Results** – Estimate treatment effects
+           - Calculate average treatment effects (ATE)
+           - Analyze treatment effect heterogeneity
+           - Generate publication-ready tables
+        
+        8. **🔍 Backcheck Selection** – Quality validation
+           - Select representative sample for backchecks
+           - Ensure data integrity
+        
+        9. **📄 Report Generation** – Create weekly reports
+           - Auto-generate monitoring summaries
+           - Share with stakeholders
+        """)
+    
+    with col2:
+        st.markdown("### 🚀 Quick Start")
+        st.info("""
+        **Getting Started:**
+        
+        Start with the **🎯 RCT Design** page to:
+        - Create your concept note
+        - View samples from similar projects
+        - Export for stakeholder review
+        
+        Then proceed to **⚡ Power** for sample size calculations.
+        
+        **Tips:**
+        - All pages auto-save your work
+        - Use sample data to test features
+        - Refer to guides in each section
+        """)
+        
+        st.markdown("---")
+        
+        # Quick navigation
+        st.markdown("### 📍 Quick Navigation")
+        if st.button("→ Go to RCT Design", use_container_width=True):
+            st.session_state.current_page = "design"
+            st.rerun()
+        
+        if st.button("→ Go to Power Calculations", use_container_width=True):
+            st.session_state.current_page = "power"
+            st.rerun()
+        
+        if st.button("→ Go to Randomization", use_container_width=True):
+            st.session_state.current_page = "random"
+            st.rerun()
 
     st.markdown("---")
+    
+    # Features highlight
+    st.markdown("### ✨ Key Features")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        **📚 Education Example**
+        - Remedial literacy programs
+        - Malawi primary schools
+        - 3,200 students, 48 teachers
+        
+        **Budget:** $275,000
+        """)
+    
+    with col2:
+        st.markdown("""
+        **🏥 Health Example**
+        - Maternal health programs
+        - Community worker visits
+        - 8,000 pregnant women
+        
+        **Outcomes:** Facility births
+        """)
+    
+    with col3:
+        st.markdown("""
+        **🌾 Agriculture Example**
+        - Climate-smart farming
+        - Drip irrigation + SMS
+        - 2,500 farmers
+        
+        **Focus:** Productivity gains
+        """)
+
+    st.markdown("---")
+    
     st.info(
-        "Tip: All features can also be driven from the CLI. Run `rct-field-flow --help` "
+        "💡 **Pro Tip:** All features can be driven from the CLI. Run `rct-field-flow --help` "
         "to explore commands and options."
     )
 
@@ -844,133 +960,39 @@ def render_home() -> None:
 
 def render_rct_design() -> None:
     """
-    Render the RCT Design Activity page following original architecture.
-    Displays program card with full context, allows design sprint or program card view.
+    Render the RCT Design Wizard page.
+    This now uses the new wizard.py which provides:
+    - 15-section concept note builder
+    - Sample concept notes (education, health, agriculture)
+    - Multi-format export (Markdown, DOCX, PDF)
+    - Real-time preview and validation
     """
     try:
-        # Load rct-design components explicitly to avoid conflicts with other config modules
-        config_module = load_rct_design_module("rct_design_app_config", "config.py")
-        cards_module = load_rct_design_module("rct_design_program_cards", "utils/program_cards.py")
-
-        app_title = getattr(config_module, "APP_TITLE", "🎯 Design an RCT")
-        app_subtitle = getattr(
-            config_module,
-            "APP_SUBTITLE",
-            "Transform program concepts into rigorous randomized evaluations",
-        )
-        app_description = getattr(
-            config_module,
-            "APP_DESCRIPTION",
-            "This workshop guides you through designing an RCT.",
-        )
-        DESIGN_DEFAULT_STATE = getattr(config_module, "DEFAULT_SESSION_STATE", {})
-        WORKBOOK_STEPS = getattr(config_module, "WORKBOOK_STEPS", [])
-        PARTICIPANT_GUIDANCE = getattr(config_module, "PARTICIPANT_GUIDANCE", [])
-        SPRINT_CHECKLIST = getattr(config_module, "SPRINT_CHECKLIST", [])
-
-        get_all_program_cards = cards_module.get_all_program_cards
-        get_program_card = cards_module.get_program_card
-        format_card_for_display = cards_module.format_card_for_display
+        # Import the wizard dynamically to handle path resolution
+        import sys
+        from pathlib import Path
         
-        # Page header
-        st.markdown(
-            f"<div style='font-size: 2.5rem; font-weight: 700; color: #164a7f; margin-bottom: 0.5rem;'>{app_title}</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(f"### {app_subtitle}")
+        # Add rct-design to path if needed
+        rct_design_path = Path(__file__).parent / "rct-design"
+        if str(rct_design_path) not in sys.path:
+            sys.path.insert(0, str(rct_design_path))
         
-        # Initialize design-specific session state
-        for key, value in DESIGN_DEFAULT_STATE.items():
-            design_key = f"design_{key}"
-            if design_key not in st.session_state:
-                st.session_state[design_key] = value
+        # Import wizard modules
+        from wizard import main as wizard_main
         
-        # Initialize navigation and workbook state
-        # design_current_step: 0=program card view, 1=welcome page, 2-7=workbook steps 1-6
-        if 'design_current_step' not in st.session_state:
-            st.session_state.design_current_step = 1  # Start at welcome page
-        if 'design_workbook_responses' not in st.session_state or st.session_state.design_workbook_responses is None:
-            st.session_state.design_workbook_responses = {}
+        # Run the wizard
+        wizard_main()
         
-        # Main content area: Team name and program selection
-        st.markdown("---")
-        st.markdown("### Get Started")
-        
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            team_name = st.text_input(
-                "Team Name:",
-                value=st.session_state.get("design_team_name", ""),
-                key="design_team_name_input",
-                placeholder="Enter your team name..."
-            )
-            if team_name:
-                st.session_state.design_team_name = team_name
-        
-        with col2:
-            cards = get_all_program_cards()
-            card_options = {card_id: card["title"] for card_id, card in cards.items()}
-            
-            selected_card_id = st.selectbox(
-                "Choose or select program:",
-                options=list(card_options.keys()),
-                format_func=lambda x: card_options[x],
-                key="design_card_select",
-            )
-            if selected_card_id:
-                st.session_state.design_program_card = selected_card_id
-        
-        st.markdown("---")
-        
-        # Validation check
-        if not team_name:
-            st.warning("Please enter your team name to get started.")
-            return
-        
-        if not st.session_state.design_program_card:
-            st.warning("Please select a program to get started.")
-            return
-        
-        # Get selected program card
-        card = get_program_card(st.session_state.design_program_card)
-        if not card:
-            st.error("Program card not found. Please select a valid program.")
-            return
-        
-        formatted = format_card_for_display(card)
-        if not formatted:
-            st.error("Error formatting program card.")
-            return
-        
-        # Page routing based on current_step
-        current_step = st.session_state.design_current_step
-        
-        # Route to appropriate page
-        if current_step == 0:
-            # Full program card display page
-            render_program_card_full(card, formatted, team_name)
-        elif current_step == 1:
-            # Welcome/home page with About expander
-            render_design_welcome(
-                card,
-                formatted,
-                team_name,
-                app_description,
-                PARTICIPANT_GUIDANCE,
-                SPRINT_CHECKLIST,
-            )
-        elif current_step == 8:
-            # Report generation page
-            render_design_report_generation(team_name)
-        else:
-            # Workbook steps (2-7 = steps 1-6)
-            render_design_workbook(team_name, WORKBOOK_STEPS)
-    
+    except ImportError as e:
+        st.error(f"Could not load RCT Design Wizard: {str(e)}")
+        st.info("Please ensure the rct-design module is properly installed.")
+        with st.expander("📋 Debug Info"):
+            st.code(f"Import error: {str(e)}", language="python")
     except Exception as e:
         import traceback
-        st.error(f"Error loading RCT Design module: {str(e)}")
-        st.code(traceback.format_exc())
+        st.error(f"Error running RCT Design Wizard: {str(e)}")
+        with st.expander("📋 Technical Details"):
+            st.code(traceback.format_exc(), language="python")
 
 
 def render_design_welcome(
