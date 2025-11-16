@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import importlib.util
 import io
+import math
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import ModuleType
 from typing import Dict, List
 
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -15,6 +19,22 @@ try:
     from .assign_cases import assign_cases
     from .flag_quality import QualityResults, flag_all
     from .randomize import RandomizationConfig, RandomizationResult, Randomizer, TreatmentArm
+    from .power_calc import (
+        PowerAssumptions,
+        calculate_mde,
+        calculate_sample_size,
+        generate_power_curve,
+        generate_cluster_size_table,
+        generate_python_code,
+        generate_stata_code,
+    )
+    from .power_simulation import (
+        SimulationAssumptions,
+        run_power_simulation,
+        generate_simulation_power_curve,
+        generate_simulation_stata_code,
+        generate_simulation_python_code,
+    )
     from .monitor import (
         load_config as mon_load_config,
         load_submissions as mon_load_submissions,
@@ -36,6 +56,22 @@ except ImportError:  # pragma: no cover
         RandomizationResult,
         Randomizer,
         TreatmentArm,
+    )
+    from rct_field_flow.power_calc import (  # type: ignore
+        PowerAssumptions,
+        calculate_mde,
+        calculate_sample_size,
+        generate_power_curve,
+        generate_cluster_size_table,
+        generate_python_code,
+        generate_stata_code,
+    )
+    from rct_field_flow.power_simulation import (  # type: ignore
+        SimulationAssumptions,
+        run_power_simulation,
+        generate_simulation_power_curve,
+        generate_simulation_stata_code,
+        generate_simulation_python_code,
     )
     from rct_field_flow.monitor import (  # type: ignore
         load_config as mon_load_config,
@@ -79,6 +115,7 @@ if "design_workbook_responses" not in st.session_state:
     st.session_state.design_workbook_responses: Dict = {}
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "default.yaml"
+RCT_DESIGN_APP_DIR = Path(__file__).parent / "rct-design" / "app"
 
 
 def load_default_config() -> Dict:
@@ -94,6 +131,21 @@ def yaml_dump(data: Dict) -> str:
 
 def yaml_load(text: str) -> Dict:
     return yaml.safe_load(text) if text.strip() else {}
+
+
+def load_rct_design_module(module_name: str, relative_path: str) -> ModuleType:
+    """Load a module from the embedded rct-design app without polluting sys.path."""
+    module_path = RCT_DESIGN_APP_DIR / relative_path
+    if not module_path.exists():
+        raise FileNotFoundError(f"RCT design module not found: {module_path}")
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError(f"Unable to load spec for {module_name} ({module_path})")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def ensure_arm_state(arms_defaults: List[Dict], count: int) -> None:
@@ -796,18 +848,36 @@ def render_rct_design() -> None:
     Displays program card with full context, allows design sprint or program card view.
     """
     try:
-        # Import rct-design components
-        sys.path.insert(0, str(Path(__file__).parent / "rct-design" / "app"))
-        from config import (
-            APP_TITLE, APP_SUBTITLE, APP_DESCRIPTION,
-            DEFAULT_SESSION_STATE as DESIGN_DEFAULT_STATE,
-            WORKBOOK_STEPS, PARTICIPANT_GUIDANCE, SPRINT_CHECKLIST
+        # Load rct-design components explicitly to avoid conflicts with other config modules
+        config_module = load_rct_design_module("rct_design_app_config", "config.py")
+        cards_module = load_rct_design_module("rct_design_program_cards", "utils/program_cards.py")
+
+        app_title = getattr(config_module, "APP_TITLE", "🎯 Design an RCT")
+        app_subtitle = getattr(
+            config_module,
+            "APP_SUBTITLE",
+            "Transform program concepts into rigorous randomized evaluations",
         )
-        from utils.program_cards import get_all_program_cards, get_program_card, format_card_for_display
+        app_description = getattr(
+            config_module,
+            "APP_DESCRIPTION",
+            "This workshop guides you through designing an RCT.",
+        )
+        DESIGN_DEFAULT_STATE = getattr(config_module, "DEFAULT_SESSION_STATE", {})
+        WORKBOOK_STEPS = getattr(config_module, "WORKBOOK_STEPS", [])
+        PARTICIPANT_GUIDANCE = getattr(config_module, "PARTICIPANT_GUIDANCE", [])
+        SPRINT_CHECKLIST = getattr(config_module, "SPRINT_CHECKLIST", [])
+
+        get_all_program_cards = cards_module.get_all_program_cards
+        get_program_card = cards_module.get_program_card
+        format_card_for_display = cards_module.format_card_for_display
         
         # Page header
-        st.markdown("<div style='font-size: 2.5rem; font-weight: 700; color: #164a7f; margin-bottom: 0.5rem;'>🎯 Design an RCT</div>", unsafe_allow_html=True)
-        st.markdown(f"### Transform program concepts into rigorous randomized evaluations")
+        st.markdown(
+            f"<div style='font-size: 2.5rem; font-weight: 700; color: #164a7f; margin-bottom: 0.5rem;'>{app_title}</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"### {app_subtitle}")
         
         # Initialize design-specific session state
         for key, value in DESIGN_DEFAULT_STATE.items():
@@ -882,7 +952,14 @@ def render_rct_design() -> None:
             render_program_card_full(card, formatted, team_name)
         elif current_step == 1:
             # Welcome/home page with About expander
-            render_design_welcome(card, formatted, team_name)
+            render_design_welcome(
+                card,
+                formatted,
+                team_name,
+                app_description,
+                PARTICIPANT_GUIDANCE,
+                SPRINT_CHECKLIST,
+            )
         elif current_step == 8:
             # Report generation page
             render_design_report_generation(team_name)
@@ -896,22 +973,19 @@ def render_rct_design() -> None:
         st.code(traceback.format_exc())
 
 
-def render_design_welcome(card, formatted, team_name):
+def render_design_welcome(
+    card,
+    formatted,
+    team_name,
+    app_description: str,
+    participant_guidance: List[str],
+    sprint_checklist: List[str],
+):
     """Render the welcome/home page matching original rct-design architecture."""
-    # Import config items - use absolute import
-    rct_design_path = Path(__file__).parent / "rct-design" / "app"
-    if str(rct_design_path) not in sys.path:
-        sys.path.insert(0, str(rct_design_path))
-    
-    try:
-        import config as rct_config
-        APP_DESCRIPTION = getattr(rct_config, 'APP_DESCRIPTION', "This workshop guides you through designing an RCT.")
-        PARTICIPANT_GUIDANCE = getattr(rct_config, 'PARTICIPANT_GUIDANCE', [])
-        SPRINT_CHECKLIST = getattr(rct_config, 'SPRINT_CHECKLIST', [])
-    except:
-        APP_DESCRIPTION = "This workshop guides you through designing an RCT."
-        PARTICIPANT_GUIDANCE = []
-        SPRINT_CHECKLIST = []
+    default_description = "This workshop guides you through designing an RCT."
+    APP_DESCRIPTION = app_description or default_description
+    PARTICIPANT_GUIDANCE = participant_guidance or []
+    SPRINT_CHECKLIST = sprint_checklist or []
     
     # About This Activity expander
     with st.expander("📖 About This Activity", expanded=False):
@@ -1763,6 +1837,874 @@ def render_randomization() -> None:
         except Exception:
             pass
         st.dataframe(style, use_container_width=True)
+
+
+# ----------------------------------------------------------------------------- #
+# POWER CALCULATIONS                                                            #
+# ----------------------------------------------------------------------------- #
+
+
+def render_power_calculations() -> None:
+    st.title("⚡ Power Calculations")
+    st.markdown(
+        "Calculate statistical power, minimum detectable effects (MDE), and required sample sizes "
+        "for your randomized controlled trial."
+    )
+    
+    # Educational content
+    with st.expander("📚 What is Statistical Power?", expanded=False):
+        st.markdown("""
+        **Statistical power** is the probability that your study will detect a treatment effect 
+        if there truly is one. It's calculated as 1 - β, where β is the Type II error rate 
+        (the probability of failing to detect a real effect).
+        
+        **Key concepts:**
+        - **Power = 0.80** means you have an 80% chance of detecting a true effect
+        - Higher power reduces the risk of false negatives (Type II errors)
+        - Standard practice is to aim for 80% power (0.80)
+        - Power increases with larger sample sizes and larger effect sizes
+        
+        **Reference:** [J-PAL Power Calculations Guide](https://www.povertyactionlab.org/resource/power-calculations)
+        """)
+    
+    with st.expander("🎯 Key Determinants of Power", expanded=False):
+        st.markdown("""
+        Your study's statistical power depends on several factors:
+        
+        1. **Sample Size (N)**: Larger samples → Higher power
+        2. **Effect Size (MDE)**: Larger effects → Easier to detect → Higher power
+        3. **Significance Level (α)**: Lower α → Harder to reject null → Lower power
+        4. **Outcome Variance (σ²)**: Lower variance → Higher power
+        5. **Treatment Share**: Balanced allocation (50/50) → Maximum power
+        6. **Covariates (R²)**: Better prediction → Lower residual variance → Higher power
+        7. **Compliance**: Perfect compliance → Higher power
+        8. **Clustering (ICC)**: Higher ICC → Lower power (requires more clusters/larger samples)
+        """)
+    
+    with st.expander("📋 Required Assumptions", expanded=False):
+        st.markdown("""
+        To calculate power or sample size, you need to specify:
+        
+        **Basic Parameters:**
+        - **Significance level (α)**: Usually 0.05 (5% false positive rate)
+        - **Power (1-β)**: Usually 0.80 (80% chance of detecting real effects)
+        - **Baseline outcome mean & SD**: From pilot data or similar studies
+        - **Treatment share**: Proportion assigned to treatment (usually 0.5)
+        
+        **Effect Size:**
+        - **MDE**: The minimum effect you want to detect (in outcome units)
+        - Or specify **target sample size** and calculate what MDE is detectable
+        
+        **Design Features (if applicable):**
+        - **Cluster randomization**: Number of clusters, cluster size, ICC
+        - **Covariates**: R² from regressing outcome on baseline covariates
+        - **Imperfect compliance**: Expected compliance rate for ITT vs LATE estimates
+        """)
+    
+    # Design type selector
+    st.markdown("---")
+    st.markdown("### Design Configuration")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        outcome_type = st.radio(
+            "Outcome Type",
+            options=["continuous", "binary"],
+            format_func=lambda x: "Continuous (e.g., test scores)" if x == "continuous" else "Binary (e.g., enrollment)",
+            help="Binary outcomes use different formulas (power twoproportions in Stata). Note: Covariate adjustment not applicable for binary outcomes."
+        )
+    
+    with col2:
+        design_type = st.radio(
+            "Randomization Design",
+            options=["individual", "cluster"],
+            format_func=lambda x: "Individual Randomization" if x == "individual" else "Cluster Randomization",
+            help="Choose whether you're randomizing individuals or clusters (e.g., villages, schools)"
+        )
+    
+    with col3:
+        calculation_mode = st.radio(
+            "What to Calculate?",
+            options=["mde", "sample_size"],
+            format_func=lambda x: "Minimum Detectable Effect (MDE)" if x == "mde" else "Required Sample Size",
+            help="Calculate MDE for a given sample size, or calculate required sample size for a target MDE"
+        )
+    
+    with col4:
+        calculation_method = st.radio(
+            "Calculation Method",
+            options=["analytical", "simulation"],
+            format_func=lambda x: "Analytical (Formula-based)" if x == "analytical" else "Simulation (Monte Carlo)",
+            help="Analytical uses closed-form formulas (fast). Simulation uses Monte Carlo methods (flexible, validates assumptions)."
+        )
+    
+    # Input form
+    st.markdown("---")
+    st.markdown("### Parameters")
+    
+    with st.form("power_calc_form"):
+        # Basic parameters
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            alpha = st.number_input(
+                "Significance Level (α)",
+                min_value=0.001,
+                max_value=0.2,
+                value=0.05,
+                step=0.01,
+                help="Probability of Type I error (false positive). Standard: 0.05"
+            )
+            
+            if outcome_type == "binary":
+                baseline_mean = st.number_input(
+                    "Baseline Proportion (Control)",
+                    min_value=0.01,
+                    max_value=0.99,
+                    value=0.5,
+                    step=0.01,
+                    help="Proportion with outcome=1 in control group (e.g., 0.5 = 50% enrollment rate)"
+                )
+            else:
+                baseline_mean = st.number_input(
+                    "Baseline Outcome Mean",
+                    value=100.0,
+                    help="Average outcome in control group (in outcome units)"
+                )
+        
+        with col2:
+            power = st.number_input(
+                "Statistical Power (1-β)",
+                min_value=0.5,
+                max_value=0.99,
+                value=0.80,
+                step=0.05,
+                help="Probability of detecting a true effect. Standard: 0.80"
+            )
+            
+            if outcome_type == "binary":
+                # SD calculated automatically for binary
+                baseline_sd = math.sqrt(baseline_mean * (1 - baseline_mean))
+                st.info(f"SD (auto-calculated): {baseline_sd:.4f}")
+            else:
+                baseline_sd = st.number_input(
+                    "Baseline Outcome SD",
+                    min_value=0.01,
+                    value=15.0,
+                    help="Standard deviation of outcome in control group"
+                )
+        
+        with col3:
+            treatment_share = st.number_input(
+                "Treatment Share",
+                min_value=0.01,
+                max_value=0.99,
+                value=0.5,
+                step=0.05,
+                help="Proportion assigned to treatment. 0.5 maximizes power"
+            )
+        
+        # Sample size or MDE input
+        st.markdown("#### Sample Size / Effect Size")
+        col1, col2 = st.columns(2)
+        
+        # Initialize variables
+        sample_size = None
+        num_clusters = None
+        cluster_size = None
+        target_mde = None
+        
+        if calculation_mode == "mde":
+            with col1:
+                if design_type == "individual":
+                    sample_size = st.number_input(
+                        "Total Sample Size (N)",
+                        min_value=10,
+                        value=400,
+                        step=10,
+                        help="Total number of individuals in the study"
+                    )
+                else:
+                    num_clusters = st.number_input(
+                        "Number of Clusters",
+                        min_value=4,
+                        value=40,
+                        step=2,
+                        help="Total number of clusters (e.g., villages, schools)"
+                    )
+            
+            with col2:
+                if design_type == "cluster":
+                    cluster_size = st.number_input(
+                        "Cluster Size (m)",
+                        min_value=2,
+                        value=25,
+                        step=1,
+                        help="Average number of individuals per cluster"
+                    )
+                    sample_size = int(num_clusters * cluster_size)
+        
+        else:  # sample_size mode
+            with col1:
+                target_mde = st.number_input(
+                    "Target MDE (Effect Size)",
+                    min_value=0.01,
+                    value=5.0,
+                    step=0.5,
+                    help="Minimum effect you want to detect (in outcome units)"
+                )
+            
+            if design_type == "cluster":
+                with col2:
+                    cluster_size = st.number_input(
+                        "Cluster Size (m)",
+                        min_value=2,
+                        value=25,
+                        step=1,
+                        help="Average number of individuals per cluster"
+                    )
+        
+        # Cluster-specific parameters
+        if design_type == "cluster":
+            st.markdown("#### Cluster Design Parameters")
+            
+            # Ensure cluster_size is defined for DEFF calculation
+            if cluster_size is None:
+                cluster_size = 25  # Default value
+            
+            icc = st.number_input(
+                "Intracluster Correlation (ICC)",
+                min_value=0.0,
+                max_value=0.99,
+                value=0.05,
+                step=0.01,
+                help="Correlation of outcomes within clusters. Typical values: 0.01-0.20"
+            )
+            
+            deff_value = 1 + (cluster_size - 1) * icc
+            st.info(
+                f"**Design Effect (DEFF):** {deff_value:.3f} — "
+                f"This inflates required sample size by {(deff_value - 1) * 100:.1f}%"
+            )
+        else:
+            icc = 0.0
+        
+        # Advanced options
+        with st.expander("🔧 Advanced Options", expanded=False):
+            if outcome_type == "binary":
+                st.info("📌 **Note**: For binary outcomes, covariate adjustment (R²) is not applicable per J-PAL guidelines.")
+                r_squared = 0.0
+                compliance_rate = st.number_input(
+                    "Compliance Rate",
+                    min_value=0.01,
+                    max_value=1.0,
+                    value=1.0,
+                    step=0.05,
+                    help="Expected compliance rate (1.0 = perfect compliance)",
+                    key="power_compliance"
+                )
+            else:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    r_squared = st.number_input(
+                        "R² from Covariates",
+                        min_value=0.0,
+                        max_value=0.99,
+                        value=0.0,
+                        step=0.05,
+                        help="Variance explained by baseline covariates (0 if no covariates)",
+                        key="power_r_squared"
+                    )
+                
+                with col2:
+                    compliance_rate = st.number_input(
+                        "Compliance Rate",
+                        min_value=0.01,
+                        max_value=1.0,
+                        value=1.0,
+                        step=0.05,
+                        help="Expected compliance rate (1.0 = perfect compliance)",
+                        key="power_compliance"
+                    )
+            
+            if compliance_rate and compliance_rate < 1.0:
+                st.warning(
+                    f"With {compliance_rate*100:.0f}% compliance, power for ITT estimates is maintained, "
+                    "but power for LATE (complier treatment effect) is reduced. "
+                    f"Effective sample size for LATE: ~{compliance_rate*100:.0f}% of nominal."
+                )
+            
+            # Simulation-specific parameters
+            if calculation_method == "simulation":
+                st.markdown("---")
+                st.markdown("##### Simulation Parameters")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    num_simulations = st.number_input(
+                        "Number of Simulations",
+                        min_value=100,
+                        max_value=10000,
+                        value=1000,
+                        step=100,
+                        help="Monte Carlo iterations. More iterations = more accurate but slower (1000 recommended)"
+                    )
+                
+                with col2:
+                    sim_seed = st.number_input(
+                        "Random Seed",
+                        min_value=1,
+                        max_value=999999,
+                        value=123456,
+                        help="For reproducibility. Same seed = same results"
+                    )
+                
+                if design_type == "cluster":
+                    within_cluster_var = st.number_input(
+                        "Within-Cluster Variance",
+                        min_value=0.01,
+                        value=1.0,
+                        step=0.1,
+                        help="Variance of individual-level errors within clusters"
+                    )
+                else:
+                    within_cluster_var = 1.0  # Not used for individual design
+            else:
+                # Default values for analytical method
+                num_simulations = 1000
+                sim_seed = 123456
+                within_cluster_var = 1.0
+        
+        calculate_button = st.form_submit_button("⚡ Calculate", use_container_width=True)
+    
+    # Perform calculations
+    if calculate_button:
+        try:
+            # Validate inputs for cluster design
+            if design_type == "cluster":
+                if cluster_size is None or cluster_size <= 0:
+                    st.error("Please specify a valid cluster size.")
+                    return
+                if calculation_mode == "mde" and (num_clusters is None or num_clusters <= 0):
+                    st.error("Please specify a valid number of clusters.")
+                    return
+            
+            # Validate inputs for individual design
+            if design_type == "individual" and calculation_mode == "mde":
+                if sample_size is None or sample_size <= 0:
+                    st.error("Please specify a valid sample size.")
+                    return
+            
+            # Validate MDE for sample_size calculation
+            if calculation_mode == "sample_size" and (target_mde is None or target_mde <= 0):
+                st.error("Please specify a valid target MDE.")
+                return
+            
+            # Ensure r_squared and compliance_rate have proper defaults
+            final_r_squared = r_squared if r_squared is not None else 0.0
+            final_compliance = compliance_rate if compliance_rate is not None else 1.0
+            
+            # ==========================================
+            # SIMULATION-BASED CALCULATIONS
+            # ==========================================
+            if calculation_method == "simulation":
+                st.markdown("---")
+                st.markdown("### 🎲 Simulation Results")
+                st.info(f"Running {num_simulations:,} Monte Carlo simulations... (Seed: {sim_seed})")
+                
+                # Note: Simulation only supports power estimation (calculation_mode must be "mde")
+                if calculation_mode == "sample_size":
+                    st.error("❌ Simulation method currently only supports MDE calculation (not sample size calculation). Please select 'Minimum Detectable Effect (MDE)' or switch to 'Analytical' method.")
+                    return
+                
+                # Determine effect size for simulation
+                # For simulation, we need an effect size to test power
+                # If user specified MDE mode, we use the calculated MDE from analytical formula as effect
+                if design_type == "individual":
+                    test_effect = baseline_sd * 0.2  # Default to 0.2 SD effect for demonstration
+                else:
+                    test_effect = baseline_sd * 0.2
+                
+                #Ask user for effect size to simulate
+                st.markdown("#### Effect Size to Test")
+                col1, col2 = st.columns(2)
+                with col1:
+                    test_effect_input = st.number_input(
+                        "Effect Size (absolute)",
+                        min_value=0.01,
+                        value=float(test_effect),
+                        step=0.01,
+                        help="The treatment effect you want to test statistical power for"
+                    )
+                with col2:
+                    effect_as_pct = (test_effect_input / baseline_mean) * 100 if baseline_mean != 0 else 0
+                    st.metric("As % of Baseline", f"{effect_as_pct:.1f}%")
+                
+                test_effect = test_effect_input
+                
+                # Create simulation assumptions
+                sim_assumptions = SimulationAssumptions(
+                    alpha=alpha,
+                    test_type="two",  # Two-sided test
+                    effect_size=test_effect,
+                    outcome_type=outcome_type,
+                    control_mean=baseline_mean,
+                    control_sd=baseline_sd if outcome_type == "continuous" else None,
+                    design_type=design_type,
+                    treatment_share=treatment_share,
+                    sample_size=int(sample_size) if design_type == "individual" else None,
+                    num_clusters=int(num_clusters) if design_type == "cluster" else None,
+                    cluster_size=int(cluster_size) if design_type == "cluster" else None,
+                    icc=icc if design_type == "cluster" else 0.0,
+                    within_cluster_var=within_cluster_var if design_type == "cluster" else 1.0,
+                    num_simulations=int(num_simulations),
+                    seed=int(sim_seed)
+                )
+                
+                # Run simulation
+                with st.spinner("Running simulations..."):
+                    sim_result = run_power_simulation(sim_assumptions)
+                
+                # Display results
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Estimated Power", f"{sim_result['power']*100:.1f}%")
+                    st.caption(f"{sim_result['rejections']}/{sim_result['num_simulations']} rejections")
+                
+                with col2:
+                    st.metric("Sample Size", f"{sim_result.get('sample_size', sim_result.get('total_sample', 0)):,}")
+                    if design_type == "cluster":
+                        st.caption(f"{sim_result['num_clusters']} clusters × {sim_result['cluster_size']} individuals")
+                
+                with col3:
+                    st.metric("Test Effect Size", f"{test_effect:.3f}")
+                    st.caption(f"{(test_effect / baseline_mean * 100):.1f}% of baseline")
+                
+                with col4:
+                    st.metric("Mean Estimate", f"{sim_result['mean_effect_estimate']:.3f}")
+                    st.caption(f"SD: {sim_result['sd_effect_estimate']:.3f}")
+                
+                # Design effect and ICC for cluster designs
+                if design_type == "cluster":
+                    st.markdown("#### Cluster Design Statistics")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Design Effect", f"{sim_result['design_effect']:.3f}")
+                    with col2:
+                        st.metric("Specified ICC", f"{sim_result['specified_icc']:.3f}")
+                    with col3:
+                        mean_icc = sim_result.get('mean_estimated_icc', np.nan)
+                        if not np.isnan(mean_icc):
+                            st.metric("Mean Estimated ICC", f"{mean_icc:.3f}")
+                        else:
+                            st.metric("Mean Estimated ICC", "N/A")
+                
+                # Summary
+                st.success(
+                    f"✅ **Simulation Complete**: With the specified design, you have approximately "
+                    f"**{sim_result['power']*100:.1f}% power** to detect an effect of **{test_effect:.3f}** "
+                    f"at α = {alpha} (two-sided test)."
+                )
+                
+                # Power curve via simulation
+                st.markdown("---")
+                st.markdown("### 📈 Power Curve (Simulation-Based)")
+                
+                with st.spinner("Generating power curve via simulation..."):
+                    sim_power_df = generate_simulation_power_curve(
+                        sim_assumptions,
+                        num_points=6  # Fewer points since simulation is slower
+                    )
+                
+                import plotly.graph_objects as go
+                
+                fig = go.Figure()
+                
+                if design_type == "cluster":
+                    x_data = sim_power_df['clusters']
+                    x_label = "Number of Clusters"
+                    current_x = num_clusters
+                else:
+                    x_data = sim_power_df['sample_size']
+                    x_label = "Sample Size (N)"
+                    current_x = sample_size
+                
+                fig.add_trace(go.Scatter(
+                    x=x_data,
+                    y=sim_power_df['power'],
+                    mode='lines+markers',
+                    name='Simulated Power',
+                    line=dict(color='#1f77b4', width=3),
+                    marker=dict(size=8)
+                ))
+                
+                # Add reference lines
+                fig.add_hline(y=0.8, line_dash="dash", line_color="gray", 
+                             annotation_text="80% Power", annotation_position="right")
+                
+                if current_x:
+                    fig.add_vline(x=current_x, line_dash="dash", line_color="red",
+                                 annotation_text=f"Current: {int(current_x):,}")
+                
+                fig.update_layout(
+                    title=f"Statistical Power vs Sample Size (Simulation: {num_simulations} iterations each)",
+                    xaxis_title=x_label,
+                    yaxis_title="Power (1-β)",
+                    yaxis=dict(range=[0, 1]),
+                    hovermode='x unified',
+                    template='plotly_white'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Code generation for simulation
+                st.markdown("---")
+                st.markdown("### 💻 Downloadable Simulation Code")
+                
+                code_tab1, code_tab2 = st.tabs(["Python", "Stata"])
+                
+                with code_tab1:
+                    python_sim_code = generate_simulation_python_code(sim_assumptions, sim_result)
+                    st.code(python_sim_code, language="python")
+                    st.download_button(
+                        "📥 Download Python Code",
+                        data=python_sim_code,
+                        file_name="power_simulation.py",
+                        mime="text/x-python"
+                    )
+                
+                with code_tab2:
+                    stata_sim_code = generate_simulation_stata_code(sim_assumptions, sim_result)
+                    st.code(stata_sim_code, language="stata")
+                    st.download_button(
+                        "📥 Download Stata Code",
+                        data=stata_sim_code,
+                        file_name="power_simulation.do",
+                        mime="text/x-stata"
+                    )
+                
+                st.markdown("---")
+                st.info("💡 **Note**: Simulation-based power calculations provide empirical validation of analytical formulas and allow for more flexible assumptions about data distributions.")
+                
+                return  # Exit early for simulation method
+            
+            # ==========================================
+            # ANALYTICAL CALCULATIONS (Original Logic)
+            # ==========================================
+            
+            # Create PowerAssumptions object
+            
+            if calculation_mode == "mde":
+                # For MDE calculation, don't set mde in assumptions
+                assumptions = PowerAssumptions(
+                    alpha=alpha,
+                    power=power,
+                    baseline_mean=baseline_mean,
+                    baseline_sd=baseline_sd,
+                    outcome_type=outcome_type,
+                    treatment_share=treatment_share,
+                    design_type=design_type,
+                    num_clusters=int(num_clusters) if design_type == "cluster" else None,
+                    cluster_size=int(cluster_size) if design_type == "cluster" else None,
+                    icc=icc if design_type == "cluster" else 0.0,
+                    r_squared=final_r_squared,
+                    compliance_rate=final_compliance
+                )
+            else:
+                # For sample size calculation, set mde in assumptions
+                # For cluster designs in sample_size mode, we need dummy num_clusters for initialization
+                assumptions = PowerAssumptions(
+                    alpha=alpha,
+                    power=power,
+                    baseline_mean=baseline_mean,
+                    baseline_sd=baseline_sd,
+                    outcome_type=outcome_type,
+                    treatment_share=treatment_share,
+                    design_type=design_type,
+                    mde=target_mde,
+                    num_clusters=int(cluster_size) if design_type == "cluster" else None,  # Dummy value, will be calculated
+                    cluster_size=int(cluster_size) if design_type == "cluster" else None,
+                    icc=icc if design_type == "cluster" else 0.0,
+                    r_squared=final_r_squared,
+                    compliance_rate=final_compliance
+                )
+            
+            # Calculate results
+            st.markdown("---")
+            st.markdown("### 📊 Results")
+            
+            if outcome_type == "binary":
+                st.info("📌 **Binary Outcome**: MDE represents change in proportion (e.g., from 50% to 55% = MDE of 0.05 or 5 percentage points)")
+            
+            if calculation_mode == "mde":
+                mde_result = calculate_mde(assumptions, sample_size=sample_size)
+                mde = mde_result['mde_absolute']
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if outcome_type == "binary":
+                        st.metric("MDE (Percentage Points)", f"{mde*100:.1f}pp")
+                        st.caption(f"Change from {baseline_mean*100:.1f}% to {(baseline_mean+mde)*100:.1f}%")
+                    else:
+                        st.metric("Minimum Detectable Effect", f"{mde:.3f}")
+                        st.caption(f"{(mde / baseline_mean * 100):.2f}% of baseline mean")
+                
+                with col2:
+                    st.metric("Sample Size", f"{int(sample_size):,}")
+                    if design_type == "cluster":
+                        st.caption(f"{int(num_clusters)} clusters × {int(cluster_size)} individuals")
+                
+                with col3:
+                    st.metric("Power", f"{power*100:.0f}%")
+                    st.caption(f"at α = {alpha}")
+                
+                # Summary
+                with st.container():
+                    st.info(
+                        f"With **{int(sample_size):,} individuals** "
+                        f"({'in ' + str(int(num_clusters)) + ' clusters' if design_type == 'cluster' else ''}), "
+                        f"you can detect an effect of **{mde:.3f}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
+                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                    )
+            
+            else:  # sample_size mode
+                sample_result = calculate_sample_size(assumptions)
+                
+                # Initialize variables
+                required_n = None
+                required_clusters = None
+                total_n = None
+                
+                if design_type == "individual":
+                    required_n = sample_result['sample_size']
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Required Sample Size", f"{int(required_n):,}")
+                    
+                    with col2:
+                        st.metric("Target MDE", f"{target_mde:.3f}")
+                        st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
+                    
+                    with col3:
+                        st.metric("Power", f"{power*100:.0f}%")
+                        st.caption(f"at α = {alpha}")
+                    
+                    with st.container():
+                        st.info(
+                            f"You need **{int(required_n):,} individuals** to detect an effect of "
+                            f"**{target_mde:.3f}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
+                            f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                        )
+                
+                else:  # cluster
+                    required_clusters = sample_result['num_clusters']
+                    total_n = sample_result['total_individuals']
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Required Clusters", f"{required_clusters:,}")
+                        st.caption(f"Total N = {total_n:,}")
+                    
+                    with col2:
+                        st.metric("Target MDE", f"{target_mde:.3f}")
+                        st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
+                    
+                    with col3:
+                        st.metric("Cluster Size", f"{int(cluster_size):,}")
+                        st.caption(f"ICC = {icc:.3f}")
+                    
+                    with st.container():
+                        st.info(
+                            f"You need **{required_clusters:,} clusters** ({total_n:,} individuals) "
+                            f"to detect an effect of **{target_mde:.3f}** "
+                            f"({(target_mde / baseline_mean * 100):.2f}% of baseline) "
+                            f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                        )
+            
+            # Visualizations
+            st.markdown("---")
+            st.markdown("### 📈 Power Curves")
+            
+            tab1, tab2 = st.tabs(["Power vs Sample Size", "Cluster Analysis" if design_type == "cluster" else "Power Analysis"])
+            
+            with tab1:
+                # Generate power curve
+                if calculation_mode == "mde":
+                    curve_assumptions = PowerAssumptions(
+                        alpha=alpha,
+                        power=power,
+                        baseline_mean=baseline_mean,
+                        baseline_sd=baseline_sd,
+                        outcome_type=outcome_type,
+                        treatment_share=treatment_share,
+                        design_type=design_type,
+                        effect_size=mde,
+                        num_clusters=num_clusters if design_type == "cluster" else None,
+                        cluster_size=cluster_size if design_type == "cluster" else None,
+                        icc=icc if design_type == "cluster" else 0.0,
+                        r_squared=final_r_squared,
+                        compliance_rate=final_compliance
+                    )
+                else:
+                    curve_assumptions = PowerAssumptions(
+                        alpha=alpha,
+                        power=power,
+                        baseline_mean=baseline_mean,
+                        baseline_sd=baseline_sd,
+                        outcome_type=outcome_type,
+                        treatment_share=treatment_share,
+                        design_type=design_type,
+                        effect_size=target_mde,
+                        num_clusters=num_clusters if design_type == "cluster" else None,
+                        cluster_size=cluster_size if design_type == "cluster" else None,
+                        icc=icc if design_type == "cluster" else 0.0,
+                        r_squared=final_r_squared,
+                        compliance_rate=final_compliance
+                    )
+                
+                power_df = generate_power_curve(curve_assumptions)
+                
+                import plotly.graph_objects as go
+                
+                fig = go.Figure()
+                
+                if design_type == "cluster":
+                    x_data = power_df['clusters']
+                    x_label = "Number of Clusters"
+                else:
+                    x_data = power_df['sample_size']
+                    x_label = "Sample Size (N)"
+                
+                fig.add_trace(go.Scatter(
+                    x=x_data,
+                    y=power_df['power'],
+                    mode='lines',
+                    name='Power',
+                    line=dict(color='#1f77b4', width=3)
+                ))
+                
+                # Add reference lines
+                fig.add_hline(y=0.8, line_dash="dash", line_color="gray", 
+                             annotation_text="80% Power", annotation_position="right")
+                
+                if calculation_mode == "mde":
+                    if design_type == "cluster":
+                        x_val = num_clusters
+                    else:
+                        x_val = sample_size
+                    if x_val:
+                        fig.add_vline(x=x_val, line_dash="dash", line_color="red",
+                                     annotation_text=f"Current: {int(x_val):,}")
+                else:
+                    if design_type == "cluster":
+                        x_val = required_clusters
+                    else:
+                        x_val = required_n
+                    if x_val:
+                        fig.add_vline(x=x_val, line_dash="dash", line_color="red",
+                                     annotation_text=f"Required: {int(x_val):,}")
+                
+                fig.update_layout(
+                    title="Statistical Power vs Sample Size",
+                    xaxis_title=x_label,
+                    yaxis_title="Power (1-β)",
+                    yaxis=dict(range=[0, 1]),
+                    hovermode='x unified',
+                    template='plotly_white'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with tab2:
+                if design_type == "cluster":
+                    # Generate MDE table for different cluster sizes
+                    st.markdown("#### MDE Table: Different Cluster Configurations")
+                    
+                    # Create assumptions for table generation
+                    table_num_clusters = num_clusters if calculation_mode == "mde" else (required_clusters if required_clusters else 50)
+                    table_assumptions = PowerAssumptions(
+                        alpha=alpha,
+                        power=power,
+                        baseline_mean=baseline_mean,
+                        baseline_sd=baseline_sd,
+                        outcome_type=outcome_type,
+                        treatment_share=treatment_share,
+                        design_type="cluster",
+                        num_clusters=table_num_clusters,
+                        cluster_size=cluster_size,
+                        icc=icc,
+                        r_squared=final_r_squared,
+                        compliance_rate=final_compliance
+                    )
+                    
+                    mde_table_df = generate_cluster_size_table(
+                        table_assumptions,
+                        cluster_sizes=[10, 15, 20, 25, 30, 40, 50],
+                        num_clusters_options=[20, 30, 40, 50, 60, 80, 100]
+                    )
+                    
+                    # Pivot for better display
+                    mde_table = mde_table_df.pivot(
+                        index='cluster_size',
+                        columns='num_clusters',
+                        values='mde_absolute'
+                    )
+                    
+                    st.dataframe(
+                        mde_table.style.format("{:.3f}").background_gradient(cmap='RdYlGn_r', axis=None),
+                        use_container_width=True
+                    )
+                    st.caption(
+                        "Each cell shows the MDE for that cluster configuration. "
+                        "Smaller MDEs (greener) are better."
+                    )
+                else:
+                    st.info("Cluster size analysis is only available for cluster randomization designs.")
+            
+            # Code generation
+            st.markdown("---")
+            st.markdown("### 💻 Downloadable Code")
+            
+            code_tab1, code_tab2 = st.tabs(["Python", "Stata"])
+            
+            # Prepare results dict for code generation
+            if calculation_mode == "mde":
+                code_results = mde_result
+            else:
+                code_results = sample_result
+            
+            with code_tab1:
+                python_code = generate_python_code(
+                    curve_assumptions if calculation_mode == "mde" else assumptions,
+                    code_results
+                )
+                st.code(python_code, language="python")
+                st.download_button(
+                    "Download Python Script",
+                    data=python_code,
+                    file_name="power_calculation.py",
+                    mime="text/x-python"
+                )
+            
+            with code_tab2:
+                stata_code = generate_stata_code(
+                    curve_assumptions if calculation_mode == "mde" else assumptions,
+                    code_results
+                )
+                st.code(stata_code, language="stata")
+                st.download_button(
+                    "Download Stata Script",
+                    data=stata_code,
+                    file_name="power_calculation.do",
+                    mime="text/plain"
+                )
+        
+        except ValueError as e:
+            st.error(f"❌ Calculation error: {str(e)}")
+        except Exception as e:
+            st.error(f"❌ Unexpected error: {str(e)}")
 
 
 # ----------------------------------------------------------------------------- #
@@ -4693,7 +5635,7 @@ from io import BytesIO
 PUBLIC_PAGES = ["home"]
 
 # Pages that require temporary access (excludes admin pages with their own auth)
-PROTECTED_PAGES = ["design", "random", "cases", "quality", "analysis", 
+PROTECTED_PAGES = ["design", "power", "random", "cases", "quality", "analysis", 
                    "backcheck", "reports", "monitor"]
 
 # Admin pages with their own password protection (skip temporary access)
@@ -5053,6 +5995,7 @@ def main() -> None:
     nav = {
         "home": "🏠 Home",
         "design": "🎯 RCT Design",
+        "power": "⚡ Power Calculations",
         "random": "🎲 Randomization",
         "cases": "📋 Case Assignment",
         "quality": "✅ Quality Checks",
@@ -5144,6 +6087,8 @@ def main() -> None:
         render_home()
     elif page == "design":
         render_rct_design()
+    elif page == "power":
+        render_power_calculations()
     elif page == "random":
         render_randomization()
     elif page == "cases":
