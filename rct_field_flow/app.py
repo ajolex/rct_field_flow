@@ -1724,46 +1724,64 @@ def render_randomization() -> None:
 
         submitted = st.form_submit_button("Run randomization", type="primary")
 
-    if not submitted:
+    result: RandomizationResult | None = st.session_state.get("randomization_result")
+
+    if submitted:
+        is_valid = True
+        total_prop = sum(a.proportion for a in arms)
+        if abs(total_prop - 1.0) > 0.01:
+            st.error(f"Arm proportions must sum to 1.0 (current total: {total_prop:.2f}).")
+            is_valid = False
+
+        if int(seed) <= 0:
+            st.error("Random seed is required and must be a positive integer.")
+            is_valid = False
+
+        if is_valid:
+            # Map "stratified + cluster" to "cluster" method with strata
+            actual_method = "cluster" if method == "stratified + cluster" else method
+
+            rand_config = RandomizationConfig(
+                id_column=id_column,
+                treatment_column=treatment_column or "treatment",
+                method=actual_method,  # type: ignore[arg-type]
+                arms=arms,
+                strata=strata if strata else [],
+                cluster=cluster_col,
+                balance_covariates=balance_covariates if balance_covariates else [],
+                iterations=int(iterations),
+                seed=int(seed),
+                use_existing_assignment=use_existing,
+            )
+
+            try:
+                result = Randomizer(rand_config).run(df, verbose=False)
+            except Exception as exc:
+                st.error(f"Randomization failed: {exc}")
+                is_valid = False
+            else:
+                st.session_state.randomization_result = result
+                st.session_state.case_data = result.assignments.copy()
+
+                # Store download data in session state to prevent recomputation on reruns
+                st.session_state.csv_assignments = result.assignments.to_csv(index=False)
+                st.session_state.python_rand_code = generate_python_randomization_code(rand_config, method)
+                st.session_state.stata_rand_code = generate_stata_randomization_code(rand_config, method)
+
+                st.success(
+                    f"Randomization complete! Iterations: {result.iterations}. Best min p-value: {result.best_min_pvalue:.4f}"
+                )
+
+                # Keep track of method for downstream display after reruns
+                st.session_state.randomization_method = actual_method
+
+        # Refresh result reference after potential update
+        result = st.session_state.get("randomization_result")
+
+    if result is None:
         return
 
-    total_prop = sum(a.proportion for a in arms)
-    if abs(total_prop - 1.0) > 0.01:
-        st.error(f"Arm proportions must sum to 1.0 (current total: {total_prop:.2f}).")
-        return
-
-    if int(seed) <= 0:
-        st.error("Random seed is required and must be a positive integer.")
-        return
-
-    # Map "stratified + cluster" to "cluster" method with strata
-    actual_method = "cluster" if method == "stratified + cluster" else method
-
-    rand_config = RandomizationConfig(
-        id_column=id_column,
-        treatment_column=treatment_column or "treatment",
-        method=actual_method,  # type: ignore[arg-type]
-        arms=arms,
-        strata=strata if strata else [],
-        cluster=cluster_col,
-        balance_covariates=balance_covariates if balance_covariates else [],
-        iterations=int(iterations),
-        seed=int(seed),
-        use_existing_assignment=use_existing,
-    )
-
-    try:
-        result = Randomizer(rand_config).run(df, verbose=False)
-    except Exception as exc:
-        st.error(f"Randomization failed: {exc}")
-        return
-
-    st.session_state.randomization_result = result
-    st.session_state.case_data = result.assignments.copy()
-
-    st.success(
-        f"Randomization complete! Iterations: {result.iterations}. Best min p-value: {result.best_min_pvalue:.4f}"
-    )
+    actual_method = st.session_state.get("randomization_method", method)
 
     # Treatment distribution table
     st.markdown("#### Treatment Distribution")
@@ -1806,50 +1824,6 @@ def render_randomization() -> None:
     st.markdown("#### Assignments preview")
     st.dataframe(result.assignments.head(10), use_container_width=True)
 
-    csv_buffer = io.StringIO()
-    result.assignments.to_csv(csv_buffer, index=False)
-    
-    # Generate code upfront (before any download buttons)
-    python_code = generate_python_randomization_code(rand_config, method)
-    stata_code = generate_stata_randomization_code(rand_config, method)
-    
-    # Downloads section with proper keys to prevent page refresh issues
-    st.markdown("#### 📥 Download Results & Code")
-    st.markdown("Download assignments, code, or analysis files.")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.download_button(
-            "📊 Download Assignments CSV",
-            data=csv_buffer.getvalue(),
-            file_name="randomized_assignments.csv",
-            mime="text/csv",
-            key="download_csv_assignments",
-        )
-    
-    with col2:
-        st.download_button(
-            "🐍 Download Python Code",
-            data=python_code,
-            file_name="randomization_code.py",
-            mime="text/x-python",
-            key="download_python_code",
-            help="Python script with your exact randomization parameters"
-        )
-    
-    with col3:
-        st.download_button(
-            "📈 Download Stata Code",
-            data=stata_code,
-            file_name="randomization_code.do",
-            mime="text/x-stata",
-            key="download_stata_code",
-            help="Stata do-file with your exact randomization parameters"
-        )
-    
-    st.markdown("---")
-
     if not result.balance_table.empty:
         st.markdown("#### Balance table")
         balance_table = result.balance_table.copy()
@@ -1870,6 +1844,46 @@ def render_randomization() -> None:
         except Exception:
             pass
         st.dataframe(style, use_container_width=True)
+
+    # Downloads section - show whenever results exist in session state
+    if ('csv_assignments' in st.session_state and 
+        'python_rand_code' in st.session_state and 
+        'stata_rand_code' in st.session_state):
+        
+        st.markdown("---")
+        st.markdown("#### 📥 Download Results & Code")
+        st.markdown("Download assignments, code, or analysis files.")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.download_button(
+                "📊 Download Assignments CSV",
+                data=st.session_state.csv_assignments,
+                file_name="randomized_assignments.csv",
+                mime="text/csv",
+                key="download_csv_assignments",
+            )
+        
+        with col2:
+            st.download_button(
+                "🐍 Download Python Code",
+                data=st.session_state.python_rand_code,
+                file_name="randomization_code.py",
+                mime="text/x-python",
+                key="download_python_code",
+                help="Python script with your exact randomization parameters"
+            )
+        
+        with col3:
+            st.download_button(
+                "📈 Download Stata Code",
+                data=st.session_state.stata_rand_code,
+                file_name="randomization_code.do",
+                mime="text/x-stata",
+                key="download_stata_code",
+                help="Stata do-file with your exact randomization parameters"
+            )
 
 
 # ----------------------------------------------------------------------------- #
