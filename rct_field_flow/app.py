@@ -1808,36 +1808,47 @@ def render_randomization() -> None:
 
     csv_buffer = io.StringIO()
     result.assignments.to_csv(csv_buffer, index=False)
-    st.download_button(
-        "Download assignments CSV",
-        data=csv_buffer.getvalue(),
-        file_name="randomized_assignments.csv",
-        mime="text/csv",
-    )
-
-    # Generate and offer code downloads for transparency
-    st.markdown("#### 📥 Download Randomization Code")
-    st.markdown("Download the actual code that ran your randomization to share with PIs and collaborators.")
     
-    col1, col2 = st.columns(2)
+    # Generate code upfront (before any download buttons)
+    python_code = generate_python_randomization_code(rand_config, method)
+    stata_code = generate_stata_randomization_code(rand_config, method)
+    
+    # Downloads section with proper keys to prevent page refresh issues
+    st.markdown("#### 📥 Download Results & Code")
+    st.markdown("Download assignments, code, or analysis files.")
+    
+    col1, col2, col3 = st.columns(3)
+    
     with col1:
-        python_code = generate_python_randomization_code(rand_config, method)
         st.download_button(
-            "📄 Download Python Code",
+            "📊 Download Assignments CSV",
+            data=csv_buffer.getvalue(),
+            file_name="randomized_assignments.csv",
+            mime="text/csv",
+            key="download_csv_assignments",
+        )
+    
+    with col2:
+        st.download_button(
+            "🐍 Download Python Code",
             data=python_code,
             file_name="randomization_code.py",
             mime="text/x-python",
+            key="download_python_code",
             help="Python script with your exact randomization parameters"
         )
-    with col2:
-        stata_code = generate_stata_randomization_code(rand_config, method)
+    
+    with col3:
         st.download_button(
-            "📄 Download Stata Code",
+            "📈 Download Stata Code",
             data=stata_code,
             file_name="randomization_code.do",
             mime="text/x-stata",
+            key="download_stata_code",
             help="Stata do-file with your exact randomization parameters"
         )
+    
+    st.markdown("---")
 
     if not result.balance_table.empty:
         st.markdown("#### Balance table")
