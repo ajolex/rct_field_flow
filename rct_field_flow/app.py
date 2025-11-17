@@ -833,7 +833,7 @@ def render_home() -> None:
     st.title("📊 RCT Field Flow")
     st.markdown(
         """
-        **Integrated toolkit** for designing RCTs, conducting randomization, managing cases, 
+        **Integrated toolkit** for designing RCTs, statistical power analysis, conducting randomization, managing enumerator interview assignments, 
         quality assurance, analysis, and live monitoring.
         """
     )
@@ -846,27 +846,27 @@ def render_home() -> None:
     with col1:
         st.markdown("""
         ### Phase 1: Design & Planning
-        1. **🎯 RCT Design** – Build your concept note with 15 sections
-           - Create comprehensive designs for education, health, agriculture projects
+        1. **🎯 RCT Design** – Build your concept note with guided prompts and tips
+           - Create comprehensive designs for education, health, agriculture projects and other sectors
            - View realistic sample concept notes from different sectors
-           - Export in multiple formats (Markdown, DOCX, PDF)
+           - Export concept note in multiple formats (Markdown, DOCX, PDF)
         
         ### Phase 2: Technical Setup
         2. **⚡ Power Calculations** – Determine sample size and power
            - Calculate minimum detectable effects (MDE)
            - Run power simulations with custom assumptions
-           - Generate analysis code (Stata/Python)
+           - Generate power analysis code (Stata/Python)
         
-        3. **🎲 Randomization** – Configure arms, strata, rerandomization
+        3. **🎲 Randomization** – Configure random assigment arms, strata, rerandomization
            - Set up treatment arms and stratification variables
            - Support for clustered and cross-clustered designs
-           - Real-time balance checking
+           - Real-time covariates balance checking
         
         ### Phase 3: Implementation
-        4. **📋 Case Assignment** – Build SurveyCTO-ready cases dataset
-           - Assign treatment groups to beneficiaries
-           - Create tracking spreadsheets
-           - Prepare for field deployment
+        4. **📋 SurveyCTO Case Assignment** – Build SurveyCTO-ready cases dataset
+           - Assign interview cases to enumerators
+           - Export case assignment files for SurveyCTO
+           - Supports direct upload to SurveyCTO via API
         
         5. **🔍 Quality Checks** – Apply speed, outlier, duplicate checks
            - Monitor data quality during collection
@@ -875,8 +875,8 @@ def render_home() -> None:
         
         6. **📈 Monitoring Dashboard** – Track live productivity
            - Monitor survey completion rates
-           - Track supervisor performance
-           - Project timelines and resource needs
+           - Track enumerator performance
+           - Project completion timelines
         
         ### Phase 4: Analysis & Reporting
         7. **📊 Analysis & Results** – Estimate treatment effects
@@ -967,7 +967,7 @@ def render_home() -> None:
     st.markdown("---")
     
     st.info(
-        "💡 **Pro Tip:** All features can be driven from the CLI. Run `rct-field-flow --help` "
+        "💡 **Pro Tip:** If running locally, all features can be driven from the CLI. Run `rct-field-flow --help` "
         "to explore commands and options."
     )
 
@@ -990,9 +990,36 @@ def render_rct_design() -> None:
         # Import the wizard dynamically to handle path resolution
         import importlib.util
         from pathlib import Path
+        import os
         
-        # Load wizard module dynamically
-        wizard_path = Path(__file__).parent / "rct-design" / "wizard.py"
+        # Try multiple path resolution strategies for cross-platform compatibility
+        wizard_path = None
+        possible_paths = [
+            Path(__file__).parent / "rct-design" / "wizard.py",  # Standard relative path
+            Path(__file__).resolve().parent / "rct-design" / "wizard.py",  # Resolved path
+            Path(os.path.dirname(os.path.abspath(__file__))) / "rct-design" / "wizard.py",  # Absolute path
+        ]
+        
+        for path in possible_paths:
+            if path.exists():
+                wizard_path = path
+                break
+        
+        if wizard_path is None:
+            # Last resort: try direct import as a package
+            try:
+                # Try importing as a subpackage
+                import sys
+                rct_design_path = Path(__file__).parent / "rct-design"
+                if str(rct_design_path) not in sys.path:
+                    sys.path.insert(0, str(rct_design_path))
+                import wizard as wizard_module
+                wizard_module.main()
+                return
+            except ImportError:
+                pass
+            
+            raise FileNotFoundError(f"Could not locate wizard.py. Tried paths: {[str(p) for p in possible_paths]}")
         
         spec = importlib.util.spec_from_file_location("wizard_module", wizard_path)
         if spec is None or spec.loader is None:
@@ -1004,12 +1031,31 @@ def render_rct_design() -> None:
         # Run the wizard
         wizard_module.main()
         
-    except ImportError as e:
+    except (ImportError, FileNotFoundError) as e:
+        import traceback
         st.error(f"Could not load RCT Design Wizard: {str(e)}")
         st.info("Please ensure the rct-design module is properly installed.")
         with st.expander("📋 Debug Info"):
-            wizard_path = Path(__file__).parent / "rct-design" / "wizard.py"
-            st.code(f"Import error: {str(e)}\nWizard path: {wizard_path}\nExists: {wizard_path.exists()}", language="python")
+            import os
+            current_dir = Path(__file__).parent
+            rct_design_dir = current_dir / "rct-design"
+            wizard_file = rct_design_dir / "wizard.py"
+            
+            debug_info = f"""Error: {str(e)}
+__file__: {__file__}
+Current directory: {current_dir}
+RCT design directory exists: {rct_design_dir.exists()}
+Wizard file exists: {wizard_file.exists()}
+Attempted paths: {[str(p) for p in possible_paths]}
+
+Directory contents:
+{os.listdir(current_dir) if current_dir.exists() else 'Directory not found'}
+
+RCT-design contents:
+{os.listdir(rct_design_dir) if rct_design_dir.exists() else 'Directory not found'}
+"""
+            st.code(debug_info, language="text")
+            st.code(traceback.format_exc(), language="python")
     except Exception as e:
         import traceback
         st.error(f"Error running RCT Design Wizard: {str(e)}")
