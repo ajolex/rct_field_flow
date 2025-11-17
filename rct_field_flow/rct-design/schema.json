@@ -1,0 +1,154 @@
+{
+  "version": "1.0.0",
+  "meta": {
+    "title": null,
+    "pis": [],
+    "affiliations": [],
+    "country": null,
+    "funder": null,
+    "project_stage": null,
+    "partners": []
+  },
+  "problem_policy_relevance": {
+    "problem_statement": null,
+    "evidence_gap": null,
+    "beneficiaries": null,
+    "policy_priority": null
+  },
+  "theory_of_change": {
+    "activities": [],
+    "outputs": [],
+    "short_run_outcomes": [],
+    "long_run_outcomes": [],
+    "assumptions": [],
+    "risks": []
+  },
+  "intervention_implementation": {
+    "description": null,
+    "components": [],
+    "delivery_channels": [],
+    "frequency_intensity": null,
+    "eligibility_criteria": null,
+    "implementers": [],
+    "operational_constraints": []
+  },
+  "study_population_sampling": {
+    "unit_of_randomization": null,
+    "sampling_frame_source": null,
+    "inclusion_exclusion": null,
+    "expected_total_n": null,
+    "coverage_limitations": null
+  },
+  "outcomes_measurement": {
+    "primary_outcomes": [],
+    "secondary_outcomes": [],
+    "measurement_timing": {
+      "baseline": null,
+      "midline": null,
+      "endline": null
+    },
+    "instruments": [],
+    "indices_composites": [],
+    "qualitative_modules": []
+  },
+  "randomization_design": {
+    "numeric": {
+      "design_type": null,
+      "arms": null,
+      "seed": null,
+      "strata": [],
+      "balance_summary": null
+    },
+    "narrative": {
+      "rationale": null,
+      "implementation_steps": null,
+      "concealment": null,
+      "contamination_mitigation": null,
+      "clustering_justification": null
+    }
+  },
+  "power_sample_size": {
+    "numeric": {
+      "n_per_arm": null,
+      "icc": null,
+      "mde": null,
+      "alpha": 0.05,
+      "power": 0.80,
+      "variance": null,
+      "attrition": null,
+      "take_up": null
+    },
+    "narrative": {
+      "effect_size_justification": null,
+      "variance_source": null,
+      "attrition_inflation": null,
+      "sensitivity_analyses": null,
+      "design_effect_explanation": null
+    }
+  },
+  "data_collection_plan": {
+    "survey_schedule": null,
+    "enumerator_training": null,
+    "tracking_attrition": null,
+    "qc_protocols": null,
+    "mode": null,
+    "data_security": null
+  },
+  "analysis_plan": {
+    "estimands": {
+      "itt": null,
+      "tot": null
+    },
+    "models": {
+      "regression_spec": null,
+      "controls_set": [],
+      "heterogeneity_subgroups": [],
+      "multiple_testing_strategy": null,
+      "missing_data_strategy": null,
+      "mediation_exploratory_flags": []
+    }
+  },
+  "ethics_risks_approvals": {
+    "irb_status": null,
+    "consent_process": null,
+    "adverse_event_protocol": null,
+    "privacy_security": null,
+    "risk_matrix": [],
+    "fairness_waitlist": null
+  },
+  "timeline_milestones": {
+    "milestones": [],
+    "dependencies": null,
+    "critical_path": null
+  },
+  "budget_summary": {
+    "categories": {
+      "personnel": null,
+      "data": null,
+      "intervention": null,
+      "overheads": null,
+      "contingency": null
+    },
+    "funding_gap": null,
+    "co_financing": null
+  },
+  "policy_relevance_scalability": {
+    "alignment_with_national_policies": null,
+    "scale_pathways": null,
+    "delivery_model_comparison": null,
+    "cost_effectiveness_narrative": null
+  },
+  "references_annexes": {
+    "citations": [],
+    "instruments_list": [],
+    "randomization_code_link": null,
+    "survey_modules": [],
+    "partner_mou_status": null
+  },
+  "compliance": {
+    "prereg_plan": null,
+    "data_management_plan": null,
+    "back_check_protocol": null,
+    "transparency_commitments": []
+  }
+}
