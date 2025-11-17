@@ -1,19 +1,24 @@
 pandas>=2.0
 numpy>=2.0,<3.0
 streamlit>=1.28
-plotly>=5.17
+# Pin within 5.x (latest patch) to avoid 6.x changes
+plotly==5.24.1
 requests>=2.31
 jinja2>=3.1
-weasyprint>=62.0
-typer[all]>=0.9
+# Pin latest 62.x patch below 63.x
+weasyprint==62.3
+# Pin latest 0.9.x patch
+typer[all]==0.9.4
 statsmodels>=0.14
 linearmodels>=7.0
 scipy>=1.11
 python-dotenv>=1.0
 pyyaml>=6.0
+matplotlib==3.10.7
 
 # RCT Design Activity dependencies
 pydantic>=2.0.0
 python-docx>=0.8.11
 openpyxl>=3.1.0
 streamlit-authenticator>=0.2.3
+cryptography>=41.0

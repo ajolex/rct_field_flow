@@ -4,10 +4,13 @@ import importlib.util
 import io
 import math
 import sys
+import json
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from types import ModuleType
-from typing import Dict, List
+from dataclasses import asdict
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -45,6 +48,14 @@ try:
     from .backcheck import BackcheckConfig, sample_backchecks
     from .report import generate_weekly_report
     from .surveycto import SurveyCTO
+    # Persistence (successful import path)
+    from .persistence import (
+        init_db,
+        record_user_login,
+        record_activity,
+        upsert_design_data,
+        upsert_randomization,
+    )
 except ImportError:  # pragma: no cover
     PACKAGE_ROOT = Path(__file__).resolve().parent.parent
     if str(PACKAGE_ROOT) not in sys.path:
@@ -88,6 +99,14 @@ except ImportError:  # pragma: no cover
     from rct_field_flow.backcheck import BackcheckConfig, sample_backchecks  # type: ignore
     from rct_field_flow.report import generate_weekly_report  # type: ignore
     from rct_field_flow.surveycto import SurveyCTO  # type: ignore
+    # Persistence (fallback import path)
+    from rct_field_flow.persistence import (  # type: ignore
+        init_db,
+        record_user_login,
+        record_activity,
+        upsert_design_data,
+        upsert_randomization,
+    )
 
 # ----------------------------------------------------------------------------- #
 # Page configuration & session state                                            #
@@ -969,25 +988,28 @@ def render_rct_design() -> None:
     """
     try:
         # Import the wizard dynamically to handle path resolution
-        import sys
+        import importlib.util
         from pathlib import Path
         
-        # Add rct-design to path if needed
-        rct_design_path = Path(__file__).parent / "rct-design"
-        if str(rct_design_path) not in sys.path:
-            sys.path.insert(0, str(rct_design_path))
+        # Load wizard module dynamically
+        wizard_path = Path(__file__).parent / "rct-design" / "wizard.py"
         
-        # Import wizard modules
-        from wizard import main as wizard_main
+        spec = importlib.util.spec_from_file_location("wizard_module", wizard_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Could not load wizard from {wizard_path}")
+        
+        wizard_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wizard_module)
         
         # Run the wizard
-        wizard_main()
+        wizard_module.main()
         
     except ImportError as e:
         st.error(f"Could not load RCT Design Wizard: {str(e)}")
         st.info("Please ensure the rct-design module is properly installed.")
         with st.expander("📋 Debug Info"):
-            st.code(f"Import error: {str(e)}", language="python")
+            wizard_path = Path(__file__).parent / "rct-design" / "wizard.py"
+            st.code(f"Import error: {str(e)}\nWizard path: {wizard_path}\nExists: {wizard_path.exists()}", language="python")
     except Exception as e:
         import traceback
         st.error(f"Error running RCT Design Wizard: {str(e)}")
@@ -1886,6 +1908,379 @@ def render_randomization() -> None:
             )
 
 
+def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
+    """Render cached analytical power results (used to keep downloads after reruns)."""
+    calculation_mode = ctx["calculation_mode"]
+    design_type = ctx["design_type"]
+    outcome_type = ctx["outcome_type"]
+    baseline_mean = ctx["baseline_mean"]
+    baseline_sd = ctx["baseline_sd"]
+    alpha = ctx["alpha"]
+    power = ctx["power"]
+    treatment_share = ctx["treatment_share"]
+    sample_size = ctx.get("sample_size")
+    num_clusters = ctx.get("num_clusters")
+    cluster_size = ctx.get("cluster_size")
+    target_mde = ctx.get("target_mde")
+    mde = ctx.get("mde")
+    mde_result = ctx.get("mde_result")
+    sample_result = ctx.get("sample_result")
+    required_n = ctx.get("required_n")
+    required_clusters = ctx.get("required_clusters")
+    total_n = ctx.get("total_n")
+    final_r_squared = ctx.get("final_r_squared", 0.0)
+    final_compliance = ctx.get("final_compliance", 1.0)
+    icc = ctx.get("icc", 0.0)
+    clusters_for_curve = ctx.get("clusters_for_curve")
+    table_num_clusters = ctx.get("table_num_clusters")
+    code_results = ctx.get("code_results")
+    assumption_params = ctx.get("assumption_params") or {}
+    curve_params = ctx.get("curve_params") or {}
+
+    if not assumption_params or not curve_params or code_results is None:
+        return
+
+    assumptions_obj = PowerAssumptions(**assumption_params)
+    curve_assumptions = PowerAssumptions(**curve_params)
+
+    st.markdown("---")
+    st.markdown("### 📊 Results")
+
+    if outcome_type == "binary":
+        st.info(
+            "📌 **Binary Outcome**: MDE represents change in proportion "
+            "(e.g., from 50% to 55% = MDE of 0.05 or 5 percentage points)"
+        )
+
+    if calculation_mode == "mde" and mde_result:
+        attrition_rate = ctx.get("attrition_rate", 0.0)
+        
+        # Display results without attrition
+        st.markdown("#### Without Attrition")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if outcome_type == "binary":
+                st.metric("MDE (Percentage Points)", f"{mde*100:.1f}pp")
+                st.caption(f"Change from {baseline_mean*100:.1f}% to {(baseline_mean+mde)*100:.1f}%")
+            else:
+                st.metric("Minimum Detectable Effect", f"{mde:.3f}")
+                st.caption(f"{(mde / baseline_mean * 100):.2f}% of baseline mean")
+
+        with col2:
+            if sample_size:
+                st.metric("Sample Size", f"{int(sample_size):,}")
+            if design_type == "cluster" and num_clusters and cluster_size:
+                st.caption(f"{int(num_clusters)} clusters × {int(cluster_size)} individuals")
+
+        with col3:
+            st.metric("Power", f"{power*100:.0f}%")
+            st.caption(f"at α = {alpha}")
+        
+        # Display results with attrition if applicable
+        if attrition_rate > 0 and mde_result:
+            st.markdown(f"#### With {attrition_rate*100:.0f}% Attrition")
+            col1, col2, col3 = st.columns(3)
+            
+            mde_with_attrition = mde_result.get("mde_absolute_with_attrition", mde)
+            sample_with_attrition = mde_result.get("sample_with_attrition") or mde_result.get("total_with_attrition")
+            
+            with col1:
+                if outcome_type == "binary":
+                    st.metric("MDE (Percentage Points)", f"{mde_with_attrition*100:.1f}pp", 
+                             delta=f"{(mde_with_attrition - mde)*100:.1f}pp", delta_color="inverse")
+                else:
+                    st.metric("Minimum Detectable Effect", f"{mde_with_attrition:.3f}",
+                             delta=f"{mde_with_attrition - mde:.3f}", delta_color="inverse")
+                st.caption(f"{(mde_with_attrition / baseline_mean * 100):.2f}% of baseline mean")
+
+            with col2:
+                if sample_with_attrition:
+                    st.metric("Required Sample Size", f"{int(sample_with_attrition):,}",
+                             delta=f"+{int(sample_with_attrition - sample_size):,}")
+                if design_type == "cluster" and mde_result.get("cluster_size_with_attrition") and num_clusters:
+                    m_with_attrition = mde_result["cluster_size_with_attrition"]
+                    st.caption(f"{int(num_clusters)} clusters × {int(m_with_attrition)} individuals (after attrition)")
+
+            with col3:
+                st.metric("Power", f"{power*100:.0f}%")
+                st.caption("(maintained with larger N)")
+        
+        with st.container():
+            sample_text = (
+                f"in {int(num_clusters)} clusters" if design_type == "cluster" and num_clusters else ""
+            )
+            if attrition_rate > 0:
+                st.success(
+                    f"✅ **Without attrition**: With **{int(sample_size):,} individuals** ({sample_text}), "
+                    f"you can detect an effect of **{mde:.3f}** with **{power*100:.0f}% power**.\n\n"
+                    f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(sample_with_attrition):,} individuals** "
+                    f"to maintain power and detect **{mde_with_attrition:.3f}** effect."
+                )
+            else:
+                st.info(
+                    f"With **{int(sample_size):,} individuals** ({sample_text}), "
+                    f"you can detect an effect of **{mde:.3f}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
+                    f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                )
+    elif calculation_mode == "sample_size" and sample_result:
+        attrition_rate = ctx.get("attrition_rate", 0.0)
+        
+        if design_type == "individual":
+            # Display results without attrition
+            st.markdown("#### Without Attrition")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Required Sample Size", f"{int(required_n):,}")
+            with col2:
+                st.metric("Target MDE", f"{target_mde:.3f}")
+                st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
+            with col3:
+                st.metric("Power", f"{power*100:.0f}%")
+                st.caption(f"at α = {alpha}")
+            
+            # Display results with attrition if applicable
+            if attrition_rate > 0 and sample_result:
+                st.markdown(f"#### With {attrition_rate*100:.0f}% Attrition")
+                n_with_attrition = sample_result.get("sample_size_with_attrition", required_n)
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Required Sample Size", f"{int(n_with_attrition):,}",
+                             delta=f"+{int(n_with_attrition - required_n):,}")
+                with col2:
+                    st.metric("Target MDE", f"{target_mde:.3f}")
+                    st.caption("(maintained with larger N)")
+                with col3:
+                    st.metric("Power", f"{power*100:.0f}%")
+                    st.caption("(preserved)")
+            
+            with st.container():
+                if attrition_rate > 0:
+                    n_with_attrition = sample_result.get("sample_size_with_attrition", required_n)
+                    st.success(
+                        f"✅ **Without attrition**: **{int(required_n):,} individuals** needed.\n\n"
+                        f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(n_with_attrition):,} individuals** "
+                        f"to maintain **{power*100:.0f}% power** for detecting **{target_mde:.3f}** effect."
+                    )
+                else:
+                    st.info(
+                        f"You need **{int(required_n):,} individuals** to detect an effect of "
+                        f"**{target_mde:.3f}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
+                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                    )
+        else:
+            # Cluster design
+            st.markdown("#### Without Attrition")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Required Clusters", f"{required_clusters:,}")
+                st.caption(f"Total N = {total_n:,}")
+            with col2:
+                st.metric("Target MDE", f"{target_mde:.3f}")
+                st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
+            with col3:
+                if cluster_size:
+                    st.metric("Cluster Size", f"{int(cluster_size):,}")
+                st.caption(f"ICC = {icc:.3f}")
+            
+            # Display results with attrition if applicable
+            if attrition_rate > 0 and sample_result:
+                st.markdown(f"#### With {attrition_rate*100:.0f}% Attrition")
+                cluster_size_with_attrition = sample_result.get("cluster_size_with_attrition", cluster_size)
+                total_with_attrition = sample_result.get("total_with_attrition", total_n)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Required Clusters", f"{required_clusters:,}")
+                    st.caption(f"Total N = {total_with_attrition:,}")
+                with col2:
+                    st.metric("Cluster Size (Inflated)", f"{int(cluster_size_with_attrition):,}",
+                             delta=f"+{int(cluster_size_with_attrition - cluster_size):,}")
+                    st.caption("(accounts for attrition)")
+                with col3:
+                    st.metric("Power", f"{power*100:.0f}%")
+                    st.caption("(preserved)")
+            
+            with st.container():
+                if attrition_rate > 0:
+                    cluster_size_with_attrition = sample_result.get("cluster_size_with_attrition", cluster_size)
+                    total_with_attrition = sample_result.get("total_with_attrition", total_n)
+                    st.success(
+                        f"✅ **Without attrition**: **{required_clusters:,} clusters** × **{int(cluster_size)} individuals** = {total_n:,} total.\n\n"
+                        f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{required_clusters:,} clusters** × **{int(cluster_size_with_attrition)} individuals** "
+                        f"= {total_with_attrition:,} total to maintain **{power*100:.0f}% power**."
+                    )
+                else:
+                    st.info(
+                        f"You need **{required_clusters:,} clusters** ({total_n:,} individuals) "
+                        f"to detect an effect of **{target_mde:.3f}** "
+                        f"({(target_mde / baseline_mean * 100):.2f}% of baseline) "
+                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
+                    )
+
+    st.markdown("---")
+    st.markdown("### 📈 Power Curves")
+
+    tab1, tab2 = st.tabs(["Power vs Sample Size", "Cluster Analysis" if design_type == "cluster" else "Power Analysis"])
+
+    with tab1:
+        if design_type == "cluster" and not clusters_for_curve:
+            st.warning("Cluster count unavailable. Recalculate to generate power curves.")
+        else:
+            power_df = generate_power_curve(curve_assumptions)
+            import plotly.graph_objects as go
+
+            fig = go.Figure()
+
+            if design_type == "cluster":
+                x_data = power_df['clusters']
+                x_label = "Number of Clusters"
+            else:
+                x_data = power_df['sample_size']
+                x_label = "Sample Size (N)"
+
+            fig.add_trace(go.Scatter(
+                x=x_data,
+                y=power_df['power'],
+                mode='lines',
+                name='Power',
+                line=dict(color='#1f77b4', width=3)
+            ))
+
+            fig.add_hline(y=0.8, line_dash="dash", line_color="gray",
+                          annotation_text="80% Power", annotation_position="right")
+
+            if calculation_mode == "mde":
+                x_val = num_clusters if design_type == "cluster" else sample_size
+                if x_val:
+                    fig.add_vline(x=x_val, line_dash="dash", line_color="red",
+                                  annotation_text=f"Current: {int(x_val):,}")
+            else:
+                x_val = required_clusters if design_type == "cluster" else required_n
+                if x_val:
+                    fig.add_vline(x=x_val, line_dash="dash", line_color="red",
+                                  annotation_text=f"Required: {int(x_val):,}")
+
+            fig.update_layout(
+                title="Statistical Power vs Sample Size",
+                xaxis_title=x_label,
+                yaxis_title="Power (1-β)",
+                yaxis=dict(range=[0, 1]),
+                hovermode='x unified',
+                template='plotly_white'
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    with tab2:
+        if design_type == "cluster" and cluster_size:
+            attrition_rate = ctx.get("attrition_rate", 0.0)
+            table_alpha = alpha
+            table_power = power
+            table_mean = baseline_mean
+            table_sd = baseline_sd
+            table_clusters = table_num_clusters or clusters_for_curve or 50
+
+            table_assumptions = PowerAssumptions(
+                alpha=table_alpha,
+                power=table_power,
+                baseline_mean=table_mean,
+                baseline_sd=table_sd,
+                outcome_type=outcome_type,
+                treatment_share=treatment_share,
+                design_type="cluster",
+                num_clusters=table_clusters,
+                cluster_size=int(cluster_size),
+                icc=icc,
+                r_squared=final_r_squared,
+                compliance_rate=final_compliance,
+                attrition_rate=attrition_rate
+            )
+
+            # Use updated cluster_sizes with smaller increments (rows) and num_clusters as columns
+            mde_table_df = generate_cluster_size_table(
+                table_assumptions,
+                cluster_sizes=None,  # Will use default: [16, 17, 18, 20, 22, 24, 26, 28, 30, 32, 35, 38, 40]
+                num_clusters_options=None  # Will use default: [20, 25, 30, 35, 40, 45, 50, 60, 70, 80]
+            )
+
+            mde_table = mde_table_df.pivot(
+                index='cluster_size',
+                columns='num_clusters',
+                values='mde_absolute'
+            )
+
+            if attrition_rate > 0:
+                st.info(f"📊 **MDE Table**: Values shown are **after {attrition_rate*100:.0f}% attrition adjustment** (final sample sizes)")
+            else:
+                st.info("📊 **MDE Table**: Values shown are for the specified sample sizes (no attrition)")
+            
+            st.dataframe(
+                mde_table.style.format("{:.3f}").background_gradient(cmap='RdYlGn_r', axis=None),
+                use_container_width=True
+            )
+            st.caption(
+                "**Table Structure**: Rows = Cluster Size (m) with 1-2 unit increments, "
+                "Columns = Number of Clusters (k). "
+                "Each cell shows the MDE for that configuration. "
+                "Smaller MDEs (greener) indicate higher power."
+            )
+        elif design_type == "cluster":
+            st.warning("Cluster size missing. Recalculate to view cluster analysis.")
+        else:
+            st.info("Cluster size analysis is only available for cluster randomization designs.")
+
+    st.markdown("---")
+    st.markdown("### 💻 Downloadable Code")
+
+    python_code = generate_python_code(
+        curve_assumptions if calculation_mode == "mde" else assumptions_obj,
+        code_results
+    )
+    stata_code = generate_stata_code(
+        curve_assumptions if calculation_mode == "mde" else assumptions_obj,
+        code_results
+    )
+
+    code_tab1, code_tab2 = st.tabs(["Python", "Stata"])
+
+    with code_tab1:
+        st.code(python_code, language="python")
+        st.download_button(
+            "Download Python Script",
+            data=python_code,
+            file_name="power_calculation.py",
+            mime="text/x-python"
+        )
+
+    with code_tab2:
+        st.code(stata_code, language="stata")
+        st.download_button(
+            "Download Stata Script",
+            data=stata_code,
+            file_name="power_calculation.do",
+            mime="text/plain"
+        )
+
+    st.markdown("#### 📥 Quick Downloads")
+    col_python, col_stata = st.columns(2)
+    with col_python:
+        st.download_button(
+            "🐍 Download Python Code",
+            data=python_code,
+            file_name="power_calculation.py",
+            mime="text/x-python",
+            use_container_width=True
+        )
+    with col_stata:
+        st.download_button(
+            "📈 Download Stata Code",
+            data=stata_code,
+            file_name="power_calculation.do",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+
 # ----------------------------------------------------------------------------- #
 # POWER CALCULATIONS                                                            #
 # ----------------------------------------------------------------------------- #
@@ -2060,7 +2455,7 @@ def render_power_calculations() -> None:
         num_clusters = None
         cluster_size = None
         target_mde = None
-        
+
         if calculation_mode == "mde":
             with col1:
                 if design_type == "individual":
@@ -2148,7 +2543,7 @@ def render_power_calculations() -> None:
                     value=1.0,
                     step=0.05,
                     help="Expected compliance rate (1.0 = perfect compliance)",
-                    key="power_compliance"
+                    key="power_compliance_binary"
                 )
             else:
                 col1, col2 = st.columns(2)
@@ -2172,17 +2567,47 @@ def render_power_calculations() -> None:
                         value=1.0,
                         step=0.05,
                         help="Expected compliance rate (1.0 = perfect compliance)",
-                        key="power_compliance"
+                        key="power_compliance_continuous"
                     )
-            
-            if compliance_rate and compliance_rate < 1.0:
-                st.warning(
-                    f"With {compliance_rate*100:.0f}% compliance, power for ITT estimates is maintained, "
-                    "but power for LATE (complier treatment effect) is reduced. "
-                    f"Effective sample size for LATE: ~{compliance_rate*100:.0f}% of nominal."
-                )
-            
-            # Simulation-specific parameters
+        
+        st.markdown("---")
+        st.markdown("#### Attrition Rate")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            attrition_rate = st.slider(
+                "Expected Attrition Rate",
+                min_value=0.00,
+                max_value=0.15,
+                value=0.10,
+                step=0.01,
+                format="%.2f",
+                help="Expected proportion of participants lost to follow-up (0.05-0.15 typical)",
+                key="power_attrition"
+            )
+        
+        with col2:
+            if attrition_rate > 0:
+                attrition_factor = 1 / (1 - attrition_rate)
+                # Display simplified inflation factor
+                inflation_display = 1 + attrition_rate
+                st.metric("Inflation Factor", f"{inflation_display:.2f}x")
+                st.caption(f"Sample multiplied by {attrition_factor:.2f}")
+        
+        with col3:
+            if attrition_rate > 0:
+                st.info(f"💡 With {attrition_rate*100:.0f}% attrition, recruit {attrition_factor:.0%} extra participants to maintain power")
+            else:
+                st.info("💡 Set attrition > 0 to adjust sample size")
+        
+        if compliance_rate and compliance_rate < 1.0:
+            st.warning(
+                f"With {compliance_rate*100:.0f}% compliance, power for ITT estimates is maintained, "
+                "but power for LATE (complier treatment effect) is reduced. "
+                f"Effective sample size for LATE: ~{compliance_rate*100:.0f}% of nominal."
+            )
+        
+        # Simulation-specific parameters
             if calculation_method == "simulation":
                 st.markdown("---")
                 st.markdown("##### Simulation Parameters")
@@ -2224,7 +2649,9 @@ def render_power_calculations() -> None:
                 within_cluster_var = 1.0
         
         calculate_button = st.form_submit_button("⚡ Calculate", use_container_width=True)
-    
+
+    current_clusters: int | None = None
+
     # Perform calculations
     if calculate_button:
         try:
@@ -2256,6 +2683,7 @@ def render_power_calculations() -> None:
             # SIMULATION-BASED CALCULATIONS
             # ==========================================
             if calculation_method == "simulation":
+                st.session_state.pop("power_calc_state", None)
                 st.markdown("---")
                 st.markdown("### 🎲 Simulation Results")
                 st.info(f"Running {num_simulations:,} Monte Carlo simulations... (Seed: {sim_seed})")
@@ -2456,11 +2884,12 @@ def render_power_calculations() -> None:
                     cluster_size=int(cluster_size) if design_type == "cluster" else None,
                     icc=icc if design_type == "cluster" else 0.0,
                     r_squared=final_r_squared,
-                    compliance_rate=final_compliance
+                    compliance_rate=final_compliance,
+                    attrition_rate=attrition_rate
                 )
             else:
                 # For sample size calculation, set mde in assumptions
-                # For cluster designs in sample_size mode, we need dummy num_clusters for initialization
+                # For cluster designs, num_clusters will be computed from MDE/cluster_size
                 assumptions = PowerAssumptions(
                     alpha=alpha,
                     power=power,
@@ -2470,289 +2899,96 @@ def render_power_calculations() -> None:
                     treatment_share=treatment_share,
                     design_type=design_type,
                     mde=target_mde,
-                    num_clusters=int(cluster_size) if design_type == "cluster" else None,  # Dummy value, will be calculated
+                    num_clusters=None,  # Will be calculated in sample size mode
                     cluster_size=int(cluster_size) if design_type == "cluster" else None,
                     icc=icc if design_type == "cluster" else 0.0,
                     r_squared=final_r_squared,
-                    compliance_rate=final_compliance
+                    compliance_rate=final_compliance,
+                    attrition_rate=attrition_rate
                 )
             
-            # Calculate results
-            st.markdown("---")
-            st.markdown("### 📊 Results")
-            
-            if outcome_type == "binary":
-                st.info("📌 **Binary Outcome**: MDE represents change in proportion (e.g., from 50% to 55% = MDE of 0.05 or 5 percentage points)")
-            
+            # Calculate results (store in session for reuse)
+            mde_result = None
+            sample_result = None
+            mde = None
+            required_n = None
+            required_clusters = None
+            total_n = None
+
             if calculation_mode == "mde":
                 mde_result = calculate_mde(assumptions, sample_size=sample_size)
                 mde = mde_result['mde_absolute']
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if outcome_type == "binary":
-                        st.metric("MDE (Percentage Points)", f"{mde*100:.1f}pp")
-                        st.caption(f"Change from {baseline_mean*100:.1f}% to {(baseline_mean+mde)*100:.1f}%")
-                    else:
-                        st.metric("Minimum Detectable Effect", f"{mde:.3f}")
-                        st.caption(f"{(mde / baseline_mean * 100):.2f}% of baseline mean")
-                
-                with col2:
-                    st.metric("Sample Size", f"{int(sample_size):,}")
-                    if design_type == "cluster":
-                        st.caption(f"{int(num_clusters)} clusters × {int(cluster_size)} individuals")
-                
-                with col3:
-                    st.metric("Power", f"{power*100:.0f}%")
-                    st.caption(f"at α = {alpha}")
-                
-                # Summary
-                with st.container():
-                    st.info(
-                        f"With **{int(sample_size):,} individuals** "
-                        f"({'in ' + str(int(num_clusters)) + ' clusters' if design_type == 'cluster' else ''}), "
-                        f"you can detect an effect of **{mde:.3f}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
-                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
-                    )
-            
-            else:  # sample_size mode
-                sample_result = calculate_sample_size(assumptions)
-                
-                # Initialize variables
-                required_n = None
-                required_clusters = None
-                total_n = None
-                
-                if design_type == "individual":
-                    required_n = sample_result['sample_size']
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Required Sample Size", f"{int(required_n):,}")
-                    
-                    with col2:
-                        st.metric("Target MDE", f"{target_mde:.3f}")
-                        st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
-                    
-                    with col3:
-                        st.metric("Power", f"{power*100:.0f}%")
-                        st.caption(f"at α = {alpha}")
-                    
-                    with st.container():
-                        st.info(
-                            f"You need **{int(required_n):,} individuals** to detect an effect of "
-                            f"**{target_mde:.3f}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
-                            f"with **{power*100:.0f}% power** at **α = {alpha}**."
-                        )
-                
-                else:  # cluster
-                    required_clusters = sample_result['num_clusters']
-                    total_n = sample_result['total_individuals']
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Required Clusters", f"{required_clusters:,}")
-                        st.caption(f"Total N = {total_n:,}")
-                    
-                    with col2:
-                        st.metric("Target MDE", f"{target_mde:.3f}")
-                        st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
-                    
-                    with col3:
-                        st.metric("Cluster Size", f"{int(cluster_size):,}")
-                        st.caption(f"ICC = {icc:.3f}")
-                    
-                    with st.container():
-                        st.info(
-                            f"You need **{required_clusters:,} clusters** ({total_n:,} individuals) "
-                            f"to detect an effect of **{target_mde:.3f}** "
-                            f"({(target_mde / baseline_mean * 100):.2f}% of baseline) "
-                            f"with **{power*100:.0f}% power** at **α = {alpha}**."
-                        )
-            
-            # Visualizations
-            st.markdown("---")
-            st.markdown("### 📈 Power Curves")
-            
-            tab1, tab2 = st.tabs(["Power vs Sample Size", "Cluster Analysis" if design_type == "cluster" else "Power Analysis"])
-            
-            with tab1:
-                # Generate power curve
-                if calculation_mode == "mde":
-                    curve_assumptions = PowerAssumptions(
-                        alpha=alpha,
-                        power=power,
-                        baseline_mean=baseline_mean,
-                        baseline_sd=baseline_sd,
-                        outcome_type=outcome_type,
-                        treatment_share=treatment_share,
-                        design_type=design_type,
-                        effect_size=mde,
-                        num_clusters=num_clusters if design_type == "cluster" else None,
-                        cluster_size=cluster_size if design_type == "cluster" else None,
-                        icc=icc if design_type == "cluster" else 0.0,
-                        r_squared=final_r_squared,
-                        compliance_rate=final_compliance
-                    )
-                else:
-                    curve_assumptions = PowerAssumptions(
-                        alpha=alpha,
-                        power=power,
-                        baseline_mean=baseline_mean,
-                        baseline_sd=baseline_sd,
-                        outcome_type=outcome_type,
-                        treatment_share=treatment_share,
-                        design_type=design_type,
-                        effect_size=target_mde,
-                        num_clusters=num_clusters if design_type == "cluster" else None,
-                        cluster_size=cluster_size if design_type == "cluster" else None,
-                        icc=icc if design_type == "cluster" else 0.0,
-                        r_squared=final_r_squared,
-                        compliance_rate=final_compliance
-                    )
-                
-                power_df = generate_power_curve(curve_assumptions)
-                
-                import plotly.graph_objects as go
-                
-                fig = go.Figure()
-                
-                if design_type == "cluster":
-                    x_data = power_df['clusters']
-                    x_label = "Number of Clusters"
-                else:
-                    x_data = power_df['sample_size']
-                    x_label = "Sample Size (N)"
-                
-                fig.add_trace(go.Scatter(
-                    x=x_data,
-                    y=power_df['power'],
-                    mode='lines',
-                    name='Power',
-                    line=dict(color='#1f77b4', width=3)
-                ))
-                
-                # Add reference lines
-                fig.add_hline(y=0.8, line_dash="dash", line_color="gray", 
-                             annotation_text="80% Power", annotation_position="right")
-                
-                if calculation_mode == "mde":
-                    if design_type == "cluster":
-                        x_val = num_clusters
-                    else:
-                        x_val = sample_size
-                    if x_val:
-                        fig.add_vline(x=x_val, line_dash="dash", line_color="red",
-                                     annotation_text=f"Current: {int(x_val):,}")
-                else:
-                    if design_type == "cluster":
-                        x_val = required_clusters
-                    else:
-                        x_val = required_n
-                    if x_val:
-                        fig.add_vline(x=x_val, line_dash="dash", line_color="red",
-                                     annotation_text=f"Required: {int(x_val):,}")
-                
-                fig.update_layout(
-                    title="Statistical Power vs Sample Size",
-                    xaxis_title=x_label,
-                    yaxis_title="Power (1-β)",
-                    yaxis=dict(range=[0, 1]),
-                    hovermode='x unified',
-                    template='plotly_white'
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with tab2:
-                if design_type == "cluster":
-                    # Generate MDE table for different cluster sizes
-                    st.markdown("#### MDE Table: Different Cluster Configurations")
-                    
-                    # Create assumptions for table generation
-                    table_num_clusters = num_clusters if calculation_mode == "mde" else (required_clusters if required_clusters else 50)
-                    table_assumptions = PowerAssumptions(
-                        alpha=alpha,
-                        power=power,
-                        baseline_mean=baseline_mean,
-                        baseline_sd=baseline_sd,
-                        outcome_type=outcome_type,
-                        treatment_share=treatment_share,
-                        design_type="cluster",
-                        num_clusters=table_num_clusters,
-                        cluster_size=cluster_size,
-                        icc=icc,
-                        r_squared=final_r_squared,
-                        compliance_rate=final_compliance
-                    )
-                    
-                    mde_table_df = generate_cluster_size_table(
-                        table_assumptions,
-                        cluster_sizes=[10, 15, 20, 25, 30, 40, 50],
-                        num_clusters_options=[20, 30, 40, 50, 60, 80, 100]
-                    )
-                    
-                    # Pivot for better display
-                    mde_table = mde_table_df.pivot(
-                        index='cluster_size',
-                        columns='num_clusters',
-                        values='mde_absolute'
-                    )
-                    
-                    st.dataframe(
-                        mde_table.style.format("{:.3f}").background_gradient(cmap='RdYlGn_r', axis=None),
-                        use_container_width=True
-                    )
-                    st.caption(
-                        "Each cell shows the MDE for that cluster configuration. "
-                        "Smaller MDEs (greener) are better."
-                    )
-                else:
-                    st.info("Cluster size analysis is only available for cluster randomization designs.")
-            
-            # Code generation
-            st.markdown("---")
-            st.markdown("### 💻 Downloadable Code")
-            
-            code_tab1, code_tab2 = st.tabs(["Python", "Stata"])
-            
-            # Prepare results dict for code generation
-            if calculation_mode == "mde":
-                code_results = mde_result
+                if design_type == "cluster" and num_clusters is not None:
+                    current_clusters = int(num_clusters)
             else:
-                code_results = sample_result
-            
-            with code_tab1:
-                python_code = generate_python_code(
-                    curve_assumptions if calculation_mode == "mde" else assumptions,
-                    code_results
-                )
-                st.code(python_code, language="python")
-                st.download_button(
-                    "Download Python Script",
-                    data=python_code,
-                    file_name="power_calculation.py",
-                    mime="text/x-python"
-                )
-            
-            with code_tab2:
-                stata_code = generate_stata_code(
-                    curve_assumptions if calculation_mode == "mde" else assumptions,
-                    code_results
-                )
-                st.code(stata_code, language="stata")
-                st.download_button(
-                    "Download Stata Script",
-                    data=stata_code,
-                    file_name="power_calculation.do",
-                    mime="text/plain"
-                )
-        
+                sample_result = calculate_sample_size(assumptions)
+                if design_type == "individual":
+                    required_n = int(sample_result['sample_size'])
+                else:
+                    required_clusters = int(sample_result['num_clusters'])
+                    total_n = int(sample_result['total_individuals'])
+                    current_clusters = int(required_clusters)
+
+            clusters_for_curve = current_clusters if design_type == "cluster" else None
+            code_results = mde_result if calculation_mode == "mde" else sample_result
+            effect_for_curve = mde if calculation_mode == "mde" else target_mde
+
+            curve_params = {
+                "alpha": alpha,
+                "power": power,
+                "baseline_mean": baseline_mean,
+                "baseline_sd": baseline_sd,
+                "outcome_type": outcome_type,
+                "treatment_share": treatment_share,
+                "design_type": design_type,
+                "effect_size": effect_for_curve,
+                "num_clusters": clusters_for_curve if design_type == "cluster" else None,
+                "cluster_size": int(cluster_size) if design_type == "cluster" and cluster_size else None,
+                "icc": icc if design_type == "cluster" else 0.0,
+                "r_squared": final_r_squared,
+                "compliance_rate": final_compliance,
+                "attrition_rate": attrition_rate,
+            }
+
+            st.session_state.power_calc_state = {
+                "calculation_method": "analytical",
+                "calculation_mode": calculation_mode,
+                "design_type": design_type,
+                "outcome_type": outcome_type,
+                "alpha": alpha,
+                "power": power,
+                "baseline_mean": baseline_mean,
+                "baseline_sd": baseline_sd,
+                "treatment_share": treatment_share,
+                "sample_size": int(sample_size) if sample_size else None,
+                "num_clusters": int(num_clusters) if num_clusters else None,
+                "cluster_size": int(cluster_size) if cluster_size else None,
+                "target_mde": target_mde,
+                "mde": mde,
+                "mde_result": mde_result,
+                "sample_result": sample_result,
+                "required_n": required_n,
+                "required_clusters": required_clusters,
+                "total_n": total_n,
+                "final_r_squared": final_r_squared,
+                "final_compliance": final_compliance,
+                "attrition_rate": attrition_rate,
+                "icc": icc,
+                "clusters_for_curve": clusters_for_curve,
+                "table_num_clusters": (clusters_for_curve or 50) if design_type == "cluster" else None,
+                "code_results": code_results,
+                "assumption_params": asdict(assumptions),
+                "curve_params": curve_params,
+            }
+
         except ValueError as e:
             st.error(f"❌ Calculation error: {str(e)}")
         except Exception as e:
             st.error(f"❌ Unexpected error: {str(e)}")
 
+    power_state = st.session_state.get("power_calc_state")
+    if power_state and power_state.get("calculation_method") == "analytical":
+        render_power_analysis_results(power_state)
 
 # ----------------------------------------------------------------------------- #
 # CASE ASSIGNMENT                                                               #
@@ -5264,7 +5500,7 @@ def render_monitoring() -> None:
                         dates = pd.to_datetime(enum_data[date_col], errors='coerce')
                         last_submission = dates.max()
                         st.metric("Last Submission", last_submission.strftime("%Y-%m-%d") if pd.notna(last_submission) else "N/A")
-                    except:
+                    except Exception:
                         pass
             
             if treatment_col in data.columns:
@@ -5419,7 +5655,7 @@ def render_facilitator_dashboard() -> None:
                     filled_fields = sum(1 for v in responses.values() if v)
                     st.progress(filled_fields / max(len(responses), 1))
                     st.caption(f"{filled_fields}/{len(responses)} fields completed")
-                except:
+                except Exception:
                     st.warning("Could not load workbook data")
             else:
                 st.info("No workbook data saved yet")
@@ -5503,34 +5739,82 @@ def render_user_information():
     
     st.markdown("---")
     
-    # Check if user has an active session
-    if 'temp_user' not in st.session_state:
-        st.warning("⚠️ No active session data found. Users must be logged in for their data to appear here.")
-        return
-    
-    username = st.session_state.temp_user
-    org_type = st.session_state.get('temp_organization', 'Not specified')
-    access_time = st.session_state.get('temp_access_time', datetime.now())
-    duration = datetime.now() - access_time
+    # Persistent user listing (historical)
+    st.markdown("### 🗂️ Historical Users")
+    try:
+        from .persistence import (
+            fetch_all_users,
+            fetch_user_session,
+            fetch_user_activity,
+            fetch_user_design,
+            fetch_user_randomization,
+            delete_user,
+            anonymize_user,
+            prune_activities,
+            vacuum_db,
+        )
+        users_list = fetch_all_users()
+    except Exception:
+        users_list = []
+    if users_list:
+        # Display summary table of users with consent + security indicators
+        user_df = pd.DataFrame([
+            {
+                "Username": u["username"],
+                "Org": u.get("organization") or "",
+                "Consent": "✅" if u.get("consent") else "❌",
+                "Hashed": "🔒" if u.get("hashed") else "—",
+                "Encrypted": "🛡️" if u.get("encrypted") else "—",
+                "User ID": (u.get("user_id") or "")[0:10] + ("…" if u.get("user_id") and len(u.get("user_id")) > 10 else ""),
+                "First Access": u.get("first_access"),
+                "Last Access": u.get("last_access"),
+            }
+            for u in users_list
+        ])
+        st.dataframe(user_df, use_container_width=True, hide_index=True)
+        usernames = [u["username"] for u in users_list]
+        selected_history_user = st.selectbox(
+            "Select user to view persisted data", usernames, key="userinfo_selected_history"
+        )
+    else:
+        st.info("No persisted users found yet.")
+        selected_history_user = None
+    st.markdown("---")
+
+    has_active_session = 'temp_user' in st.session_state and st.session_state.temp_user
+    if has_active_session:
+        username = st.session_state.temp_user
+        org_type = st.session_state.get('temp_organization', 'Not specified')
+        access_time = st.session_state.get('temp_access_time', datetime.now())
+        duration = datetime.now() - access_time
+    else:
+        username = None
+        org_type = None
+        duration = None
     
     # Session Summary
-    st.markdown("### 👤 Session Summary")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Username", username)
-    with col2:
-        st.metric("Organization", org_type if org_type else "Not specified")
-    with col3:
-        hours = int(duration.total_seconds() // 3600)
-        minutes = int((duration.total_seconds() % 3600) // 60)
-        duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-        st.metric("Session Duration", duration_str)
+    if has_active_session:
+        st.markdown("### 👤 Current Browser Session Summary")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Username", username)
+        with col2:
+            st.metric("Organization", org_type if org_type else "Not specified")
+        with col3:
+            hours = int(duration.total_seconds() // 3600)
+            minutes = int((duration.total_seconds() % 3600) // 60)
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            st.metric("Session Duration", duration_str)
+        st.markdown("---")
+    else:
+        st.info("No live session loaded – use historical selector above to inspect persisted data.")
+        st.markdown("---")
     
     st.markdown("---")
     
-    # Activity Log
-    st.markdown("### 📊 Activity Log")
-    activity_log = st.session_state.get('activity_log', [])
+    # Activity Log (live session) & historical persisted activity (selected user)
+    st.markdown("### 📊 Activity Log (Current Session)")
+    activity_log = st.session_state.get('activity_log', []) if has_active_session else []
     
     if activity_log:
         st.info(f"📝 Total activities logged: **{len(activity_log)}**")
@@ -5556,6 +5840,95 @@ def render_user_information():
         st.info("No activities logged yet.")
     
     st.markdown("---")
+    # Historical persisted data for selected user
+    if selected_history_user:
+        st.markdown("### 🗄️ Persisted Data for Selected User")
+        try:
+            persisted_session = fetch_user_session(selected_history_user)
+            persisted_activity = fetch_user_activity(selected_history_user)
+            persisted_design = fetch_user_design(selected_history_user)
+            persisted_randomization = fetch_user_randomization(selected_history_user)
+        except Exception as e:
+            st.error(f"Error loading persisted data: {e}")
+            persisted_session = {}
+            persisted_activity = []
+            persisted_design = {}
+            persisted_randomization = {}
+
+        if persisted_session:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Username", persisted_session.get('username'))
+            with col2:
+                st.metric("Organization", persisted_session.get('organization') or 'N/A')
+            with col3:
+                st.metric("Last Access", persisted_session.get('last_access') or 'N/A')
+        else:
+            st.info("No session metadata persisted.")
+
+        # Persisted activity summary
+        if persisted_activity:
+            st.markdown("#### Activity Summary (Persisted)")
+            df_hist = pd.DataFrame(persisted_activity)
+            with st.expander("View Persisted Activity Log", expanded=False):
+                st.dataframe(df_hist, use_container_width=True)
+            if 'action' in df_hist.columns:
+                counts = df_hist['action'].value_counts()
+                for act, ct in counts.items():
+                    st.markdown(f"- **{act}**: {ct} time(s)")
+        else:
+            st.info("No persisted activity entries.")
+
+        # Persisted design data
+        if persisted_design:
+            st.markdown("#### Design Data (Persisted)")
+            st.write({k: v for k, v in persisted_design.items() if k != 'workbook_responses'})
+            if persisted_design.get('workbook_responses'):
+                with st.expander("Workbook Responses (Persisted)"):
+                    for step, resp in persisted_design['workbook_responses'].items():
+                        st.markdown(f"**{step}:**")
+                        st.write(resp)
+                        st.markdown("---")
+        else:
+            st.info("No persisted design data.")
+
+        # Persisted randomization data
+        if persisted_randomization:
+            st.markdown("#### Randomization Data (Persisted)")
+            st.write(persisted_randomization)
+        else:
+            st.info("No persisted randomization data.")
+        st.markdown("---")
+
+        # Downloads of persisted data
+        st.markdown("### 💾 Download Persisted Data")
+        export_payload = {
+            'session': persisted_session,
+            'activity': persisted_activity,
+            'design': persisted_design,
+            'randomization': persisted_randomization,
+        }
+        json_hist = json.dumps(export_payload, indent=2)
+        st.download_button(
+            "📥 Download Persisted JSON",
+            json_hist,
+            file_name=f"persisted_{selected_history_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        if persisted_activity:
+            df_hist_csv = pd.DataFrame(persisted_activity)
+            csv_buf = BytesIO()
+            df_hist_csv.to_csv(csv_buf, index=False)
+            csv_buf.seek(0)
+            st.download_button(
+                "📥 Download Persisted Activity CSV",
+                csv_buf.getvalue(),
+                file_name=f"persisted_activity_{selected_history_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        st.markdown("---")
     
     # RCT Design Data
     st.markdown("### 🎯 RCT Design Data")
@@ -5645,26 +6018,105 @@ def render_user_information():
             st.caption("No activity data to download")
     
     st.markdown("---")
+    # ------------------------------------------------------------------
+    # Maintenance & Privacy Actions
+    # ------------------------------------------------------------------
+    st.markdown("### 🛠️ Maintenance & Privacy Actions")
+    with st.expander("Admin Maintenance Tools", expanded=False):
+        st.caption("Perform irreversible maintenance tasks. Proceed with care.")
+        # User-specific actions
+        if selected_history_user:
+            st.markdown(f"#### Selected User: `{selected_history_user}`")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**Anonymize User**")
+                if st.button("🌀 Anonymize", key="btn_anonymize_user", use_container_width=True):
+                    try:
+                        new_name = anonymize_user(selected_history_user)
+                        if new_name:
+                            st.success(f"User anonymized. New handle: `{new_name}`")
+                            st.rerun()
+                        else:
+                            st.error("User not found; cannot anonymize.")
+                    except Exception as e:  # pragma: no cover
+                        st.error(f"Error anonymizing: {e}")
+            with col_b:
+                st.markdown("**Delete User**")
+                confirm_text = st.text_input(
+                    "Type username to confirm deletion", key="delete_confirm_input"
+                )
+                if st.button("🗑️ Delete", key="btn_delete_user", use_container_width=True, disabled=not confirm_text):
+                    if confirm_text == selected_history_user:
+                        try:
+                            delete_user(selected_history_user)
+                            st.success("User and related data deleted.")
+                            st.rerun()
+                        except Exception as e:  # pragma: no cover
+                            st.error(f"Deletion failed: {e}")
+                    else:
+                        st.error("Confirmation text does not match username.")
+        else:
+            st.info("Select a user above to enable user-specific actions.")
+
+        st.markdown("---")
+        # Prune activities before a given date/time
+        st.markdown("#### Prune Old Activities")
+        prune_col1, prune_col2, prune_col3 = st.columns([2, 2, 1])
+        with prune_col1:
+            prune_date = st.date_input("Delete entries before date", key="prune_date_input")
+        with prune_col2:
+            prune_time = st.time_input("Time (UTC)", key="prune_time_input")
+        with prune_col3:
+            if st.button("🧹 Prune", key="btn_prune", use_container_width=True):
+                if prune_date:
+                    from datetime import datetime
+                    dt = datetime.combine(prune_date, prune_time)
+                    iso_ts = dt.isoformat()
+                    try:
+                        deleted = prune_activities(iso_ts)
+                        st.success(f"Pruned {deleted} activity rows before {iso_ts}.")
+                    except Exception as e:  # pragma: no cover
+                        st.error(f"Prune failed: {e}")
+                else:
+                    st.error("Select a date to prune.")
+
+        st.markdown("---")
+        # Vacuum database
+        st.markdown("#### Optimize Database")
+        if st.button("🧪 VACUUM", key="btn_vacuum_db", use_container_width=True):
+            try:
+                vacuum_db()
+                st.success("Database vacuum completed.")
+            except Exception as e:  # pragma: no cover
+                st.error(f"VACUUM failed: {e}")
+
+        st.caption(
+            "Anonymization preserves user_id linkage; deletion removes all rows. "
+            "Pruning only affects activities table."
+        )
+
+    st.markdown("---")
     
     # Data Privacy Notice
     with st.expander("ℹ️ About User Data"):
         st.markdown("""
-        **What's included in downloads:**
-        - Session information (username, organization type, timestamps)
-        - Activity log (pages visited, actions taken)
-        - RCT Design responses (if user completed the design feature)
-        - Randomization data (if user performed randomization)
+        **What's included:**
+        - Live session data (in-memory) AND persisted historical records
+        - Persisted records include: session metadata, activities, design data, randomization summaries
         
-        **Data retention:**
-        - All data is stored only in the user's current browser session
-        - Data is automatically cleared when user ends session or closes browser
-        - No data is stored on servers permanently
-        - Downloads are generated on-demand from session state
+        **Persistence model:**
+        - Data written to local SQLite database `persistent_data/rct_field_flow.db`
+        - Each activity and design/randomization update is appended or upserted
+        - Historical data survives browser/session termination
         
-        **Administrator access:**
-        - This page is password-protected for administrators only
-        - Used for monitoring user activity and generating reports
-        - All user data remains private and temporary
+        **Privacy & Compliance:**
+        - Only username + organization type stored (no emails unless entered as username)
+        - Delete a user by removing their rows from the database (manual admin action)
+        - Consider adding an explicit consent checkbox for production use
+        
+        **Administration:**
+        - Use this page to audit usage and export historical datasets
+        - Password protects access (`admin2025`) – change for production
         """)
     
     st.markdown("---")
@@ -5675,8 +6127,6 @@ def render_user_information():
 # TEMPORARY ACCESS SYSTEM & ACTIVITY LOGGING                                    #
 # ----------------------------------------------------------------------------- #
 
-import json
-from io import BytesIO
 
 # Pages that don't require access credentials
 PUBLIC_PAGES = ["home"]
@@ -5715,6 +6165,12 @@ def log_activity(action: str, details: dict = None):
         log_entry['details'] = details
     
     st.session_state.activity_log.append(log_entry)
+    # Persist activity if persistence available
+    try:
+        if log_entry.get('username'):
+            record_activity(log_entry.get('username'), log_entry.get('page', 'unknown'), action, details)
+    except Exception:  # pragma: no cover
+        pass
     
     # Auto-save session data after logging activity
     save_session_snapshot()
@@ -5748,6 +6204,27 @@ def save_session_snapshot():
     # Store snapshot in session state (persists during browser session)
     st.session_state.session_snapshot = snapshot
     st.session_state.last_save_time = datetime.now()
+    # Persist design & randomization data if available
+    try:
+        if st.session_state.get('temp_user'):
+            upsert_design_data(
+                st.session_state.temp_user,
+                st.session_state.get('design_team_name'),
+                st.session_state.get('design_program_card'),
+                st.session_state.get('design_current_step', 1),
+                dict(st.session_state.get('design_workbook_responses', {})),
+            )
+            if 'randomization_result' in st.session_state and st.session_state.randomization_result:
+                rr = st.session_state.randomization_result
+                arms = [{'name': arm.name, 'size': arm.size} for arm in rr.treatment_arms]
+                upsert_randomization(
+                    st.session_state.temp_user,
+                    rr.total_units,
+                    arms,
+                    rr.timestamp.isoformat() if hasattr(rr, 'timestamp') else None,
+                )
+    except Exception:  # pragma: no cover
+        pass
 
 
 def restore_session_if_available():
@@ -5764,7 +6241,7 @@ def restore_session_if_available():
             try:
                 from dateutil import parser
                 st.session_state.temp_access_time = parser.parse(snapshot['user_info'].get('access_time'))
-            except:
+            except Exception:
                 st.session_state.temp_access_time = datetime.now()
         
         # Restore design data
@@ -5918,8 +6395,16 @@ def show_temp_access_form(page_name: str):
             key="temp_org_input"
         )
         
+        # Consent checkbox
+        st.markdown("#### Consent")
+        consent_text = (
+            "I consent to the temporary storage of this session's data (design inputs, randomization summaries, "
+            "and activity logs) for analysis and improvement purposes."
+        )
+        consent = st.checkbox(consent_text, key="temp_consent_checkbox")
+        st.caption("You can request deletion/anonymization later via the User Information admin page.")
         st.markdown("---")
-        
+
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             submit = st.form_submit_button(
@@ -5930,10 +6415,18 @@ def show_temp_access_form(page_name: str):
         
         if submit:
             if username and username.strip():
+                if not consent:
+                    st.error("⚠️ Please provide consent to proceed.")
+                    st.stop()
                 # Store temporary access credentials
                 st.session_state.temp_user = username.strip()
                 st.session_state.temp_organization = org_type if org_type != "Select..." else None
                 st.session_state.temp_access_time = datetime.now()
+                # Persist user login
+                try:
+                    record_user_login(username.strip(), st.session_state.temp_organization, consent=True)
+                except Exception:  # pragma: no cover
+                    pass
                 
                 # Initialize activity log and log access
                 init_activity_log()
@@ -5960,10 +6453,10 @@ def show_temp_access_form(page_name: str):
         - No passwords required or stored
         
         **Your privacy:**
-        - We only store your username and organization type for the current session
-        - No personal data is saved permanently
-        - Session data is cleared when you end session or close browser
-        - Organization type helps us understand our user community
+        - Username & organization stored with a hashed and optionally encrypted form
+        - Consent status recorded; you may request deletion/anonymization
+        - Data persists locally until deleted by an administrator
+        - Organization type helps understand user community; optional
         """)
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -6035,7 +6528,11 @@ def show_user_info_sidebar():
 
 
 def main() -> None:
-    # Initialize and recover session if available
+    # Initialize persistence then recover session if available
+    try:
+        init_db()
+    except Exception:  # pragma: no cover
+        pass
     restore_session_if_available()
     
     # Visible navigation menu for users
