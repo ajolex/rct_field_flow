@@ -120,6 +120,114 @@ def randomize(
         typer.echo(f"Used {result.iterations} iterations (mean p-value: {result.diagnostics.get('mean_p_value', 0):.4f})")
 
 
+@app.command("validate-randomization")
+def validate_randomization_cmd(
+    baseline: Path = typer.Option(..., exists=True, readable=True, help="Baseline dataset (CSV)."),
+    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True, help="Project config."),
+    n_simulations: int = typer.Option(500, help="Number of randomization simulations to run."),
+    output: Optional[Path] = typer.Option(None, help="Optional CSV path to save assignment probabilities."),
+    plot_output: Optional[Path] = typer.Option(None, help="Optional path to save histogram plot (PNG)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress."),
+) -> None:
+    """Validate randomization fairness by running it multiple times with different seeds.
+    
+    This validation helps verify that the randomization code is fair and no observations
+    are systematically favored for treatment or control. Following best practices from
+    the RANDOMIZATION.md guide, this runs the randomization multiple times (default: 500)
+    with different seeds and checks if each observation has approximately equal probability
+    of being assigned to each treatment arm.
+    
+    The histogram of average treatment assignment should look like a binomial distribution.
+    If some observations are almost always in treatment or almost always in control,
+    there may be a problem with the randomization code.
+    """
+    app_config = load_config(str(config_path))
+    rand_cfg = build_randomization_config(app_config.get("randomization", {}))
+    df = pd.read_csv(baseline)
+    
+    if verbose:
+        typer.echo(f"Loaded {len(df)} observations from {baseline}")
+        typer.echo(f"Running {n_simulations} simulations to validate randomization fairness...")
+        typer.echo("")
+    
+    from .randomize import Randomizer
+    
+    randomizer = Randomizer(rand_cfg)
+    validation_result = randomizer.validate_randomization(
+        df, 
+        n_simulations=n_simulations,
+        base_seed=rand_cfg.seed,
+        verbose=verbose
+    )
+    
+    # Report results
+    typer.echo(f"\n{'='*60}")
+    typer.echo("VALIDATION RESULTS")
+    typer.echo(f"{'='*60}")
+    typer.echo(f"Valid: {'✓ PASS' if validation_result.is_valid else '✗ FAIL'}")
+    typer.echo("")
+    
+    typer.echo("Assignment Probability Summary:")
+    for arm, stats in validation_result.summary_stats.items():
+        typer.echo(f"  {arm}:")
+        typer.echo(f"    Expected proportion: {stats['expected']:.3f}")
+        typer.echo(f"    Mean probability:    {stats['mean']:.4f}")
+        typer.echo(f"    Std deviation:       {stats['std']:.4f}")
+        typer.echo(f"    Range:               [{stats['min']:.4f}, {stats['max']:.4f}]")
+        typer.echo("")
+    
+    if validation_result.warnings:
+        typer.echo("Warnings:")
+        for warning in validation_result.warnings:
+            typer.echo(f"  ⚠  {warning}")
+        typer.echo("")
+    else:
+        typer.echo("✓ No issues detected. Randomization appears fair.")
+        typer.echo("")
+    
+    # Save assignment probabilities if requested
+    if output:
+        validation_result.assignment_probabilities.to_csv(output, index=False)
+        typer.echo(f"Assignment probabilities saved to {output}")
+    
+    # Generate histogram if requested
+    if plot_output:
+        try:
+            import matplotlib.pyplot as plt
+            
+            # Create histogram for first treatment arm's probabilities
+            first_arm = list(validation_result.summary_stats.keys())[0]
+            prob_col = f"prob_{first_arm}"
+            probs = validation_result.assignment_probabilities[prob_col].values
+            expected = validation_result.summary_stats[first_arm]["expected"]
+            
+            plt.figure(figsize=(10, 6))
+            plt.hist(probs, bins=30, edgecolor='black', alpha=0.7)
+            plt.axvline(expected, color='red', linestyle='--', linewidth=2, 
+                       label=f'Expected proportion ({expected:.2f})')
+            plt.xlabel(f'Probability of {first_arm} assignment')
+            plt.ylabel('Number of observations')
+            plt.title(f'Distribution of Assignment Probabilities\n({n_simulations} simulations)')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(plot_output, dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            typer.echo(f"Histogram saved to {plot_output}")
+        except ImportError:
+            typer.echo("Warning: matplotlib not installed. Skipping histogram generation.", err=True)
+        except Exception as e:
+            typer.echo(f"Warning: Failed to generate histogram: {e}", err=True)
+    
+    typer.echo(f"{'='*60}")
+    
+    # Exit with error code if validation failed
+    if not validation_result.is_valid:
+        typer.echo("\n⚠  Validation FAILED. Check your randomization code.", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command("assign-cases")
 def assign_cases_cmd(
     randomized: Path = typer.Option(..., exists=True, readable=True, help="Randomized dataset."),
