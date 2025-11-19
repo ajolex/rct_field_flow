@@ -64,6 +64,8 @@ Treatment assignment with complete transparency and reproducibility.
 - Seed-based randomization for exact reproducibility
 - Balance diagnostics comparing treatment arms
 - Optional rerandomization (up to 10,000 iterations) to optimize covariate balance
+- **Randomization validation**: Run randomization multiple times (e.g., 500) with different seeds to verify fairness
+- Assignment probability analysis with histograms to detect systematic bias
 - Preserves existing assignments for follow-up rounds
 - Visual balance checks with automatic flagging
 - Downloadable Python and Stata code replicating exact procedure
