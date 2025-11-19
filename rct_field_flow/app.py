@@ -118,6 +118,8 @@ if "baseline_data" not in st.session_state:
     st.session_state.baseline_data: pd.DataFrame | None = None
 if "randomization_result" not in st.session_state:
     st.session_state.randomization_result: RandomizationResult | None = None
+if "validation_state" not in st.session_state:
+    st.session_state.validation_state: Dict[str, Any] | None = None
 if "case_data" not in st.session_state:
     st.session_state.case_data: pd.DataFrame | None = None
 if "quality_data" not in st.session_state:
@@ -411,6 +413,366 @@ print("-" * 80)
 print(f"Assignments saved to {{output_file}}")
 print(f"Total observations: {{len(result.assignments):,}}")
 print("-" * 80)
+'''
+    return code
+
+
+def generate_python_validation_code(config: RandomizationConfig, n_simulations: int) -> str:
+    """Generate Python code that replicates the validation workflow."""
+
+    arms_code = ",\n        ".join(
+        [
+            f'TreatmentArm(name="{arm.name}", proportion={arm.proportion})'
+            for arm in config.arms
+        ]
+    )
+    strata_code = json.dumps(config.strata)
+    balance_code = json.dumps(config.balance_covariates)
+    cluster_code = f'"{config.cluster}"' if config.cluster else "None"
+    seed_literal = "None" if config.seed is None else str(config.seed)
+
+    code = f'''"""
+================================================================================
+RANDOMIZATION VALIDATION CODE - RCT Field Flow
+================================================================================
+Generated: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")}
+Simulations: {int(n_simulations):,}
+
+This script reruns the validation exactly as configured in the app.
+Update the data path and re-run to reproduce the results.
+================================================================================
+"""
+
+import pandas as pd
+from rct_field_flow.randomize import RandomizationConfig, Randomizer, TreatmentArm
+
+# Load your baseline data
+df = pd.read_csv("baseline_data.csv")  # TODO: replace with your dataset path
+
+# Mirror the validation configuration from the app
+config = RandomizationConfig(
+    id_column="{config.id_column}",
+    treatment_column="{config.treatment_column}",
+    method="{config.method}",
+    arms=[
+        {arms_code}
+    ],
+    strata={strata_code},
+    cluster={cluster_code},
+    balance_covariates={balance_code},
+    iterations={config.iterations},
+    seed={seed_literal},
+    use_existing_assignment={config.use_existing_assignment}
+)
+
+randomizer = Randomizer(config)
+
+result = randomizer.validate_randomization(
+    df=df,
+    n_simulations={int(n_simulations)},
+    base_seed={seed_literal},
+    verbose=False,
+)
+
+status = "PASSED" if result.is_valid else "FAILED"
+print(f"Validation {{status}}")
+
+summary_df = (
+    pd.DataFrame.from_dict(result.summary_stats, orient="index")
+    .reset_index()
+    .rename(columns=dict(index="Treatment Arm"))
+)
+
+print("\\nAssignment probability summary:")
+print(summary_df)
+
+if result.warnings:
+    print("\\nWarnings detected during validation:")
+    for warning in result.warnings:
+        print(f" - {{warning}}")
+else:
+    print("\\nNo warnings detected.")
+
+if result.assignment_probabilities.empty:
+    print("\nAssignment probabilities table is empty; no files generated.")
+else:
+    result.assignment_probabilities.to_csv("validation_results.csv", index=False)
+    print("\nSaved detailed probabilities to validation_results.csv")
+
+    first_arm = summary_df.loc[0, "Treatment Arm"]
+    prob_col = f"prob_{{first_arm}}"
+
+    if prob_col in result.assignment_probabilities.columns:
+        import matplotlib.pyplot as plt
+
+        probs = result.assignment_probabilities[prob_col]
+        expected_prob = result.summary_stats[first_arm]["expected"]
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.hist(probs, bins=30, edgecolor="black", alpha=0.7)
+        ax.axvline(expected_prob, color="red", linestyle="--", linewidth=2,
+                   label=f"Expected: {{expected_prob:.3f}}")
+        ax.set_xlabel(f"P(assignment to {{first_arm}})")
+        ax.set_ylabel("Number of observations")
+        ax.set_title(f"Assignment Probability Distribution - {{first_arm}}")
+        ax.legend()
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+        fig.savefig("validation_histogram.png", dpi=300)
+        plt.close(fig)
+        print("Saved histogram to validation_histogram.png")
+    else:
+        print(f"Column {{prob_col}} not found; skipping histogram export.")
+'''
+    return code
+
+
+def generate_stata_validation_code(config: RandomizationConfig, n_simulations: int) -> str:
+    """Generate a pure Stata do-file that validates randomization fairness."""
+    
+    # Generate treatment arm info
+    arms_names = [arm.name for arm in config.arms]
+    arms_props = [arm.proportion for arm in config.arms]
+    
+    # Generate cumulative proportions for assignment
+    cumulative_props = []
+    cum = 0.0
+    for prop in arms_props[:-1]:
+        cum += prop
+        cumulative_props.append(f"{cum:.6f}")
+    
+    # Generate treatment assignment code
+    treatment_assign = "gen double rand_draw = runiform()\n"
+    treatment_assign += f"gen str20 {config.treatment_column}_sim = \"\"\n"
+    
+    for idx, (name, cutoff) in enumerate(zip(arms_names[:-1], cumulative_props)):
+        if idx == 0:
+            treatment_assign += f'    replace {config.treatment_column}_sim = "{name}" if rand_draw < {cutoff}\n'
+        else:
+            prev_cutoff = cumulative_props[idx-1]
+            treatment_assign += f'    replace {config.treatment_column}_sim = "{name}" if rand_draw >= {prev_cutoff} & rand_draw < {cutoff}\n'
+    
+    last_name = arms_names[-1]
+    if len(cumulative_props) > 0:
+        treatment_assign += f'    replace {config.treatment_column}_sim = "{last_name}" if rand_draw >= {cumulative_props[-1]}\n'
+    else:
+        treatment_assign += f'    replace {config.treatment_column}_sim = "{last_name}"\n'
+    
+    # Strata handling
+    strata_code = ""
+    if config.strata and config.method in ["stratified", "cluster"]:
+        strata_vars = " ".join(config.strata)
+        strata_code = f'''
+* Stratified randomization - randomize within each stratum
+bysort {strata_vars} (rand_draw): replace {config.treatment_column}_sim = ""
+bysort {strata_vars} (rand_draw): replace rand_draw = runiform()
+sort {strata_vars} rand_draw
+bysort {strata_vars}: '''
+        # Indent the assignment code for stratified case
+        treatment_assign = "\n".join(["    " + line if line.strip() else line 
+                                       for line in treatment_assign.split("\n")])
+    
+    # Cluster handling
+    cluster_code = ""
+    if config.cluster and config.method == "cluster":
+        cluster_var = config.cluster
+        cluster_code = f'''
+* Cluster randomization - assign treatment at cluster level
+* First, get unique clusters
+preserve
+keep {cluster_var}
+duplicates drop
+gen cluster_id = _n
+tempfile clusters
+save `clusters'
+restore
+
+* Merge back to get cluster assignments
+merge m:1 {cluster_var} using `clusters', nogenerate
+
+* Randomize clusters (not individuals)
+gen double cluster_rand = runiform()
+sort cluster_rand
+'''
+    
+    # Base seed
+    base_seed = config.seed if config.seed else 12345
+    
+    code = f'''********************************************************************************
+* RANDOMIZATION VALIDATION DO-FILE - RCT Field Flow (Pure Stata)
+********************************************************************************
+* Generated: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")}
+* Method: {config.method}
+* Simulations: {int(n_simulations):,}
+* Base seed: {base_seed}
+*
+* PURPOSE:
+*   Validate randomization fairness by running it {int(n_simulations):,} times with 
+*   different seeds. Each observation should have approximately equal probability 
+*   of being assigned to each treatment arm across all simulations.
+*
+* INSTRUCTIONS:
+*   1. Update the data import section below with your dataset path
+*   2. Run this script to generate validation results
+*   3. Check that average assignment probabilities match expected proportions
+*   4. Review histogram to ensure binomial-like distribution
+*
+* REFERENCE:
+*   This follows best practices from RANDOMIZATION.md guide:
+*   "Run your randomization a few hundred times with different seeds and 
+*    compare the outcomes... if some observations are almost always in 
+*    treatment or almost always in control – check your randomization code"
+********************************************************************************
+
+clear all
+set more off
+version 14.0
+
+* TODO: Import your baseline data
+* Example for CSV:
+*   import delimited "baseline_data.csv", clear
+* Example for Stata:
+*   use "baseline_data.dta", clear
+
+di _n(2) "================================================================================"
+di "RANDOMIZATION VALIDATION - RCT Field Flow"
+di "================================================================================"
+di "Method: {config.method}"
+di "Treatment arms: {', '.join([f'{name} ({prop*100:.1f}%)' for name, prop in zip(arms_names, arms_props)])}"
+di "ID column: {config.id_column}"
+di "Simulations: {int(n_simulations):,}"
+di "================================================================================" _n
+
+* Validate data
+confirm variable {config.id_column}
+quietly count if missing({config.id_column})
+if r(N) > 0 {{
+    di as error "ERROR: " r(N) " observations have missing ID"
+    exit 198
+}}
+
+quietly duplicates report {config.id_column}
+if r(unique_value) != r(N) {{
+    di as error "ERROR: Duplicate IDs found in {config.id_column}"
+    exit 198
+}}
+
+* Initialize probability tracking variables
+gen long obs_id = _n
+{' '.join([f'gen double prob_{name} = 0' for name in arms_names])}
+
+di "Running {int(n_simulations):,} simulations..."
+
+* Run validation simulations
+forvalues sim = 1/{int(n_simulations)} {{
+    
+    quietly {{
+        * Set seed for this simulation
+        local seed = {base_seed} + `sim' - 1
+        set seed `seed'
+        
+        {cluster_code if config.cluster and config.method == "cluster" else ""}
+        {strata_code if config.strata and config.method in ["stratified", "cluster"] else ""}
+        * Generate random assignment for this simulation
+        {treatment_assign}
+        
+        * Count assignments for each arm
+        {' '.join([f'''
+        count if {config.treatment_column}_sim == "{name}"
+        replace prob_{name} = prob_{name} + 1 if {config.treatment_column}_sim == "{name}"''' 
+        for name in arms_names])}
+        
+        * Clean up simulation variables
+        drop rand_draw {config.treatment_column}_sim
+        {f'drop cluster_rand cluster_id' if config.cluster and config.method == "cluster" else ""}
+    }}
+    
+    * Progress indicator
+    if mod(`sim', {max(1, int(n_simulations) // 10)}) == 0 {{
+        di "  Completed `sim'/{int(n_simulations)} simulations"
+    }}
+}}
+
+di _n "Converting counts to probabilities..."
+
+* Convert counts to probabilities
+{' '.join([f'replace prob_{name} = prob_{name} / {int(n_simulations)}' for name in arms_names])}
+
+* Calculate average probability (for histogram)
+gen double avg_prob = ({' + '.join([f'prob_{name}' for name in arms_names])}) / {len(arms_names)}
+
+di _n "================================================================================"
+di "VALIDATION RESULTS"
+di "================================================================================" _n
+
+* Summary statistics for each arm
+{chr(10).join([f'''
+di "Treatment Arm: {name} (Expected: {prop*100:.1f}%)"
+quietly summarize prob_{name}, detail
+di "  Mean probability:  " %6.4f r(mean) " (expected: {prop:.4f})"
+di "  Std deviation:     " %6.4f r(sd)
+di "  Min probability:   " %6.4f r(min)
+di "  Max probability:   " %6.4f r(max)
+local mean_{name.replace(" ", "_")} = r(mean)
+local expected_{name.replace(" ", "_")} = {prop}
+if abs(`mean_{name.replace(" ", "_")}' - `expected_{name.replace(" ", "_")}') > 0.05 {{
+    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%!"
+}}
+di ""''' for name, prop in zip(arms_names, arms_props)])}
+
+* Check for extreme probabilities
+local warning_count = 0
+{chr(10).join([f'''
+quietly count if prob_{name} < {prop} - 0.30 | prob_{name} > {prop} + 0.30
+if r(N) > 0 {{
+    di as error "⚠ WARNING: " r(N) " observations have extreme probabilities for '{name}'"
+    di as error "  (>30% deviation from expected {prop*100:.1f}%)"
+    local warning_count = `warning_count' + 1
+}}''' for name, prop in zip(arms_names, arms_props)])}
+
+di _n "================================================================================"
+if `warning_count' == 0 {{
+    di as text "✓ VALIDATION PASSED - No issues detected"
+    di as text "  Randomization appears fair and unbiased"
+}} else {{
+    di as error "✗ VALIDATION FAILED - `warning_count' warning(s) detected"
+    di as error "  Please review your randomization code"
+}}
+di "================================================================================" _n
+
+* Export results
+preserve
+keep {config.id_column} obs_id prob_* avg_prob
+export delimited using "validation_results.csv", replace
+di "Saved detailed results to: validation_results.csv"
+restore
+
+* Generate histogram for first treatment arm
+histogram prob_{arms_names[0]}, ///
+    width({1.0 / (int(n_simulations) / 20)}) ///
+    frequency ///
+    title("Assignment Probability Distribution - {arms_names[0]}") ///
+    subtitle("{int(n_simulations):,} simulations") ///
+    xtitle("Probability of assignment to {arms_names[0]}") ///
+    ytitle("Number of observations") ///
+    xline({arms_props[0]}, lcolor(red) lwidth(medium) lpattern(dash)) ///
+    note("Expected probability: {arms_props[0]:.3f} (red dashed line)" ///
+         "Each observation should have approximately equal probability" ///
+         "Histogram should resemble binomial distribution", size(small)) ///
+    scheme(s2color)
+
+graph export "validation_histogram.png", replace width(2400) height(1600)
+di "Saved histogram to: validation_histogram.png"
+
+di _n "================================================================================"
+di "INTERPRETATION GUIDE"
+di "================================================================================"
+di "1. Mean probabilities should match expected proportions (±5%)"
+di "2. Standard deviation should be reasonable (not too high)"
+di "3. No observations should have extreme probabilities (±30%)"
+di "4. Histogram should look like a binomial distribution"
+di "5. If validation fails, there may be systematic bias in randomization code"
+di "================================================================================" _n
 '''
     return code
 
@@ -1830,6 +2192,7 @@ def render_randomization() -> None:
             else:
                 st.session_state.randomization_result = result
                 st.session_state.case_data = result.assignments.copy()
+                st.session_state.randomization_config = rand_config  # Store config for validation
 
                 # Store download data in session state to prevent recomputation on reruns
                 st.session_state.csv_assignments = result.assignments.to_csv(index=False)
@@ -1951,6 +2314,262 @@ def render_randomization() -> None:
                 mime="text/x-stata",
                 key="download_stata_code",
                 help="Stata do-file with your exact randomization parameters"
+            )
+    
+    # Validation section
+    st.markdown("---")
+    st.markdown("#### 🔍 Validate Randomization Fairness")
+    st.markdown("""
+    Run your randomization multiple times with different seeds to verify that it's fair. 
+    Each observation should have approximately equal probability of being assigned to each treatment arm.
+    """)
+    
+    with st.expander("ℹ️ What is randomization validation?", expanded=False):
+        st.markdown("""
+        **Randomization validation** helps ensure your randomization code is working correctly by:
+        
+        - Running the randomization many times (e.g., 500 times) with different random seeds
+        - Tracking how often each observation gets assigned to each treatment arm
+        - Checking if probabilities match the expected proportions
+        
+        **When to use it:**
+        - Before running your actual randomization in the field
+        - After making changes to randomization code
+        - When using complex stratification or clustering
+        
+        **What to look for:**
+        - Assignment probabilities should match expected proportions (e.g., 50% for treatment in a 50/50 split)
+        - Standard deviation should be reasonable (not too high)
+        - No observations should be systematically favored or excluded
+        
+        See [RANDOMIZATION.md](https://github.com/ajolex/rct_field_flow/blob/master/docs/RANDOMIZATION.md) for more details.
+        """)
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        n_simulations = st.number_input(
+            "Number of simulations",
+            min_value=100,
+            max_value=5000,
+            value=500,
+            step=100,
+            key="validation_n_sims",
+            help="More simulations = more accurate validation but takes longer"
+        )
+    with col2:
+        show_plot = st.checkbox(
+            "Show histogram",
+            value=True,
+            key="validation_show_plot",
+            help="Display histogram of assignment probabilities"
+        )
+    
+    if st.button("🚀 Run Validation", key="run_validation_btn", type="primary"):
+        if df is None:
+            st.error("No data loaded for validation")
+            return
+
+        # Get current randomization config from form or session state
+        rand_config_to_validate = st.session_state.get("randomization_config")
+        if rand_config_to_validate is None:
+            st.warning("Please run randomization first to set up the configuration")
+            return
+
+        with st.spinner(f"Running {n_simulations} simulations..."):
+            try:
+                randomizer = Randomizer(rand_config_to_validate)
+                validation_result = randomizer.validate_randomization(
+                    df,
+                    n_simulations=int(n_simulations),
+                    base_seed=rand_config_to_validate.seed,
+                    verbose=False,
+                )
+
+                summary_data = []
+                for arm, stats in validation_result.summary_stats.items():
+                    summary_data.append(
+                        {
+                            "Treatment Arm": arm,
+                            "Expected": f"{stats['expected']:.1%}",
+                            "Mean Probability": f"{stats['mean']:.4f}",
+                            "Std Deviation": f"{stats['std']:.4f}",
+                            "Min": f"{stats['min']:.4f}",
+                            "Max": f"{stats['max']:.4f}",
+                        }
+                    )
+
+                summary_df = pd.DataFrame(summary_data)
+                histogram_bytes: bytes | None = None
+                histogram_caption: str | None = None
+
+                if show_plot:
+                    if validation_result.assignment_probabilities.empty:
+                        st.info("Assignment probabilities table is empty; nothing to plot.")
+                    else:
+                        try:
+                            import matplotlib.pyplot as plt
+
+                            first_arm = list(validation_result.summary_stats.keys())[0]
+                            prob_col = f"prob_{first_arm}"
+
+                            if prob_col in validation_result.assignment_probabilities.columns:
+                                fig, ax = plt.subplots(figsize=(10, 5))
+
+                                probs = validation_result.assignment_probabilities[prob_col]
+                                expected_prob = validation_result.summary_stats[first_arm]["expected"]
+
+                                ax.hist(probs, bins=30, edgecolor="black", alpha=0.7)
+                                ax.axvline(
+                                    expected_prob,
+                                    color="red",
+                                    linestyle="--",
+                                    linewidth=2,
+                                    label=f"Expected: {expected_prob:.3f}",
+                                )
+                                ax.set_xlabel(f"Probability of assignment to {first_arm}")
+                                ax.set_ylabel("Frequency (number of observations)")
+                                ax.set_title(
+                                    f"Distribution of Assignment Probabilities - {first_arm}"
+                                )
+                                ax.legend()
+                                ax.grid(True, alpha=0.3)
+
+                                buffer = BytesIO()
+                                fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+                                buffer.seek(0)
+                                histogram_bytes = buffer.getvalue()
+                                buffer.close()
+                                histogram_caption = (
+                                    f"{first_arm}: expected probability {expected_prob:.3f}"
+                                )
+                                plt.close(fig)
+                            else:
+                                st.info(
+                                    f"Could not locate probability column '{prob_col}' to build the histogram."
+                                )
+                        except Exception as e:
+                            st.info(f"Could not generate plot: {e}")
+
+                csv_validation = validation_result.assignment_probabilities.to_csv(index=False)
+                st.session_state.validation_state = {
+                    "summary_df": summary_df,
+                    "is_valid": validation_result.is_valid,
+                    "warnings": validation_result.warnings,
+                    "csv_data": csv_validation,
+                    "histogram_bytes": histogram_bytes,
+                    "histogram_caption": histogram_caption,
+                    "n_simulations": int(n_simulations),
+                    "ran_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "has_probabilities": not validation_result.assignment_probabilities.empty,
+                    "histogram_generated": histogram_bytes is not None,
+                    "show_plot_requested": bool(show_plot),
+                    "python_code": generate_python_validation_code(
+                        rand_config_to_validate,
+                        int(n_simulations),
+                    ),
+                    "stata_code": generate_stata_validation_code(
+                        rand_config_to_validate,
+                        int(n_simulations),
+                    ),
+                }
+
+            except Exception as e:
+                st.error(f"Validation failed: {str(e)}")
+                import traceback
+                with st.expander("🐛 Error details"):
+                    st.code(traceback.format_exc())
+
+    validation_state = st.session_state.get("validation_state")
+    if validation_state:
+        st.markdown("---")
+        st.markdown("### 📊 Validation Results")
+        st.caption(
+            f"Last run: {validation_state['ran_at']} • Simulations: {validation_state['n_simulations']:,}"
+        )
+
+        if validation_state.get("is_valid"):
+            st.success("✓ Validation PASSED - Randomization appears fair!")
+        else:
+            st.error("✗ Validation FAILED - Potential issues detected")
+
+        st.markdown("#### Assignment Probability Summary")
+        st.dataframe(
+            validation_state["summary_df"],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        warnings_list = validation_state.get("warnings") or []
+        if warnings_list:
+            st.warning("**Warnings:**")
+            for warning in warnings_list:
+                st.markdown(f"- ⚠️ {warning}")
+
+        histogram_bytes = validation_state.get("histogram_bytes")
+        histogram_caption = validation_state.get("histogram_caption")
+        histogram_requested = validation_state.get("show_plot_requested", False)
+
+        if show_plot:
+            if histogram_bytes:
+                st.markdown("#### Assignment Probability Histogram")
+                st.image(
+                    histogram_bytes,
+                    caption=histogram_caption,
+                    use_column_width=True,
+                )
+            else:
+                message = (
+                    "Histogram not available for this run. Re-run validation with 'Show histogram' enabled."
+                    if not histogram_requested
+                    else "Histogram could not be generated for this run. Ensure matplotlib is installed and rerun validation."
+                )
+                st.info(message)
+
+        st.markdown("#### 📎 Validation Downloads")
+        dl_col1, dl_col2, dl_col3, dl_col4 = st.columns(4)
+        with dl_col1:
+            st.download_button(
+                "📥 Detailed Validation Results",
+                data=validation_state.get("csv_data", ""),
+                file_name="validation_results.csv",
+                mime="text/csv",
+                key="download_validation_csv",
+            )
+        with dl_col2:
+            st.download_button(
+                "🖼️ Download Histogram",
+                data=histogram_bytes or b"",
+                file_name="validation_histogram.png",
+                mime="image/png",
+                key="download_validation_histogram",
+                disabled=histogram_bytes is None,
+                help=(
+                    "Run validation with 'Show histogram' enabled to generate this file."
+                    if histogram_bytes is None
+                    else "Save the histogram shown above as a PNG."
+                ),
+            )
+        with dl_col3:
+            code_payload = validation_state.get("python_code") or ""
+            st.download_button(
+                "🐍 Download Validation Code",
+                data=code_payload,
+                file_name="validation_code.py",
+                mime="text/x-python",
+                key="download_validation_code",
+                disabled=not code_payload,
+                help="Python script to reproduce this validation locally.",
+            )
+        with dl_col4:
+            stata_payload = validation_state.get("stata_code") or ""
+            st.download_button(
+                "📊 Download Stata Validation Do-file",
+                data=stata_payload,
+                file_name="validation_code.do",
+                mime="text/x-stata",
+                key="download_validation_code_stata",
+                disabled=not stata_payload,
+                help="Stata do-file (uses Python integration) to reproduce the validation.",
             )
 
 
