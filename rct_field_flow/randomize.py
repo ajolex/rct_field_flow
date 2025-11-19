@@ -62,6 +62,23 @@ class RandomizationResult:
     diagnostics: Dict = field(default_factory=dict)
 
 
+@dataclass
+class ValidationResult:
+    """Results from validating randomization fairness.
+    
+    Attributes:
+        assignment_probabilities: DataFrame with average assignment probability for each unit and arm
+        summary_stats: Dictionary with summary statistics about assignment probabilities
+        is_valid: Boolean indicating if randomization appears fair
+        warnings: List of warning messages if issues detected
+    """
+
+    assignment_probabilities: pd.DataFrame
+    summary_stats: Dict
+    is_valid: bool
+    warnings: List[str] = field(default_factory=list)
+
+
 class Randomizer:
     """Implements rerandomization with balance checks."""
 
@@ -426,3 +443,174 @@ class Randomizer:
                       f"std={stats['std']:.3f}, range=[{stats['min']:.3f}, {stats['max']:.3f}]")
         
         return diagnostics
+
+    def validate_randomization(
+        self,
+        df: pd.DataFrame,
+        n_simulations: int = 500,
+        base_seed: Optional[int] = None,
+        verbose: bool = False
+    ) -> ValidationResult:
+        """Validate randomization fairness by running it multiple times with different seeds.
+        
+        Following the best practice from the RANDOMIZATION.md guide: run the randomization
+        multiple times (e.g., 500) with different seeds and check if each observation has
+        an approximately equal probability of being assigned to each treatment arm.
+        
+        Args:
+            df: DataFrame with units to randomize
+            n_simulations: Number of times to run randomization (default: 500)
+            base_seed: Base seed for simulations. Each simulation uses base_seed + i
+            verbose: If True, print progress and diagnostic information
+            
+        Returns:
+            ValidationResult with assignment probabilities and validation diagnostics
+            
+        Note:
+            This validation helps detect if any units are systematically favored for
+            certain treatment arms, which would indicate a problem with the randomization code.
+        """
+        cfg = self.config
+        work_df = df.copy()
+        
+        # Validate input data
+        if cfg.id_column not in work_df.columns:
+            raise ValueError(f"ID column '{cfg.id_column}' not found in data")
+        
+        # Check for duplicates
+        if work_df[cfg.id_column].duplicated().any():
+            raise ValueError(f"Duplicate IDs found in column '{cfg.id_column}'")
+        
+        if verbose:
+            print(f"Running {n_simulations} randomization simulations to validate fairness...")
+            print(f"Method: {cfg.method}")
+            if cfg.strata:
+                print(f"Stratification: {', '.join(cfg.strata)}")
+            if cfg.cluster:
+                print(f"Cluster: {cfg.cluster}")
+            print("")
+        
+        # Track assignments for each unit across all simulations
+        arm_names = [arm.name for arm in cfg.arms]
+        assignment_counts = {arm: np.zeros(len(work_df)) for arm in arm_names}
+        
+        # Temporarily disable rerandomization iterations for this validation
+        original_iterations = cfg.iterations
+        original_use_existing = cfg.use_existing_assignment
+        temp_config = RandomizationConfig(
+            id_column=cfg.id_column,
+            treatment_column=cfg.treatment_column,
+            method=cfg.method,
+            arms=cfg.arms,
+            strata=cfg.strata,
+            cluster=cfg.cluster,
+            balance_covariates=[],  # Don't need balance checks for validation
+            iterations=1,  # Single assignment per simulation
+            seed=None,  # Will be set per iteration
+            use_existing_assignment=False
+        )
+        temp_randomizer = Randomizer(temp_config)
+        
+        # Run simulations
+        for i in range(n_simulations):
+            if base_seed is not None:
+                temp_config = RandomizationConfig(
+                    id_column=cfg.id_column,
+                    treatment_column=cfg.treatment_column,
+                    method=cfg.method,
+                    arms=cfg.arms,
+                    strata=cfg.strata,
+                    cluster=cfg.cluster,
+                    balance_covariates=[],
+                    iterations=1,
+                    seed=base_seed + i,
+                    use_existing_assignment=False
+                )
+                temp_randomizer = Randomizer(temp_config)
+            
+            # Run single randomization
+            sim_df = work_df.copy()
+            seed = None if base_seed is None else base_seed + i
+            assignment = temp_randomizer._assign(sim_df, seed)
+            
+            # Count assignments for each unit
+            for idx, (row_idx, arm) in enumerate(assignment.items()):
+                assignment_counts[arm][idx] += 1
+            
+            if verbose and (i + 1) % max(1, n_simulations // 10) == 0:
+                print(f"  Completed {i + 1}/{n_simulations} simulations")
+        
+        # Calculate probabilities
+        prob_df = work_df[[cfg.id_column]].copy()
+        for arm in arm_names:
+            prob_df[f"prob_{arm}"] = assignment_counts[arm] / n_simulations
+        
+        # Calculate average probability (should be close to arm proportion for each unit)
+        prob_df["avg_treatment_assignment"] = prob_df[[f"prob_{arm}" for arm in arm_names]].mean(axis=1)
+        
+        # Compute summary statistics
+        summary_stats = {}
+        warnings_list = []
+        is_valid = True
+        
+        for arm in arm_names:
+            probs = prob_df[f"prob_{arm}"].values
+            expected = next(a.proportion for a in cfg.arms if a.name == arm)
+            
+            stats_dict = {
+                "mean": float(np.mean(probs)),
+                "std": float(np.std(probs)),
+                "min": float(np.min(probs)),
+                "max": float(np.max(probs)),
+                "expected": expected,
+                "mean_deviation": float(abs(np.mean(probs) - expected)),
+            }
+            summary_stats[arm] = stats_dict
+            
+            # Check for issues
+            # 1. Mean should be close to expected proportion
+            if abs(np.mean(probs) - expected) > 0.05:
+                is_valid = False
+                warnings_list.append(
+                    f"Arm '{arm}': Mean probability ({np.mean(probs):.3f}) deviates from "
+                    f"expected ({expected:.3f}) by more than 5%"
+                )
+            
+            # 2. Check if some units are almost always in treatment or control
+            # Standard deviation should be close to sqrt(p*(1-p)) for binomial
+            expected_std = np.sqrt(expected * (1 - expected))
+            
+            # Count units with extreme probabilities (>90% or <10% when expecting 50%)
+            if expected > 0.2 and expected < 0.8:  # Only check for balanced designs
+                extreme_low = np.sum(probs < expected - 0.3)
+                extreme_high = np.sum(probs > expected + 0.3)
+                if extreme_low > len(probs) * 0.05 or extreme_high > len(probs) * 0.05:
+                    is_valid = False
+                    warnings_list.append(
+                        f"Arm '{arm}': {extreme_low + extreme_high} units ({100*(extreme_low + extreme_high)/len(probs):.1f}%) "
+                        f"have extreme assignment probabilities (>30% deviation from expected)"
+                    )
+        
+        if verbose:
+            print("\nValidation Results:")
+            print(f"  Valid: {'✓ Yes' if is_valid else '✗ No'}")
+            print("\n  Summary Statistics by Arm:")
+            for arm, stats in summary_stats.items():
+                print(f"    {arm}:")
+                print(f"      Mean probability: {stats['mean']:.4f} (expected: {stats['expected']:.4f})")
+                print(f"      Std deviation: {stats['std']:.4f}")
+                print(f"      Range: [{stats['min']:.4f}, {stats['max']:.4f}]")
+            
+            if warnings_list:
+                print("\n  Warnings:")
+                for warning in warnings_list:
+                    print(f"    - {warning}")
+            else:
+                print("\n  ✓ No issues detected. Randomization appears fair.")
+        
+        return ValidationResult(
+            assignment_probabilities=prob_df,
+            summary_stats=summary_stats,
+            is_valid=is_valid,
+            warnings=warnings_list
+        )

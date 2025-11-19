@@ -45,6 +45,56 @@ Run your randomization a few hundred times with different seeds and compare the 
 - Graph it with `hist avg_treat_assignment`
 - If that histogram does NOT look like a binomial distribution – if some observations are almost always in treatment or almost always in control – check your randomization code
 
+**RCT Field Flow implementation:**
+
+The toolkit includes a built-in validation feature that automatically implements this best practice:
+
+```bash
+# Validate your randomization with 500 simulations
+rct-field-flow validate-randomization \
+  --baseline examples/sample_baseline.csv \
+  --config-path config/default.yaml \
+  --n-simulations 500 \
+  --output validation_probabilities.csv \
+  --plot-output validation_histogram.png \
+  --verbose
+```
+
+This command will:
+- Run the randomization 500 times with different seeds (configurable with `--n-simulations`)
+- Calculate the probability of each observation being assigned to each treatment arm
+- Generate a histogram showing the distribution of assignment probabilities
+- Output validation results showing whether the randomization appears fair
+- Save detailed probability data to CSV for further analysis
+
+**Example output:**
+
+```
+VALIDATION RESULTS
+Valid: ✓ PASS
+
+Assignment Probability Summary:
+  treatment:
+    Expected proportion: 0.500
+    Mean probability:    0.5002
+    Std deviation:       0.0500
+    Range:               [0.3100, 0.6900]
+  
+  control:
+    Expected proportion: 0.500
+    Mean probability:    0.4998
+    Std deviation:       0.0500
+    Range:               [0.3100, 0.6900]
+
+✓ No issues detected. Randomization appears fair.
+```
+
+The validation will flag issues if:
+- Mean assignment probabilities deviate from expected proportions by more than 5%
+- Some observations have extreme assignment probabilities (>30% deviation from expected)
+
+These warnings indicate potential problems with your randomization code that should be investigated.
+
 ---
 
 ## Types of Randomization
