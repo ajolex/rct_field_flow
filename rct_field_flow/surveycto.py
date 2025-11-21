@@ -65,9 +65,28 @@ class SurveyCTO:
         # SurveyCTO API requires the 'date' parameter. Use '0' to get all data.
         # Format can be: 'Oct 15, 2024 12:00:00 AM', timestamp, or '0' for all data
         params = {"date": since if since else "0"}
-        response = requests.get(url, auth=self.auth, params=params, timeout=60)
-        response.raise_for_status()
-        return pd.DataFrame(response.json())
+        # Disable Expect header to avoid 417 errors
+        headers = {"Expect": ""}
+        
+        try:
+            response = requests.get(url, auth=self.auth, params=params, headers=headers, timeout=60)
+            response.raise_for_status()
+            return pd.DataFrame(response.json())
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 404:
+                raise ValueError(
+                    f"Form '{form_id}' not found. Please check:\n"
+                    f"  1. Form ID is correct (case-sensitive)\n"
+                    f"  2. Form exists on server: {self.base_url.replace('/api/v2', '')}\n"
+                    f"  3. You have permission to access this form\n"
+                    f"Note: Form IDs use underscores, not spaces (e.g., 'my_form' not 'My Form')"
+                ) from e
+            elif response.status_code == 401:
+                raise ValueError("Authentication failed. Check username and password.") from e
+            elif response.status_code == 403:
+                raise ValueError(f"Access denied to form '{form_id}'. Check permissions.") from e
+            else:
+                raise
 
     def upload_cases(
         self, 

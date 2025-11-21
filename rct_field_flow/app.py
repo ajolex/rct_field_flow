@@ -5,12 +5,13 @@ import io
 import math
 import sys
 import json
+import zipfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from types import ModuleType
 from dataclasses import asdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -4181,6 +4182,1742 @@ def render_case_assignment() -> None:
 # ----------------------------------------------------------------------------- #
 
 
+# ----------------------------------------------------------------------------- #
+# DATA VISUALIZATION                                                            #
+# ----------------------------------------------------------------------------- #
+
+
+def detect_unique_id(df: pd.DataFrame) -> List[str]:
+    """
+    Detect potential unique ID columns in the dataset.
+    Prioritizes SurveyCTO KEY column if present.
+    
+    Returns list of column names that could serve as unique identifiers,
+    ordered by likelihood (columns with all unique values first).
+    """
+    candidates = []
+    
+    # SurveyCTO KEY column gets highest priority
+    if 'KEY' in df.columns:
+        if df['KEY'].nunique() == len(df):
+            candidates.append(('KEY', 2.0))  # Highest priority
+    
+    for col in df.columns:
+        if col == 'KEY':  # Already handled
+            continue
+            
+        # Check if column has all unique values
+        if df[col].nunique() == len(df) and df[col].notna().all():
+            candidates.append((col, 1.0))  # Perfect candidate
+        elif df[col].nunique() == len(df):
+            candidates.append((col, 0.9))  # Has nulls but otherwise unique
+        elif df[col].nunique() / len(df) > 0.95:  # More than 95% unique
+            candidates.append((col, 0.8))
+    
+    # Sort by score
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    return [col for col, score in candidates]
+
+
+def detect_duplicates(df: pd.DataFrame, id_col: str) -> pd.DataFrame:
+    """Detect and return duplicate rows based on ID column."""
+    duplicates = df[df.duplicated(subset=[id_col], keep=False)].copy()
+    if not duplicates.empty:
+        duplicates = duplicates.sort_values(by=[id_col])
+    return duplicates
+
+
+def detect_wide_patterns(df: pd.DataFrame) -> Dict[str, List[str]]:
+    """
+    Detect repeated patterns in column names that indicate wide format data.
+    
+    Returns dict with pattern as key and list of matching columns as values.
+    Patterns detected:
+    - var_1, var_2, ... (suffix with underscore) - SurveyCTO repeat groups in wide format
+    - var1, var2, ... (suffix without underscore)
+    - var_1_1, var_1_2, ... (nested repeats)
+    - var1_1, var1_2, ... (nested without underscore)
+    
+    Special SurveyCTO patterns:
+    - geopoint fields: fieldname-Latitude, fieldname-Longitude, fieldname-Altitude, fieldname-Accuracy
+    - select_multiple: fieldname_1, fieldname_2, ... (dummy variables)
+    """
+    import re
+    
+    patterns = {}
+    geopoint_groups = {}
+    
+    # Detect geopoint fields (4 columns: Latitude, Longitude, Altitude, Accuracy)
+    for col in df.columns:
+        if col.endswith('-Latitude'):
+            base = col[:-9]  # Remove '-Latitude'
+            expected_cols = [f"{base}-Latitude", f"{base}-Longitude", 
+                           f"{base}-Altitude", f"{base}-Accuracy"]
+            if all(c in df.columns for c in expected_cols):
+                geopoint_groups[f"{base} (geopoint)"] = expected_cols
+    
+    # Add geopoint patterns (these are special, not for reshaping but for grouping)
+    for key, cols in geopoint_groups.items():
+        patterns[key] = cols
+    
+    # Pattern 1: var_N or var_N_M (with underscores)
+    pattern1 = re.compile(r'^(.+?)_(\d+)(?:_(\d+))?$')
+    # Pattern 2: varN or varNM (without underscores)  
+    pattern2 = re.compile(r'^(.+?)(\d+)(?:_(\d+))?$')
+    
+    # Skip geopoint component columns
+    geopoint_cols = set()
+    for cols in geopoint_groups.values():
+        geopoint_cols.update(cols)
+    
+    for col in df.columns:
+        # Skip SurveyCTO metadata columns
+        if col in ['KEY', 'instanceID', 'SubmissionDate', 'formdef_version', 
+                   'review_status', 'review_comments', 'review_corrections', 'review_quality']:
+            continue
+        
+        # Skip geopoint component columns
+        if col in geopoint_cols:
+            continue
+            
+        # Try pattern with underscores first
+        match = pattern1.match(col)
+        if match:
+            base = match.group(1)
+            if match.group(3):  # Nested pattern
+                key = f"{base}_*_*"
+            else:
+                key = f"{base}_*"
+            
+            if key not in patterns:
+                patterns[key] = []
+            patterns[key].append(col)
+            continue
+        
+        # Try pattern without underscores
+        match = pattern2.match(col)
+        if match:
+            base = match.group(1)
+            if match.group(3):  # Nested pattern
+                key = f"{base}*_*"
+            else:
+                key = f"{base}*"
+            
+            if key not in patterns:
+                patterns[key] = []
+            patterns[key].append(col)
+    
+    # Filter out patterns with less than 2 columns (not really repeated)
+    # Exception: keep geopoint groups even if marked as pattern
+    patterns = {k: v for k, v in patterns.items() 
+               if len(v) >= 2 or '(geopoint)' in k}
+    
+    return patterns
+
+
+def reshape_single_pattern(
+    df: pd.DataFrame,
+    id_col: str,
+    pattern: str,
+    cols: List[str]
+) -> pd.DataFrame:
+    """
+    Reshape a single pattern from wide to long format.
+    Memory-efficient by processing only one pattern at a time.
+    
+    Args:
+        df: DataFrame in wide format
+        id_col: Column to use as identifier
+        pattern: Pattern string (e.g., 'var_*')
+        cols: List of columns matching this pattern
+        
+    Returns:
+        DataFrame in long format for this specific pattern
+    """
+    import re
+    
+    # Skip geopoint patterns
+    if '(geopoint)' in pattern:
+        return df[[id_col] + cols].copy()
+    
+    # Determine if nested pattern
+    is_nested = pattern.count('*') > 1
+    
+    # Extract base name - preserve full variable name, just remove the repeat suffix pattern
+    # For pattern 'shs_count_g1_*', base_name should be 'shs_count_g1', not 'shs'
+    base_name = pattern.replace('_*', '').replace('*', '')
+    
+    if is_nested:
+        # Nested pattern - create temp data list
+        temp_data = []
+        for col in cols:
+            if '_' in pattern.replace('*', ''):
+                match = re.search(r'_(\d+)_(\d+)$', col)
+            else:
+                match = re.search(r'(\d+)_(\d+)$', col)
+            
+            if match:
+                idx1, idx2 = match.groups()
+                # Process in chunks to save memory
+                for idx in range(0, len(df), 10000):
+                    chunk = df[col].iloc[idx:idx+10000]
+                    for i, val in enumerate(chunk, start=idx):
+                        parent_key = df[id_col].iloc[i]
+                        temp_data.append({
+                            'KEY': f"{parent_key}_{idx1}_{idx2}",
+                            'PARENT_KEY': parent_key,
+                            'repeat_1': int(idx1),
+                            'repeat_2': int(idx2),
+                            base_name: val
+                        })
+        
+        if temp_data:
+            nested_df = pd.DataFrame(temp_data)
+            # Remove empty rows
+            data_cols = [c for c in nested_df.columns if c not in ['KEY', 'PARENT_KEY', 'repeat_1', 'repeat_2']]
+            if data_cols:
+                mask = nested_df[data_cols].notna().any(axis=1)
+                for col in data_cols:
+                    if nested_df[col].dtype == 'object':
+                        mask = mask & (nested_df[col] != 'None') & (nested_df[col] != 'nan') & (nested_df[col] != '')
+                nested_df = nested_df[mask]
+            
+            # Drop rows where index variables are blank (if they exist)
+            index_cols = [c for c in nested_df.columns if c.endswith('_index') or c.startswith('index')]
+            if index_cols:
+                for idx_col in index_cols:
+                    if idx_col in nested_df.columns:
+                        if nested_df[idx_col].dtype == 'object':
+                            nested_df = nested_df[
+                                nested_df[idx_col].notna() & 
+                                (nested_df[idx_col] != '') & 
+                                (nested_df[idx_col] != 'None') & 
+                                (nested_df[idx_col] != 'nan')
+                            ]
+                        else:
+                            nested_df = nested_df[nested_df[idx_col].notna()]
+            
+            return nested_df
+        return pd.DataFrame()
+    else:
+        # Single level pattern - use melt
+        temp_df = df[[id_col] + cols].copy()
+        
+        melted = pd.melt(
+            temp_df,
+            id_vars=[id_col],
+            value_vars=cols,
+            var_name='_temp_var',
+            value_name=base_name
+        )
+        
+        # Extract repeat index
+        if '_' in pattern:
+            repeat_series = melted['_temp_var'].str.extract(r'_(\d+)$')[0]
+        else:
+            repeat_series = melted['_temp_var'].str.extract(r'(\d+)$')[0]
+        
+        melted['repeat'] = pd.to_numeric(repeat_series, errors='coerce').astype('Int64')
+        melted = melted.drop('_temp_var', axis=1)
+        
+        # Add PARENT_KEY (original KEY from wide format) and generate unique KEY for each row
+        melted = melted.rename(columns={id_col: 'PARENT_KEY'})
+        melted['KEY'] = [f"{parent_key}_{repeat}" for parent_key, repeat in zip(melted['PARENT_KEY'], melted['repeat'])]
+        
+        # Reorder columns: KEY, PARENT_KEY, repeat, then data columns
+        cols_order = ['KEY', 'PARENT_KEY', 'repeat'] + [c for c in melted.columns if c not in ['KEY', 'PARENT_KEY', 'repeat']]
+        melted = melted[cols_order]
+        
+        # Remove empty rows immediately after reshape (drop rows where all data columns are null/None)
+        data_cols = [c for c in melted.columns if c not in ['KEY', 'PARENT_KEY', 'repeat']]
+        if data_cols:
+            # Drop rows where all data columns are null or string 'None'
+            mask = melted[data_cols].notna().any(axis=1)
+            for col in data_cols:
+                if melted[col].dtype == 'object':
+                    mask = mask & (melted[col] != 'None') & (melted[col] != 'nan') & (melted[col] != '')
+            melted = melted[mask]
+        
+        # Drop rows where index variables are blank (if they exist)
+        # Check for columns ending with '_index' or starting with 'index'
+        index_cols = [c for c in melted.columns if c.endswith('_index') or c.startswith('index')]
+        if index_cols:
+            before_index_drop = len(melted)
+            for idx_col in index_cols:
+                if idx_col in melted.columns:
+                    # Drop rows where index column is null or blank
+                    if melted[idx_col].dtype == 'object':
+                        melted = melted[
+                            melted[idx_col].notna() & 
+                            (melted[idx_col] != '') & 
+                            (melted[idx_col] != 'None') & 
+                            (melted[idx_col] != 'nan')
+                        ]
+                    else:
+                        melted = melted[melted[idx_col].notna()]
+            
+            dropped_by_index = before_index_drop - len(melted)
+            if dropped_by_index > 0:
+                # Note: This will be visible if called with progress tracking
+                pass
+        
+        return melted
+
+
+def reshape_wide_to_long(
+    df: pd.DataFrame,
+    id_col: str,
+    pattern_cols: Dict[str, List[str]]
+) -> Dict[str, pd.DataFrame]:
+    """
+    Reshape wide format data to long format based on detected patterns.
+    Intelligently merges patterns from the same repeat group (same suffixes).
+    
+    Args:
+        df: DataFrame in wide format
+        id_col: Column to use as identifier (like KEY in SurveyCTO)
+        pattern_cols: Dict from detect_wide_patterns()
+        
+    Returns:
+        Dictionary mapping repeat group names to their long-format DataFrames (each with KEY/PARENT_KEY)
+    """
+    import re
+    
+    if not pattern_cols:
+        return {}
+
+    def _structure_signature(frame: pd.DataFrame) -> str:
+        """Create a stable signature for a repeat group based on KEY/PARENT_KEY membership."""
+        key_cols = [c for c in ["KEY", "PARENT_KEY"] if c in frame.columns]
+        if not key_cols:
+            return f"no_key::{len(frame)}"
+        snapshot = (
+            frame[key_cols]
+            .astype(str)
+            .sort_values(by=key_cols)
+            .reset_index(drop=True)
+        )
+        hash_series = pd.util.hash_pandas_object(snapshot, index=False)
+        return f"{len(frame)}::{int(hash_series.sum())}"
+
+    def _choose_dataset_name(name_candidates: List[str], base_candidates: List[str]) -> str:
+        """Select the most descriptive dataset name available for a repeat group."""
+        filtered = [name for name in name_candidates if name]
+        repeat_focused = [name for name in filtered if "repeat" in name.lower()]
+        if repeat_focused:
+            return repeat_focused[0]
+        if filtered:
+            return filtered[0]
+
+        unique_bases: List[str] = []
+        for base in base_candidates:
+            if base and base not in unique_bases:
+                unique_bases.append(base)
+        if unique_bases:
+            merged = "_".join(unique_bases[:3])
+            return f"{merged}_repeat"
+        return "repeat_group"
+    
+    st.write("### 🔄 Reshaping Wide to Long Format")
+    st.info("ℹ️ Patterns from the same repeat group will be merged together")
+    
+    # Group patterns by their repeat structure (same suffixes)
+    repeat_groups = {}  # Maps repeat_key -> list of (pattern, cols)
+    patterns_skipped = []
+    
+    # Create progress expander for detailed progress
+    progress_expander = st.expander("📋 Reshaping Progress", expanded=True)
+    
+    with progress_expander:
+        st.write("**Step 1: Grouping patterns by repeat structure...**")
+    
+    for pattern, cols in pattern_cols.items():
+        # Skip geopoint patterns (just for grouping display)
+        if '(geopoint)' in pattern:
+            continue
+        
+        # Skip if too many columns
+        if len(cols) > 100:
+            patterns_skipped.append(f"{pattern} ({len(cols)} columns - too many)")
+            continue
+        
+        # Extract repeat indices from first column to determine repeat structure
+        if cols:
+            first_col = cols[0]
+            # Extract all numbers from column name
+            numbers = re.findall(r'_(\d+)', first_col)
+            
+            if numbers:
+                # Create repeat key based on number of repeat levels
+                if len(numbers) == 1:
+                    # Single level repeat: firstn_1, firstn_2, etc.
+                    repeat_key = "repeat_single"
+                    num_repeats = len(cols)
+                elif len(numbers) == 2:
+                    # Nested repeat: var_1_1, var_1_2, etc.
+                    repeat_key = "repeat_nested"
+                    num_repeats = len(cols)
+                else:
+                    repeat_key = f"repeat_{len(numbers)}level"
+                    num_repeats = len(cols)
+                
+                # Check memory limits based on repeat group
+                if repeat_key not in repeat_groups:
+                    repeat_groups[repeat_key] = []
+                
+                repeat_groups[repeat_key].append((pattern, cols))
+    
+    with progress_expander:
+        st.write(f"  ✓ Found {len(repeat_groups)} repeat group(s)")
+        for repeat_key, patterns_list in repeat_groups.items():
+            st.write(f"    - {repeat_key}: {len(patterns_list)} variable pattern(s)")
+    
+    # Now reshape each pattern and group by repeat structure
+    with progress_expander:
+        st.write("\n**Step 2: Reshaping and intelligently grouping patterns...**")
+    
+    # First, reshape all patterns
+    reshaped_patterns = {}  # Maps pattern_name -> (reshaped_df, repeat_group_name, base_name)
+    
+    for repeat_key, patterns_list in repeat_groups.items():
+        for pattern, cols in patterns_list:
+            try:
+                reshaped = reshape_single_pattern(df, id_col, pattern, cols)
+                if not reshaped.empty:
+                    base_name = pattern.replace('_*', '').replace('*', '')
+                    
+                    # Extract repeat group identifier from index columns
+                    index_cols = [c for c in reshaped.columns if c.endswith('_index') or c.startswith('index')]
+                    
+                    if index_cols:
+                        first_index = index_cols[0]
+                        if first_index.endswith('_index'):
+                            repeat_group_name = first_index[:-6]
+                        elif first_index.startswith('index'):
+                            repeat_group_name = first_index
+                        else:
+                            repeat_group_name = base_name
+                    else:
+                        repeat_group_name = base_name
+                    
+                    reshaped_patterns[pattern] = (reshaped, repeat_group_name, base_name)
+                    
+                    with progress_expander:
+                        st.write(f"  ✓ {pattern}: {len(reshaped):,} rows")
+            except Exception as e:
+                with progress_expander:
+                    st.warning(f"  ✗ {pattern}: {str(e)}")
+                patterns_skipped.append(f"{pattern} (error: {str(e)})")
+    
+    # Step 3: Group patterns by (repeat_group_name, row_count) - patterns with same rows belong together
+    with progress_expander:
+        st.write(f"\n**Step 3: Grouping {len(reshaped_patterns)} pattern(s) by repeat structure...**")
+    
+    repeat_structure_groups: Dict[str, Dict[str, Any]] = {}
+    
+    for pattern, (reshaped_df, repeat_group_name, base_name) in reshaped_patterns.items():
+        row_count = len(reshaped_df)
+        structure_key = _structure_signature(reshaped_df)
+        
+        if structure_key not in repeat_structure_groups:
+            repeat_structure_groups[structure_key] = {
+                "row_count": row_count,
+                "patterns": [],
+                "repeat_names": [],
+                "base_names": [],
+                "display_name": None,
+            }
+        
+        group_entry = repeat_structure_groups[structure_key]
+        group_entry["patterns"].append((pattern, reshaped_df, base_name))
+        group_entry["repeat_names"].append(repeat_group_name)
+        group_entry["base_names"].append(base_name)
+    
+    with progress_expander:
+        st.write(f"  ✓ Found {len(repeat_structure_groups)} unique repeat structure(s)")
+        for group_data in repeat_structure_groups.values():
+            group_data["display_name"] = _choose_dataset_name(
+                group_data["repeat_names"],
+                group_data["base_names"],
+            )
+            st.write(
+                f"    - {group_data['display_name']} ({group_data['row_count']} rows): "
+                f"{len(group_data['patterns'])} variable(s)"
+            )
+    
+    # Step 4: Merge patterns within each repeat structure group
+    with progress_expander:
+        st.write(f"\n**Step 4: Merging patterns within each repeat structure...**")
+    
+    final_datasets = {}
+    used_dataset_names: set[str] = set()
+    
+    for group_key, group_data in repeat_structure_groups.items():
+        repeat_group_name = group_data.get("display_name") or "repeat_group"
+        row_count = group_data.get("row_count", 0)
+        patterns_in_group = group_data.get("patterns", [])
+        with progress_expander:
+            st.write(f"\n  Processing: {repeat_group_name} ({row_count} rows, {len(patterns_in_group)} patterns)")
+        
+        # Merge all patterns in this group on KEY
+        merged_df = None
+        merged_var_names = []
+        skipped_in_group = []
+        
+        for idx, (pattern, reshaped_df, base_name) in enumerate(patterns_in_group):
+            with progress_expander:
+                st.write(f"    [{idx+1}/{len(patterns_in_group)}] Processing {base_name}...")
+            
+            if merged_df is None:
+                merged_df = reshaped_df.copy()
+                merged_var_names.append(base_name)
+                with progress_expander:
+                    st.write(f"      ✓ Starting with {base_name} ({len(reshaped_df)} rows, {len(reshaped_df.columns)} cols)")
+            else:
+                # Get structural columns that should be excluded from overlap check
+                structural_cols = ['KEY', 'PARENT_KEY', 'repeat', 'repeat_1', 'repeat_2']
+                structural_cols.extend([c for c in reshaped_df.columns if c.endswith('_index') or c.startswith('index')])
+                
+                # Get actual data columns from the new dataset
+                data_cols = [c for c in reshaped_df.columns if c not in structural_cols]
+                
+                # Get existing data columns from merged dataset  
+                existing_data_cols = [c for c in merged_df.columns if c not in structural_cols]
+                
+                # Check for TRUE overlaps (same column name)
+                overlapping = set(data_cols) & set(existing_data_cols)
+                
+                with progress_expander:
+                    st.write(f"      Data cols to add: {data_cols}")
+                    st.write(f"      Existing data cols: {existing_data_cols}")
+                    st.write(f"      Overlapping: {overlapping}")
+                
+                if overlapping:
+                    with progress_expander:
+                        st.write(f"      ⚠️ Skipping {base_name} - overlapping columns: {overlapping}")
+                    skipped_in_group.append(base_name)
+                    continue
+                
+                # Merge on KEY (should be perfect 1:1 within same repeat structure)
+                merge_keys = [c for c in ['KEY', 'PARENT_KEY', 'repeat', 'repeat_1', 'repeat_2'] 
+                             if c in merged_df.columns and c in reshaped_df.columns]
+                
+                if not merge_keys:
+                    with progress_expander:
+                        st.write(f"      ✗ No common merge keys with {base_name}")
+                    skipped_in_group.append(base_name)
+                    continue
+                
+                try:
+                    before_rows = len(merged_df)
+                    merged_df = merged_df.merge(
+                        reshaped_df[merge_keys + data_cols],
+                        on=merge_keys,
+                        how='inner',  # Inner join - only keep matching rows
+                        suffixes=('', '_dup')
+                    )
+                    after_rows = len(merged_df)
+                    merged_var_names.append(base_name)
+                    with progress_expander:
+                        st.write(f"      ✓ Merged {base_name} ({before_rows} → {after_rows} rows, +{len(data_cols)} cols)")
+                except Exception as e:
+                    with progress_expander:
+                        st.write(f"      ✗ Failed to merge {base_name}: {str(e)}")
+                    skipped_in_group.append(base_name)
+                    continue
+        
+        if merged_df is not None and not merged_df.empty:
+            # Create intelligent dataset name
+            dataset_name = f"{repeat_group_name}"
+            if dataset_name in used_dataset_names:
+                suffix = 2
+                while f"{dataset_name}_{suffix}" in used_dataset_names:
+                    suffix += 1
+                dataset_name = f"{dataset_name}_{suffix}"
+            used_dataset_names.add(dataset_name)
+            
+            final_datasets[dataset_name] = merged_df
+            
+            with progress_expander:
+                st.write(f"\n  ✅ **{dataset_name}**: {len(merged_df):,} rows × {len(merged_df.columns)} cols")
+                st.write(f"      Merged variables: {', '.join(merged_var_names)}")
+                if skipped_in_group:
+                    st.write(f"      Skipped: {', '.join(skipped_in_group)}")
+    
+    # Show skipped patterns
+    if patterns_skipped:
+        with st.expander(f"⚠️ Skipped {len(patterns_skipped)} pattern(s)", expanded=False):
+            st.warning("These patterns were not reshaped:")
+            for skipped in patterns_skipped:
+                st.text(f"• {skipped}")
+    
+    if not final_datasets:
+        st.error("❌ No patterns could be reshaped. All patterns failed.")
+        st.info("Please check your data or select different patterns.")
+        return {}
+    
+    # Show final summary
+    total_rows = sum(len(df) for df in final_datasets.values())
+    with progress_expander:
+        st.write("\n" + "="*60)
+        st.write("**📊 Reshaping Summary:**")
+        st.write(f"   - Variable patterns detected: {len(reshaped_patterns)}")
+        st.write(f"   - Repeat structures identified: {len(repeat_structure_groups)}")
+        st.write(f"   - Final merged datasets: {len(final_datasets)}")
+        st.write(f"   - Total rows: {total_rows:,}")
+        st.write("\n💡 Variables from the same repeat group (same row count) are intelligently merged together")
+    
+    st.success(f"✅ Reshaping complete! {len(final_datasets)} dataset(s) created with {total_rows:,} total rows")
+    st.caption("💡 Each dataset represents ONE repeat group with all its variables merged (e.g., firstn, lastn, age together)")
+    
+    return final_datasets
+
+
+def generate_stata_reshape_dofile(
+    pattern_cols: Dict[str, List[str]],
+    reshaped_datasets: Dict[str, pd.DataFrame],
+    id_col: str = "KEY"
+) -> str:
+    """
+    Generate a Stata do-file that replicates the Python reshaping operations.
+    
+    Args:
+        pattern_cols: Dictionary of detected patterns from detect_wide_patterns()
+        reshaped_datasets: Dictionary of final reshaped datasets
+        id_col: ID column used for reshaping (default: "KEY")
+        
+    Returns:
+        String containing complete Stata do-file code
+    """
+    import re
+    from datetime import datetime
+    
+    dofile = []
+    
+    # Header
+    dofile.append("*" + "="*78)
+    dofile.append("* Wide-to-Long Reshape Do-File")
+    dofile.append(f"* Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    dofile.append("* This file replicates the Python reshaping operations in Stata")
+    dofile.append("*" + "="*78)
+    dofile.append("")
+    dofile.append("clear all")
+    dofile.append("set more off")
+    dofile.append("")
+    
+    # Instructions
+    dofile.append("* INSTRUCTIONS:")
+    dofile.append("* 1. Load your wide-format dataset before running this code")
+    dofile.append("* 2. Adjust file paths as needed")
+    dofile.append("* 3. Each section reshapes one repeat group")
+    dofile.append("")
+    dofile.append("*" + "-"*78)
+    dofile.append("* Save original wide-format data")
+    dofile.append("*" + "-"*78)
+    dofile.append("")
+    dofile.append('tempfile wide_original')
+    dofile.append('save `wide_original\'')
+    dofile.append("")
+    
+    # Group patterns by their structure (similar to Python logic)
+    pattern_groups = {}
+    for pattern, cols in pattern_cols.items():
+        # Extract base name
+        base_name = pattern.replace('_*', '').replace('*', '')
+        
+        # Determine pattern structure
+        if cols:
+            first_col = cols[0]
+            numbers = re.findall(r'_(\d+)', first_col)
+            
+            if numbers:
+                if len(numbers) == 1:
+                    pattern_type = "single_level"
+                elif len(numbers) == 2:
+                    pattern_type = "nested"
+                else:
+                    pattern_type = f"{len(numbers)}_level"
+                
+                # Try to identify repeat group
+                repeat_group = base_name
+                for dataset_name in reshaped_datasets.keys():
+                    if base_name in dataset_name:
+                        repeat_group = dataset_name
+                        break
+                
+                if repeat_group not in pattern_groups:
+                    pattern_groups[repeat_group] = []
+                
+                pattern_groups[repeat_group].append({
+                    'pattern': pattern,
+                    'base_name': base_name,
+                    'cols': cols,
+                    'pattern_type': pattern_type,
+                    'numbers': numbers
+                })
+    
+    # Generate reshape code for each group
+    for group_idx, (repeat_group, patterns) in enumerate(pattern_groups.items(), 1):
+        dofile.append("")
+        dofile.append("*" + "="*78)
+        dofile.append(f"* Repeat Group {group_idx}: {repeat_group}")
+        dofile.append("*" + "="*78)
+        dofile.append("")
+        
+        # Restore original data for each reshape
+        dofile.append("* Restore original wide data")
+        dofile.append('use `wide_original\', clear')
+        dofile.append("")
+        
+        for pattern_info in patterns:
+            pattern = pattern_info['pattern']
+            base_name = pattern_info['base_name']
+            cols = pattern_info['cols']
+            pattern_type = pattern_info['pattern_type']
+            
+            dofile.append(f"* Reshape pattern: {pattern}")
+            dofile.append(f"* Variable: {base_name}")
+            dofile.append(f"* Columns: {len(cols)}")
+            dofile.append("")
+            
+            if pattern_type == "single_level":
+                # Single-level reshape: var_1, var_2, var_3, ...
+                # Stata command: reshape long var_, i(KEY) j(repeat)
+                dofile.append(f"* Single-level reshape")
+                dofile.append(f"reshape long {base_name}_, i({id_col}) j(repeat)")
+                dofile.append(f"rename {base_name}_ {base_name}")
+                dofile.append("")
+                
+                # Drop missing observations
+                dofile.append("* Drop rows where all data values are missing")
+                dofile.append(f"drop if missing({base_name})")
+                dofile.append("")
+                
+            elif pattern_type == "nested":
+                # Nested reshape: var_1_1, var_1_2, var_2_1, var_2_2, ...
+                # Requires two reshape commands
+                dofile.append(f"* Nested reshape (2 levels)")
+                dofile.append(f"* First reshape: outer level")
+                dofile.append(f"reshape long {base_name}_@_, i({id_col}) j(repeat_1)")
+                dofile.append("")
+                dofile.append(f"* Second reshape: inner level")
+                dofile.append(f"reshape long {base_name}_, i({id_col} repeat_1) j(repeat_2)")
+                dofile.append(f"rename {base_name}_ {base_name}")
+                dofile.append("")
+                
+                # Drop missing observations
+                dofile.append("* Drop rows where all data values are missing")
+                dofile.append(f"drop if missing({base_name})")
+                dofile.append("")
+            
+            # Save individual pattern dataset
+            dofile.append(f"* Save reshaped data for {base_name}")
+            dofile.append(f'tempfile temp_{base_name}')
+            dofile.append(f'save `temp_{base_name}\'')
+            dofile.append("")
+            
+            # Restore for next pattern in group
+            dofile.append('use `wide_original\', clear')
+            dofile.append("")
+        
+        # Merge all patterns in the group
+        if len(patterns) > 1:
+            dofile.append("*" + "-"*78)
+            dofile.append(f"* Merge all variables in {repeat_group}")
+            dofile.append("*" + "-"*78)
+            dofile.append("")
+            
+            # Start with first pattern
+            first_pattern = patterns[0]
+            dofile.append(f"* Start with {first_pattern['base_name']}")
+            dofile.append(f"use `temp_{first_pattern['base_name']}\', clear")
+            dofile.append("")
+            
+            # Merge remaining patterns
+            for pattern_info in patterns[1:]:
+                base_name = pattern_info['base_name']
+                pattern_type = pattern_info['pattern_type']
+                
+                if pattern_type == "single_level":
+                    merge_vars = f"{id_col} repeat"
+                elif pattern_type == "nested":
+                    merge_vars = f"{id_col} repeat_1 repeat_2"
+                else:
+                    merge_vars = f"{id_col}"
+                
+                dofile.append(f"* Merge {base_name}")
+                dofile.append(f"merge 1:1 {merge_vars} using `temp_{base_name}\', nogenerate")
+                dofile.append("")
+        
+        # Save final merged dataset
+        clean_name = repeat_group.replace(':', '_').replace(' ', '_').replace(',', '')
+        dofile.append(f"* Save final merged dataset: {repeat_group}")
+        dofile.append(f'save "{clean_name}_long.dta", replace')
+        dofile.append("")
+        dofile.append(f"* Export to CSV")
+        dofile.append(f'export delimited using "{clean_name}_long.csv", replace')
+        dofile.append("")
+    
+    # Footer
+    dofile.append("")
+    dofile.append("*" + "="*78)
+    dofile.append("* End of reshape do-file")
+    dofile.append("*" + "="*78)
+    dofile.append("")
+    dofile.append(f"* Generated {len(pattern_groups)} repeat group dataset(s)")
+    dofile.append("* Review output files to verify reshape operations")
+    
+    return "\n".join(dofile)
+
+
+def merge_datasets_on_key(
+    datasets: Dict[str, pd.DataFrame]
+) -> Dict[str, pd.DataFrame]:
+    """
+    Intelligently merge datasets based on 1:1 KEY matching.
+    Similar to Stata's merge with _merge==3 (perfect matches only).
+    
+    Strategy:
+    1. Loop through all datasets and try 1:1 merge on KEY
+    2. Keep only perfectly matched rows (_merge==3 equivalent)
+    3. Save merged datasets separately
+    4. For unmatched rows, try merging with other datasets iteratively
+    5. Retain unmatched datasets as separate dataframes
+    
+    Args:
+        datasets: Dict mapping pattern names to DataFrames (all must have 'KEY' column)
+        
+    Returns:
+        Dictionary with merged and unmerged datasets
+    """
+    if not datasets or len(datasets) < 2:
+        st.info("📊 Only one dataset available - no merging needed")
+        return datasets
+    
+    st.write("### 🔗 Intelligent KEY-based Merging")
+    st.info("ℹ️ Attempting to merge datasets with matching KEY values (1:1 merge, perfect matches only)")
+    
+    merge_expander = st.expander("📋 Merge Progress", expanded=True)
+    
+    # Convert dict to list of (name, df) tuples for easier manipulation
+    remaining_datasets = [(name, df.copy()) for name, df in datasets.items()]
+    merged_datasets = {}
+    merge_counter = 1
+    
+    # Track merging history
+    with merge_expander:
+        st.write("**Starting merge process...**")
+    
+    # Iteratively try to merge datasets
+    while len(remaining_datasets) > 1:
+        merged_in_iteration = False
+        
+        # Try to merge first dataset with each other dataset
+        base_name, base_df = remaining_datasets[0]
+        
+        for i in range(1, len(remaining_datasets)):
+            other_name, other_df = remaining_datasets[i]
+            
+            # Check if both have KEY column
+            if 'KEY' not in base_df.columns or 'KEY' not in other_df.columns:
+                continue
+            
+            # Perform 1:1 merge on KEY
+            merged = base_df.merge(
+                other_df,
+                on='KEY',
+                how='inner',  # Inner join = only perfect matches
+                suffixes=('', '_OTHER'),
+                indicator=True
+            )
+            
+            # Check if we got any matches
+            if len(merged) > 0:
+                # Handle PARENT_KEY columns (should be the same, so drop duplicate)
+                if 'PARENT_KEY_OTHER' in merged.columns:
+                    merged = merged.drop(columns=['PARENT_KEY_OTHER'])
+                
+                # Handle repeat columns
+                repeat_cols = [c for c in merged.columns if c.startswith('repeat') and c.endswith('_OTHER')]
+                for col in repeat_cols:
+                    base_col = col.replace('_OTHER', '')
+                    if base_col in merged.columns:
+                        merged = merged.drop(columns=[col])
+                
+                # Drop the merge indicator
+                merged = merged.drop(columns=['_merge'])
+                
+                # Calculate merge statistics
+                base_unmatched = len(base_df) - len(merged)
+                other_unmatched = len(other_df) - len(merged)
+                match_rate = (len(merged) / min(len(base_df), len(other_df))) * 100
+                
+                with merge_expander:
+                    st.write(f"\n✅ **Merge #{merge_counter}**: `{base_name}` + `{other_name}`")
+                    st.write(f"   - Matched: {len(merged):,} rows ({match_rate:.1f}% match rate)")
+                    st.write(f"   - Unmatched from {base_name}: {base_unmatched:,} rows")
+                    st.write(f"   - Unmatched from {other_name}: {other_unmatched:,} rows")
+                
+                # Create merged dataset name
+                merged_name = f"🔗 Merged_{merge_counter}: {base_name} + {other_name}"
+                merged_datasets[merged_name] = merged
+                merge_counter += 1
+                
+                # Extract unmatched rows for future merging
+                base_unmatched_df = base_df[~base_df['KEY'].isin(merged['KEY'])].copy()
+                other_unmatched_df = other_df[~other_df['KEY'].isin(merged['KEY'])].copy()
+                
+                # Remove the two merged datasets from remaining
+                remaining_datasets.pop(i)  # Remove other dataset
+                remaining_datasets.pop(0)  # Remove base dataset
+                
+                # Add unmatched portions back if they have rows
+                if len(base_unmatched_df) > 0:
+                    remaining_datasets.append((f"{base_name} (unmatched)", base_unmatched_df))
+                if len(other_unmatched_df) > 0:
+                    remaining_datasets.append((f"{other_name} (unmatched)", other_unmatched_df))
+                
+                merged_in_iteration = True
+                break  # Start over with new remaining list
+        
+        # If no merges happened in this iteration, we're done
+        if not merged_in_iteration:
+            # Move the first dataset to final results as unmerged
+            name, df = remaining_datasets.pop(0)
+            merged_datasets[f"📄 {name}"] = df
+            with merge_expander:
+                st.write(f"\n📄 **{name}**: No merge partners found - keeping separate ({len(df):,} rows)")
+    
+    # Add any remaining single dataset
+    if remaining_datasets:
+        name, df = remaining_datasets[0]
+        merged_datasets[f"📄 {name}"] = df
+        with merge_expander:
+            st.write(f"\n📄 **{name}**: Last dataset - keeping separate ({len(df):,} rows)")
+    
+    # Show final summary
+    with merge_expander:
+        st.write("\n" + "="*60)
+        st.write("**📊 Merge Summary:**")
+        st.write(f"   - Original datasets: {len(datasets)}")
+        st.write(f"   - Final datasets: {len(merged_datasets)}")
+        st.write(f"   - Merged datasets: {merge_counter - 1}")
+        st.write(f"   - Unmerged datasets: {len([k for k in merged_datasets.keys() if k.startswith('📄')])}")
+    
+    total_rows = sum(len(df) for df in merged_datasets.values())
+    st.success(f"✅ Merge complete! {len(merged_datasets)} dataset(s) ready for analysis ({total_rows:,} total rows)")
+    
+    return merged_datasets
+
+
+def build_reshaped_download_payloads(datasets: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+    """
+    Prepare cached download payloads (Excel workbook + zipped CSV files) for reshaped datasets.
+    """
+    if not datasets:
+        return {}
+
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+
+    def _clean_name(name: str, fallback: str) -> str:
+        safe = "".join(ch if ch.isalnum() or ch in (" ", "-", "_") else "_" for ch in (name or fallback))
+        safe = safe.strip().replace(" ", "_") or fallback
+        return safe[:50]
+
+    # Build Excel workbook (one sheet per dataset)
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        for idx, (dataset_name, dataset_df) in enumerate(datasets.items(), start=1):
+            sheet_name = dataset_name.replace("*", "").replace(":", "")[:31] or f"dataset_{idx}"
+            dataset_df.to_excel(writer, index=False, sheet_name=sheet_name)
+    excel_bytes = excel_buffer.getvalue()
+
+    # Build zipped CSV archive
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        used_names: set[str] = set()
+        for idx, (dataset_name, dataset_df) in enumerate(datasets.items(), start=1):
+            base_name = _clean_name(dataset_name, f"dataset_{idx}")
+            csv_name = f"{base_name}.csv"
+            suffix = 2
+            while csv_name in used_names:
+                csv_name = f"{base_name}_{suffix}.csv"
+                suffix += 1
+            used_names.add(csv_name)
+            archive.writestr(csv_name, dataset_df.to_csv(index=False).encode("utf-8"))
+    zip_bytes = zip_buffer.getvalue()
+
+    return {
+        "excel_bytes": excel_bytes,
+        "excel_filename": f"long_format_datasets_{timestamp}.xlsx",
+        "zip_bytes": zip_bytes,
+        "zip_filename": f"long_format_datasets_{timestamp}.zip",
+        "generated_at": timestamp,
+    }
+
+
+def clean_and_convert_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean and convert data types:
+    - Convert numeric strings to numbers
+    - Handle SurveyCTO value labels (keep labels as categorical)
+    - Handle SurveyCTO date/time fields
+    - Handle select_multiple space-separated values
+    - Strip whitespace from strings
+    """
+    df_clean = df.copy()
+    
+    # Convert SurveyCTO SubmissionDate to datetime if present
+    if 'SubmissionDate' in df_clean.columns:
+        try:
+            df_clean['SubmissionDate'] = pd.to_datetime(df_clean['SubmissionDate'], errors='coerce')
+        except:
+            pass
+    
+    for col in df_clean.columns:
+        # Skip already processed datetime columns
+        if df_clean[col].dtype == 'datetime64[ns]':
+            continue
+            
+        # Handle geopoint numeric columns (Latitude, Longitude, Altitude, Accuracy)
+        if col.endswith(('-Latitude', '-Longitude', '-Altitude', '-Accuracy')):
+            df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+            continue
+        
+        if df_clean[col].dtype == 'object':
+            # Strip whitespace
+            df_clean[col] = df_clean[col].astype(str).str.strip()
+            
+            # Handle select_multiple dummy variables (should be 0/1)
+            # These typically have column names like fieldname_1, fieldname_2, etc.
+            # and contain only 0, 1, or empty values
+            non_null_vals = df_clean[col].replace(['', 'nan', 'None', 'NaN', 'na'], pd.NA).dropna()
+            if len(non_null_vals) > 0:
+                unique_vals = set(non_null_vals.unique())
+                if unique_vals.issubset({'0', '1', '0.0', '1.0'}):
+                    df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0).astype(int)
+                    continue
+            
+            # Try to convert to numeric if all non-null values are numeric
+            # This handles cases like "1", "2", "3.5" stored as strings
+            # But preserves value labels (text responses)
+            try:
+                # Check if values look numeric (ignoring NaN/empty)
+                non_null = df_clean[col].replace(['', 'nan', 'None', 'NaN', 'na'], pd.NA).dropna()
+                if len(non_null) > 0:
+                    # Try conversion
+                    converted = pd.to_numeric(non_null, errors='coerce')
+                    # If more than 80% successfully converted, treat as numeric
+                    if converted.notna().sum() / len(non_null) > 0.8:
+                        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+            except:
+                pass
+    
+    return df_clean
+
+
+def classify_variables(df: pd.DataFrame, max_unique_for_categorical: int = 20, special_values: List[float] = None) -> Dict[str, List[str]]:
+    """
+    Classify variables as numeric or categorical.
+    
+    Args:
+        df: DataFrame to classify
+        max_unique_for_categorical: Max unique values to consider a numeric var as categorical
+        special_values: List of values to treat as missing (-999, -888, -666, etc.)
+        
+    Returns:
+        Dict with 'numeric', 'categorical', and 'special_values' keys
+    """
+    if special_values is None:
+        special_values = [-999, -888, -666]
+    
+    numeric_vars = []
+    categorical_vars = []
+    
+    for col in df.columns:
+        if df[col].dtype in ['int64', 'float64']:
+            # Check if it's really categorical (like status codes 1,2,3)
+            if df[col].nunique() <= max_unique_for_categorical:
+                categorical_vars.append(col)
+            else:
+                numeric_vars.append(col)
+        else:
+            categorical_vars.append(col)
+    
+    return {
+        'numeric': numeric_vars,
+        'categorical': categorical_vars,
+        'special_values': special_values
+    }
+
+
+def generate_numeric_summary(df: pd.DataFrame, columns: List[str], special_values: List[float] = None) -> pd.DataFrame:
+    """
+    Generate summary statistics for numeric variables.
+    Excludes special values (-999, -888, -666) from calculations.
+    """
+    if not columns:
+        return pd.DataFrame()
+    
+    if special_values is None:
+        special_values = [-999, -888, -666]
+    
+    stats = []
+    for col in columns:
+        if col not in df.columns:
+            continue
+        
+        series = df[col]
+        # Count special values
+        special_count = series.isin(special_values).sum() if special_values else 0
+        # Exclude special values from calculations
+        series_clean = series[~series.isin(special_values)] if special_values else series
+        
+        stats.append({
+            'Variable': col,
+            'Count': series_clean.notna().sum(),
+            'Missing': series.isna().sum(),
+            'Special': special_count,
+            'Mean': series_clean.mean(),
+            'Std': series_clean.std(),
+            'Min': series_clean.min(),
+            'Q25': series_clean.quantile(0.25),
+            'Median': series_clean.median(),
+            'Q75': series_clean.quantile(0.75),
+            'Max': series_clean.max(),
+        })
+    
+    return pd.DataFrame(stats)
+
+
+def generate_categorical_summary(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Generate frequency table for a categorical variable."""
+    if column not in df.columns:
+        return pd.DataFrame()
+    
+    freq = df[column].value_counts().reset_index()
+    freq.columns = ['Value', 'Count']
+    freq['Percentage'] = (freq['Count'] / len(df) * 100).round(2)
+    freq = freq.sort_values('Count', ascending=False)
+    
+    # Add missing count if any
+    missing_count = df[column].isna().sum()
+    if missing_count > 0:
+        missing_row = pd.DataFrame({
+            'Value': ['(Missing)'],
+            'Count': [missing_count],
+            'Percentage': [(missing_count / len(df) * 100).round(2)]
+        })
+        freq = pd.concat([freq, missing_row], ignore_index=True)
+    
+    return freq
+
+
+def render_data_visualization() -> None:
+    """
+    Render the Data Visualization page.
+    
+    Features:
+    - Multiple data sources (CSV upload, SurveyCTO API, System Config)
+    - Automatic unique ID detection
+    - Duplicate detection and removal
+    - Wide-to-long reshaping with pattern detection
+    - Variable classification (numeric/categorical)
+    - Interactive filtering and selection
+    - Summary statistics and visualizations
+    - Cross-tabulation
+    - Downloadable reports
+    """
+    st.title("📊 Data Visualization & Exploration")
+    st.markdown("""
+    Explore your data with automatic wide-to-long reshaping, summary statistics, 
+    and interactive visualizations for both numeric and categorical variables.
+    """)
+    
+    # Initialize session state for visualization
+    if "viz_data" not in st.session_state:
+        st.session_state.viz_data = None
+    if "viz_data_reshaped" not in st.session_state:
+        st.session_state.viz_data_reshaped = None  # Dict of pattern_name -> long-format DataFrame
+    if "viz_download_cache" not in st.session_state:
+        st.session_state.viz_download_cache = None  # Cached download payloads for reshaped data
+    if "viz_id_column" not in st.session_state:
+        st.session_state.viz_id_column = None
+    
+    # ------------------------------------------------------------------------ #
+    # Data Source Selection
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 📁 Data Source")
+    
+    cfg = load_default_config()
+    
+    source = st.radio(
+        "Load data from",
+        ["Upload CSV", "SurveyCTO API", "Use project config"],
+        key="viz_data_source",
+        horizontal=True
+    )
+    
+    data: pd.DataFrame | None = None
+    
+    if source == "Upload CSV":
+        uploaded_file = st.file_uploader(
+            "Choose a CSV file",
+            type="csv",
+            key="viz_csv_upload"
+        )
+        if uploaded_file:
+            try:
+                data = pd.read_csv(uploaded_file, low_memory=False)
+                # Clean and convert data types
+                data = clean_and_convert_data(data)
+                st.success(f"✓ Loaded {len(data):,} rows and {len(data.columns)} columns")
+            except Exception as e:
+                st.error(f"Error loading CSV: {e}")
+    
+    elif source == "SurveyCTO API":
+        with st.form("surveycto_viz_form", clear_on_submit=False):
+            server = st.text_input(
+                "Server URL", 
+                value=cfg.get("surveycto", {}).get("server", ""),
+                placeholder="yourserver.surveycto.com",
+                help="Your SurveyCTO server domain (e.g., myorg.surveycto.com)"
+            )
+            username = st.text_input(
+                "Username", 
+                value=cfg.get("surveycto", {}).get("username", ""),
+                help="Your SurveyCTO account username"
+            )
+            password = st.text_input(
+                "Password", 
+                type="password",
+                help="Your SurveyCTO account password"
+            )
+            form_id = st.text_input(
+                "Form ID", 
+                value=cfg.get("surveycto", {}).get("form_id", ""),
+                placeholder="my_form_name",
+                help="Exact form ID (case-sensitive, use underscores not spaces). Find in Form Design > Form IDs."
+            )
+            
+            st.caption("💡 **Tip**: Form IDs are case-sensitive. Use exact form ID from SurveyCTO (e.g., 'ADB_Questionnaire_test', not 'ADB Questionnaire Test')")
+            
+            submitted = st.form_submit_button("📥 Fetch Data")
+            
+            if submitted:
+                if not all([server, username, password, form_id]):
+                    st.error("All fields are required")
+                else:
+                    try:
+                        with st.spinner("Fetching data from SurveyCTO..."):
+                            scto = SurveyCTO(server, username, password)
+                            data = scto.get_submissions(form_id)
+                            # Clean and convert data types
+                            data = clean_and_convert_data(data)
+                            st.session_state.viz_data = data.copy()
+                            st.success(f"✓ Fetched {len(data):,} submissions")
+                    except Exception as e:
+                        st.error(f"Error fetching data: {e}")
+    
+    else:  # Use project config
+        monitor_cfg = cfg.get("monitoring", {})
+        if monitor_cfg.get("server") and monitor_cfg.get("form_id"):
+            try:
+                with st.spinner("Loading data from project config..."):
+                    scto = SurveyCTO(
+                        monitor_cfg["server"],
+                        monitor_cfg["username"],
+                        monitor_cfg.get("password", "")
+                    )
+                    data = scto.get_submissions(monitor_cfg["form_id"])
+                    # Clean and convert data types
+                    data = clean_and_convert_data(data)
+                    st.session_state.viz_data = data.copy()
+                    st.success(f"✓ Loaded {len(data):,} submissions from config")
+            except Exception as e:
+                st.error(f"Error loading from config: {e}")
+                st.info("Configure monitoring settings in config/default.yaml or use another data source")
+        else:
+            st.info("No monitoring configuration found. Please upload CSV or use SurveyCTO API.")
+    
+    # Use data from session state if available
+    if st.session_state.viz_data is not None:
+        data = st.session_state.viz_data
+    
+    if data is None or data.empty:
+        st.info("👆 Please load data to begin exploration")
+        return
+    
+    # ------------------------------------------------------------------------ #
+    # Data Preview & Validation
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 🔍 Data Overview")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Rows", f"{len(data):,}")
+    with col2:
+        st.metric("Columns", len(data.columns))
+    with col3:
+        st.metric("Memory", f"{data.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+    with col4:
+        missing_pct = (data.isna().sum().sum() / (len(data) * len(data.columns)) * 100)
+        st.metric("Missing %", f"{missing_pct:.1f}%")
+    
+    with st.expander("📋 Data Preview", expanded=False):
+        st.dataframe(data.head(20), use_container_width=True)
+    
+    # SurveyCTO-specific info
+    surveycto_cols = [c for c in ['KEY', 'SubmissionDate', 'formdef_version'] if c in data.columns]
+    if surveycto_cols:
+        with st.expander("ℹ️ SurveyCTO Data Detected", expanded=False):
+            st.markdown("""
+            This appears to be SurveyCTO data. Special features detected:
+            """)
+            features = []
+            if 'KEY' in data.columns:
+                features.append(f"- **KEY column**: {data['KEY'].nunique():,} unique submissions")
+            if 'SubmissionDate' in data.columns:
+                features.append("- **SubmissionDate**: Automatically converted to datetime")
+            
+            # Check for geopoints
+            geopoint_fields = [c[:-9] for c in data.columns if c.endswith('-Latitude')]
+            if geopoint_fields:
+                features.append(f"- **Geopoint fields** ({len(geopoint_fields)}): {', '.join(geopoint_fields)}")
+            
+            # Check for select_multiple patterns
+            select_mult = [c for c in data.columns if '_' in c and c.split('_')[-1].isdigit()]
+            if select_mult:
+                features.append(f"- **Possible select_multiple dummy variables** ({len(select_mult)} columns)")
+            
+            # Check for repeat groups (wide format)
+            repeat_patterns = [c for c in data.columns if c.endswith(tuple([f'_{i}' for i in range(1, 10)]))]
+            if repeat_patterns:
+                features.append(f"- **Repeat groups in wide format**: Use reshaping to convert to long format")
+            
+            for f in features:
+                st.markdown(f)
+    
+    # ------------------------------------------------------------------------ #
+    # ID Detection & Duplicate Handling
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 🔑 ID Column & Duplicate Check")
+    
+    # Detect potential ID columns
+    id_candidates = detect_unique_id(data)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if id_candidates:
+            id_col = st.selectbox(
+                "Select ID column",
+                options=id_candidates,
+                help="Detected columns with unique or mostly unique values"
+            )
+        else:
+            id_col = st.selectbox(
+                "Select ID column",
+                options=list(data.columns),
+                help="No columns with all unique values detected. Please select manually."
+            )
+        
+        st.session_state.viz_id_column = id_col
+    
+    with col2:
+        check_duplicates = st.button("🔍 Check for Duplicates", key="viz_check_dupes", use_container_width=True)
+    
+    if check_duplicates and id_col:
+        duplicates = detect_duplicates(data, id_col)
+        
+        if not duplicates.empty:
+            st.warning(f"⚠️ Found {len(duplicates)} duplicate rows based on '{id_col}'")
+            
+            with st.expander("View Duplicates", expanded=True):
+                st.dataframe(duplicates, use_container_width=True)
+            
+            if st.button("🗑️ Remove Duplicates (keep first occurrence)", key="viz_remove_dupes"):
+                data = data.drop_duplicates(subset=[id_col], keep='first')
+                st.session_state.viz_data = data.copy()
+                st.success(f"✓ Removed duplicates. {len(data):,} rows remaining.")
+                st.rerun()
+        else:
+            st.success(f"✓ No duplicates found in '{id_col}'")
+    
+    # ------------------------------------------------------------------------ #
+    # Wide-to-Long Reshaping
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 🔄 Data Reshaping (Wide to Long)")
+    
+    st.markdown("""
+    Automatically detect and reshape repeated patterns in your data:
+    - `var_1`, `var_2`, ... → Long format with `var` and `repeat` columns
+    - `var1`, `var2`, ... → Same transformation
+    - `var_1_1`, `var_1_2`, ... → Long with `var`, `repeat_1`, `repeat_2`
+    """)
+    
+    enable_reshape = st.checkbox("Enable automatic reshaping", value=False, key="enable_reshape")
+    
+    if enable_reshape and id_col:
+        with st.spinner("Detecting repeated patterns..."):
+            patterns = detect_wide_patterns(data)
+        
+        if patterns:
+            st.success(f"✓ Detected {len(patterns)} repeated pattern(s)")
+            
+            # Special value handling configuration
+            st.write("---")
+            st.write("#### ⚙️ Special Value Handling")
+            st.caption("Specify values that represent special responses (will be treated as missing in numeric analysis)")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                dont_know_val = st.text_input(
+                    "Don't Know",
+                    value="-999",
+                    key="viz_dont_know_value",
+                    help="Value representing 'Don't know' responses"
+                )
+            with col2:
+                refuse_val = st.text_input(
+                    "Refuse to Answer",
+                    value="-888",
+                    key="viz_refuse_value",
+                    help="Value representing 'Refuse to answer' responses"
+                )
+            with col3:
+                other_val = st.text_input(
+                    "Other (Specify)",
+                    value="-666",
+                    key="viz_other_value",
+                    help="Value representing 'Other specify' responses"
+                )
+            
+            # Parse special values
+            special_values = []
+            for val_str in [dont_know_val, refuse_val, other_val]:
+                if val_str.strip():
+                    try:
+                        special_values.append(float(val_str.strip()))
+                    except ValueError:
+                        pass
+            
+            if special_values:
+                st.info(f"ℹ️ Special values {special_values} will be treated as missing in numeric analysis")
+            
+            st.session_state.viz_special_values = special_values
+            
+            st.write("---")
+            
+            with st.expander("🔍 Detected Patterns", expanded=False):
+                for pattern, cols in patterns.items():
+                    st.markdown(f"**Pattern:** `{pattern}`")
+                    st.write(f"Columns ({len(cols)}): {', '.join(cols[:10])}" + 
+                            (f" ... and {len(cols)-10} more" if len(cols) > 10 else ""))
+                    st.markdown("---")
+            
+            selected_patterns = st.multiselect(
+                "Select patterns to reshape",
+                options=list(patterns.keys()),
+                default=list(patterns.keys()),
+                help="Choose which patterns should be converted to long format",
+                key="viz_select_patterns"
+            )
+            
+            # Additional merge option for cross-repeat merging
+            st.write("---")
+            st.write("#### 🔗 Cross-Repeat Group Merging")
+            st.caption("Variables from the same repeat structure are automatically merged. This option merges across different repeat structures.")
+            
+            cross_merge = st.checkbox(
+                "Attempt to merge different repeat groups (if they share KEY values)",
+                value=False,
+                key="viz_cross_merge",
+                help="Try to merge datasets from different repeat structures if they have matching KEY values. Use with caution."
+            )
+            
+            if st.button("▶️ Apply Reshaping", type="primary", key="viz_apply_reshape"):
+                selected_pattern_cols = {k: v for k, v in patterns.items() if k in selected_patterns}
+                
+                with st.spinner("Reshaping data to long format..."):
+                    reshaped_data = reshape_wide_to_long(data, id_col, selected_pattern_cols)
+                    
+                if reshaped_data:
+                    if cross_merge:
+                        with st.spinner("Attempting cross-repeat group merging..."):
+                            reshaped_data = merge_datasets_on_key(reshaped_data)
+                    
+                    st.session_state.viz_data_reshaped = reshaped_data
+                    st.session_state.viz_download_cache = build_reshaped_download_payloads(reshaped_data)
+                    st.success("✅ Reshaping complete. Downloads are cached below.")
+                else:
+                    st.warning("No patterns could be reshaped. Check warnings above.")
+
+            current_long = st.session_state.get("viz_data_reshaped")
+            if isinstance(current_long, dict) and current_long:
+                st.write("\n### 📊 Reshaped Datasets Summary")
+                
+                summary_data = []
+                for pattern_name, pattern_df in current_long.items():
+                    summary_data.append({
+                        'Dataset': pattern_name,
+                        'Rows': len(pattern_df),
+                        'Columns': len(pattern_df.columns),
+                        'Data Columns': len([c for c in pattern_df.columns if c not in ['KEY', 'PARENT_KEY', 'repeat', 'repeat_1', 'repeat_2']])
+                    })
+                
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                
+                st.write("\n#### 📥 Download Long Format Datasets")
+                st.caption("Excel mirrors SurveyCTO exports (one sheet per repeat). CSV option provides a ZIP with one file per dataset.")
+                
+                download_cache = st.session_state.get("viz_download_cache")
+                if (not download_cache) and current_long:
+                    download_cache = build_reshaped_download_payloads(current_long)
+                    st.session_state.viz_download_cache = download_cache
+                
+                if download_cache:
+                    dl_col1, dl_col2, dl_col3 = st.columns(3)
+                    with dl_col1:
+                        st.download_button(
+                            label="📊 Download All Datasets (Excel)",
+                            data=download_cache["excel_bytes"],
+                            file_name=download_cache["excel_filename"],
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            help="Cached workbook – downloading will not clear analysis results.",
+                            use_container_width=True,
+                            key="viz_download_excel"
+                        )
+                    with dl_col2:
+                        st.download_button(
+                            label="📁 Download CSV Bundle (ZIP)",
+                            data=download_cache["zip_bytes"],
+                            file_name=download_cache["zip_filename"],
+                            mime="application/zip",
+                            help="ZIP archive with UTF-8 CSV files for each repeat group.",
+                            use_container_width=True,
+                            key="viz_download_zip"
+                        )
+                    with dl_col3:
+                        # Generate Stata do-file
+                        selected_pattern_cols = {k: v for k, v in patterns.items() if k in selected_patterns}
+                        stata_dofile = generate_stata_reshape_dofile(
+                            selected_pattern_cols,
+                            current_long,
+                            id_col
+                        )
+                        st.download_button(
+                            label="📜 Download Stata Do-File",
+                            data=stata_dofile,
+                            file_name=f"reshape_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.do",
+                            mime="text/plain",
+                            help="Stata code that replicates the reshaping operations",
+                            use_container_width=True,
+                            key="viz_download_stata"
+                        )
+                    st.caption("📎 Downloads remain available after clicking. No need to rerun reshaping.")
+        else:
+            st.info("No repeated patterns detected in column names")
+    
+    # Multi-dataset analysis - analyze all datasets simultaneously
+    st.markdown("---")
+    st.markdown("### 📊 Dataset Analysis")
+    
+    # Check if long format datasets are available
+    has_long_format = (st.session_state.viz_data_reshaped is not None and 
+                      isinstance(st.session_state.viz_data_reshaped, dict) and 
+                      len(st.session_state.viz_data_reshaped) > 0)
+    
+    # Prepare datasets for analysis
+    if has_long_format:
+        # Analyze ALL long format datasets by default
+        datasets_to_analyze = st.session_state.viz_data_reshaped
+        st.info(f"📊 Analyzing **{len(datasets_to_analyze)} long-format dataset(s)** simultaneously (SurveyCTO style - each pattern separate)")
+        st.caption("💡 Each dataset shown below with its own summary statistics. Toggle expanders to view details.")
+        analyze_mode = "multi"
+    else:
+        # Only wide format available
+        datasets_to_analyze = {"Wide Format (original)": data}
+        st.info(f"📋 Analyzing **wide format**: {len(data):,} rows × {len(data.columns)} columns")
+        st.caption("💡 Enable reshaping above to create long-format datasets for repeat group analysis")
+        analyze_mode = "single"
+    
+    # ------------------------------------------------------------------------ #
+    # Multi-Dataset Analysis
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 📊 Summary Statistics for All Datasets")
+    
+    special_vals = st.session_state.get('viz_special_values', [-999, -888, -666])
+    
+    # Global filter settings (apply to all datasets)
+    st.write("#### 🎛️ Global Filters (applies to all datasets)")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        filter_type = st.radio(
+            "Filter by type",
+            ["All", "Numeric Only", "Categorical Only"],
+            horizontal=True,
+            key="var_filter_type"
+        )
+    
+    with col2:
+        search_term = st.text_input("🔍 Search variables by name", key="var_search", placeholder="Enter variable name...")
+    
+    # ------------------------------------------------------------------------ #
+    # Multi-Dataset Analysis Sections
+    # ------------------------------------------------------------------------ #
+    
+    # Analyze each dataset in expandable sections
+    for idx, (dataset_name, working_data) in enumerate(datasets_to_analyze.items()):
+        with st.expander(f"📊 **{dataset_name}** ({len(working_data):,} rows × {len(working_data.columns)} cols)", expanded=(idx == 0)):
+            
+            # Classify variables for this dataset
+            var_types = classify_variables(working_data, max_unique_for_categorical=20, special_values=special_vals)
+            
+            # Apply filters
+            if filter_type == "Numeric Only":
+                available_vars = var_types['numeric']
+            elif filter_type == "Categorical Only":
+                available_vars = var_types['categorical']
+            else:
+                available_vars = list(working_data.columns)
+            
+            # Apply search filter
+            if search_term:
+                available_vars = [v for v in available_vars if search_term.lower() in v.lower()]
+            
+            # Dataset metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Variables", len(available_vars))
+            with col2:
+                st.metric("Numeric", len([v for v in available_vars if v in var_types['numeric']]))
+            with col3:
+                st.metric("Categorical", len([v for v in available_vars if v in var_types['categorical']]))
+            with col4:
+                missing_pct = (working_data.isna().sum().sum() / (len(working_data) * len(working_data.columns)) * 100)
+                st.metric("Missing %", f"{missing_pct:.1f}")
+            
+            # Tabs for different analysis types
+            tab1, tab2, tab3 = st.tabs([
+                "📈 Numeric Summary",
+                "📊 Data Preview",
+                "📋 Variable List"
+            ])
+            
+            # TAB 1: Numeric Summary
+            with tab1:
+                numeric_vars_to_analyze = [v for v in available_vars if v in var_types['numeric']]
+                
+                if not numeric_vars_to_analyze:
+                    st.info("No numeric variables in this dataset")
+                else:
+                    # Show summary for all numeric variables
+                    summary_df = generate_numeric_summary(working_data, numeric_vars_to_analyze, special_vals)
+                    
+                    if not summary_df.empty:
+                        # Format for display
+                        format_dict = {
+                            'Count': '{:,.0f}',
+                            'Missing': '{:,.0f}',
+                            'Special': '{:,.0f}',
+                            'Mean': '{:,.2f}',
+                            'Std': '{:,.2f}',
+                            'Min': '{:,.2f}',
+                            'Q25': '{:,.2f}',
+                            'Median': '{:,.2f}',
+                            'Q75': '{:,.2f}',
+                            'Max': '{:,.2f}',
+                        }
+                        
+                        st.dataframe(
+                            summary_df.style.format(format_dict),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        if special_vals:
+                            st.caption(f"ℹ️ Statistics exclude special values {special_vals}")
+                        
+                        # Download button
+                        csv = summary_df.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Summary (CSV)",
+                            csv,
+                            f"{dataset_name}_summary.csv",
+                            "text/csv",
+                            key=f"download_summary_{idx}"
+                        )
+            
+            # TAB 2: Data Preview
+            with tab2:
+                st.dataframe(working_data.head(20), use_container_width=True)
+            
+            # TAB 3: Variable List
+            with tab3:
+                var_list = []
+                for col in available_vars:
+                    var_type = "Numeric" if col in var_types['numeric'] else "Categorical"
+                    unique_count = working_data[col].nunique()
+                    missing_count = working_data[col].isna().sum()
+                    var_list.append({
+                        'Variable': col,
+                        'Type': var_type,
+                        'Unique': unique_count,
+                        'Missing': missing_count
+                    })
+                
+                if var_list:
+                    var_df = pd.DataFrame(var_list)
+                    st.dataframe(var_df, use_container_width=True, hide_index=True)
+    
+    # Global download section for all datasets
+    st.markdown("---")
+    st.markdown("### 📥 Download All Summaries")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Download all numeric summaries combined
+        if st.button("📊 Download All Numeric Summaries (Excel)", use_container_width=True):
+            from io import BytesIO
+            excel_buffer = BytesIO()
+            
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                for dataset_name, working_data in datasets_to_analyze.items():
+                    var_types = classify_variables(working_data, max_unique_for_categorical=20, special_values=special_vals)
+                    numeric_vars = var_types['numeric']
+                    
+                    if numeric_vars:
+                        summary_df = generate_numeric_summary(working_data, numeric_vars, special_vals)
+                        sheet_name = dataset_name.replace('*', '').replace(':', '')[:31]
+                        summary_df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
+            excel_data = excel_buffer.getvalue()
+            st.download_button(
+                "⬇️ Download",
+                excel_data,
+                f"all_numeric_summaries_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_all_summaries"
+            )
+    
+    with col2:
+        # Info about download
+        st.info("💡 Excel file contains one sheet per dataset with all numeric variable summaries")
+
+
 def render_quality_checks() -> None:
     st.title("✅ Quality Checks")
     st.markdown("Apply duration, duplicate, outlier, and intervention checks to submission data.")
@@ -6797,7 +8534,7 @@ def render_user_information():
 PUBLIC_PAGES = ["home"]
 
 # Pages that require temporary access (excludes admin pages with their own auth)
-PROTECTED_PAGES = ["design", "power", "random", "cases", "quality", "analysis", 
+PROTECTED_PAGES = ["design", "power", "random", "cases", "visualize", "quality", "analysis", 
                    "backcheck", "reports", "monitor"]
 
 # Admin pages with their own password protection (skip temporary access)
@@ -7207,6 +8944,7 @@ def main() -> None:
         "power": "⚡ Power Calculations",
         "random": "🎲 Randomization",
         "cases": "📋 Case Assignment",
+        "visualize": "📊 Data Visualization",
         "quality": "✅ Quality Checks",
         "analysis": "📊 Analysis & Results",
         "backcheck": "🔍 Backcheck Selection",
@@ -7302,6 +9040,8 @@ def main() -> None:
         render_randomization()
     elif page == "cases":
         render_case_assignment()
+    elif page == "visualize":
+        render_data_visualization()
     elif page == "quality":
         render_quality_checks()
     elif page == "analysis":
