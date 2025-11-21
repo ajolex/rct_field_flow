@@ -4486,19 +4486,22 @@ def reshape_wide_to_long(
     if not pattern_cols:
         return {}
 
-    def _structure_signature(frame: pd.DataFrame) -> str:
-        """Create a stable signature for a repeat group based on KEY/PARENT_KEY membership."""
-        key_cols = [c for c in ["KEY", "PARENT_KEY"] if c in frame.columns]
-        if not key_cols:
-            return f"no_key::{len(frame)}"
-        snapshot = (
-            frame[key_cols]
-            .astype(str)
-            .sort_values(by=key_cols)
-            .reset_index(drop=True)
-        )
-        hash_series = pd.util.hash_pandas_object(snapshot, index=False)
-        return f"{len(frame)}::{int(hash_series.sum())}"
+    def _structure_signature(frame: pd.DataFrame) -> tuple[int, bool, int]:
+        """
+        Signature for grouping patterns.
+        Primarily uses row count (SurveyCTO rule: same repeat group ⇒ same number of rows),
+        but distinguishes top-level vs nested repeats via PARENT_KEY presence and repeat depth.
+        """
+        row_count = len(frame)
+        has_parent = "PARENT_KEY" in frame.columns
+        repeat_depth = len([c for c in frame.columns if c.startswith("repeat")])
+        return (row_count, has_parent, repeat_depth or 0)
+
+    def _has_multiple_matches(frame: pd.DataFrame, keys: List[str]) -> bool:
+        """Check if dataset has more than one row per merge key combination."""
+        if not keys:
+            return False
+        return frame.duplicated(subset=keys).any()
 
     def _choose_dataset_name(name_candidates: List[str], base_candidates: List[str]) -> str:
         """Select the most descriptive dataset name available for a repeat group."""
@@ -4613,7 +4616,7 @@ def reshape_wide_to_long(
     with progress_expander:
         st.write(f"\n**Step 3: Grouping {len(reshaped_patterns)} pattern(s) by repeat structure...**")
     
-    repeat_structure_groups: Dict[str, Dict[str, Any]] = {}
+    repeat_structure_groups: Dict[tuple[int, bool, int], Dict[str, Any]] = {}
     
     for pattern, (reshaped_df, repeat_group_name, base_name) in reshaped_patterns.items():
         row_count = len(reshaped_df)
@@ -4622,6 +4625,8 @@ def reshape_wide_to_long(
         if structure_key not in repeat_structure_groups:
             repeat_structure_groups[structure_key] = {
                 "row_count": row_count,
+                "repeat_depth": structure_key[2],
+                "has_parent_key": structure_key[1],
                 "patterns": [],
                 "repeat_names": [],
                 "base_names": [],
@@ -4641,8 +4646,9 @@ def reshape_wide_to_long(
                 group_data["base_names"],
             )
             st.write(
-                f"    - {group_data['display_name']} ({group_data['row_count']} rows): "
-                f"{len(group_data['patterns'])} variable(s)"
+                f"    - {group_data['display_name']} • {group_data['row_count']:,} rows "
+                f"(repeat depth: {group_data['repeat_depth']}) "
+                f"→ {len(group_data['patterns'])} variable pattern(s)"
             )
     
     # Step 4: Merge patterns within each repeat structure group
@@ -4706,6 +4712,16 @@ def reshape_wide_to_long(
                     with progress_expander:
                         st.write(f"      ✗ No common merge keys with {base_name}")
                     skipped_in_group.append(base_name)
+                    continue
+                
+                left_multi = _has_multiple_matches(merged_df, merge_keys)
+                right_multi = _has_multiple_matches(reshaped_df, merge_keys)
+                
+                if left_multi and right_multi:
+                    with progress_expander:
+                        st.write("      ⚠️ Skipping merge: would create many-to-many matches on "
+                                 f"{merge_keys}. Prefer SurveyCTO-style 1:m or m:1 joins.")
+                    skipped_in_group.append(f"{base_name} (m:m risk)")
                     continue
                 
                 try:
@@ -5020,6 +5036,15 @@ def merge_datasets_on_key(
             
             # Check if both have KEY column
             if 'KEY' not in base_df.columns or 'KEY' not in other_df.columns:
+                continue
+
+            merge_keys = ['KEY']
+            base_multi = base_df.duplicated(subset=merge_keys).any()
+            other_multi = other_df.duplicated(subset=merge_keys).any()
+            if base_multi and other_multi:
+                with merge_expander:
+                    st.write(f"⚠️ Skipping merge {base_name} + {other_name}: "
+                             "both datasets have multiple rows per KEY (would be m:m).")
                 continue
             
             # Perform 1:1 merge on KEY
