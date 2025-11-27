@@ -4,7 +4,7 @@
 
 ## Overview
 
-RCT Field Flow provides an integrated web-based platform supporting the complete lifecycle of RCT field operations. The toolkit offers intuitive interfaces and automated workflows that maintain research rigor while streamlining operations from initial design through final analysis.
+RCT Field Flow app provides an integrated web-based platform supporting the complete lifecycle of RCT field operations. The toolkit offers intuitive interfaces and automated workflows that maintain research rigor while streamlining operations from initial design through final analysis.
 
 **📥 [Installation &amp; Setup Instructions](INSTALLATION.md)**
 
