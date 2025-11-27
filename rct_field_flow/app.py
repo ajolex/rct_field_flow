@@ -18,6 +18,7 @@ import pandas as pd
 import requests
 import streamlit as st
 import yaml
+import streamlit_authenticator as stauth
 
 try:
     from .assign_cases import assign_cases
@@ -56,6 +57,8 @@ try:
         record_activity,
         upsert_design_data,
         upsert_randomization,
+        fetch_users_for_auth,
+        create_user,
     )
 except ImportError:  # pragma: no cover
     PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -107,6 +110,8 @@ except ImportError:  # pragma: no cover
         record_activity,
         upsert_design_data,
         upsert_randomization,
+        fetch_users_for_auth,
+        create_user,
     )
 
 # ----------------------------------------------------------------------------- #
@@ -8131,16 +8136,19 @@ def render_facilitator_dashboard() -> None:
 
 
 def render_user_information():
-    """Render the User Information page - admin only with password protection."""
+    """Render the User Information page - admin only."""
     
     st.title("👥 User Information")
     st.markdown("---")
     
-    # Password protection
+    # Check if current user is admin
+    is_admin = st.session_state.get("username") == "aj-admin"
+    
+    # Password protection (fallback for non-logged in admin or other users trying to access)
     if 'userinfo_authenticated' not in st.session_state:
         st.session_state.userinfo_authenticated = False
     
-    if not st.session_state.userinfo_authenticated:
+    if not is_admin and not st.session_state.userinfo_authenticated:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
         with st.form("userinfo_password_form"):
@@ -8208,11 +8216,18 @@ def render_user_information():
         selected_history_user = None
     st.markdown("---")
 
-    has_active_session = 'temp_user' in st.session_state and st.session_state.temp_user
+    has_active_session = st.session_state.get("authentication_status")
     if has_active_session:
-        username = st.session_state.temp_user
-        org_type = st.session_state.get('temp_organization', 'Not specified')
-        access_time = st.session_state.get('temp_access_time', datetime.now())
+        username = st.session_state.get("username")
+        org_type = "See DB" # We don't have this in session state currently
+        # Calculate duration if we have access time, otherwise just show now
+        access_time = st.session_state.get('access_time', datetime.now())
+        if isinstance(access_time, str):
+             try:
+                 from dateutil import parser
+                 access_time = parser.parse(access_time)
+             except:
+                 access_time = datetime.now()
         duration = datetime.now() - access_time
     else:
         username = None
@@ -8551,19 +8566,131 @@ def render_user_information():
 
 
 # ----------------------------------------------------------------------------- #
-# TEMPORARY ACCESS SYSTEM & ACTIVITY LOGGING                                    #
+# ----------------------------------------------------------------------------- #
+# AUTHENTICATION & ACTIVITY LOGGING                                             #
 # ----------------------------------------------------------------------------- #
 
 
-# Pages that don't require access credentials
-PUBLIC_PAGES = ["home"]
+# Pages that don't require access credentials (if any - currently all protected)
+PUBLIC_PAGES = []
 
-# Pages that require temporary access (excludes admin pages with their own auth)
+# Protected pages (require authentication)
 PROTECTED_PAGES = ["design", "power", "random", "cases", "visualize", "quality", "analysis", 
-                   "backcheck", "reports", "monitor"]
+                   "backcheck", "reports", "monitor", "home"]
 
-# Admin pages with their own password protection (skip temporary access)
+# Admin pages
 ADMIN_PAGES = ["facilitator", "userinfo"]
+
+
+def init_auth():
+    """Initialize authentication state and return authenticator object."""
+    users = fetch_users_for_auth()
+    
+    # Convert to credentials dict format expected by streamlit-authenticator
+    credentials = {"usernames": {}}
+    for username, data in users.items():
+        credentials["usernames"][username] = {
+            "name": data["name"],
+            "password": data["password"],
+            "email": data.get("email", "")
+        }
+
+    # Add admin user if not exists (seed)
+    if "aj-admin" not in credentials["usernames"]:
+        # We should probably create it in DB if missing, but for now let's just handle it via registration
+        pass
+
+    authenticator = stauth.Authenticate(
+        credentials,
+        "rct_field_flow_auth",
+        "rct_field_flow_key",
+        cookie_expiry_days=30,
+    )
+    return authenticator
+
+
+def render_login_page(authenticator):
+    """Render the login page and registration form."""
+    st.markdown("""
+    <style>
+    .auth-container {
+        max-width: 500px;
+        margin: 50px auto;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background-color: #ffffff;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.title("🔐 RCT Field Flow")
+    
+    # Initialize mode in session state
+    if 'auth_mode' not in st.session_state:
+        st.session_state.auth_mode = 'register'  # Start with register mode
+    
+    # Registration Form (shown first)
+    if st.session_state.auth_mode == 'register':
+        st.subheader("Create New Account")
+        with st.form("register_form"):
+            new_username = st.text_input("Username")
+            new_password = st.text_input("Password", type="password")
+            new_password_confirm = st.text_input("Confirm Password", type="password")
+            new_org = st.selectbox("Organization Type", [
+                "University/Academic Institution",
+                "Research Organization",
+                "NGO/Non-Profit",
+                "Government Agency",
+                "Private Company",
+                "Independent Researcher",
+                "Student",
+                "Other"
+            ])
+            submit_reg = st.form_submit_button("Register", use_container_width=True, type="primary")
+            
+            if submit_reg:
+                if new_password != new_password_confirm:
+                    st.error("Passwords do not match")
+                elif len(new_password) < 6:
+                    st.error("Password must be at least 6 characters")
+                elif not new_username:
+                    st.error("Username is required")
+                else:
+                    success = create_user(new_username, new_password, new_username, new_org)
+                    if success:
+                        st.success("Registration successful! Please login below.")
+                        st.session_state.auth_mode = 'login'
+                        st.rerun()
+                    else:
+                        st.error("Username already exists or error creating account.")
+        
+        # Toggle to login
+        st.markdown("---")
+        if st.button("Already registered? Log in", use_container_width=True):
+            st.session_state.auth_mode = 'login'
+            st.rerun()
+    
+    # Login Form
+    else:
+        st.subheader("Welcome Back")
+        try:
+            authenticator.login(location='main')
+        except Exception as e:
+            st.error(f"Error initializing login: {e}")
+        
+        if st.session_state.get("authentication_status"):
+            st.rerun()
+        elif st.session_state.get("authentication_status") is False:
+            st.error("Username/password is incorrect")
+        elif st.session_state.get("authentication_status") is None:
+            pass  # Don't show warning, let the form speak for itself
+        
+        # Toggle to register
+        st.markdown("---")
+        if st.button("Need an account? Register", use_container_width=True):
+            st.session_state.auth_mode = 'register'
+            st.rerun()
 
 
 def init_activity_log():
@@ -8583,9 +8710,9 @@ def log_activity(action: str, details: dict = None):
     }
     
     # Add user info if available
-    if 'temp_user' in st.session_state:
-        log_entry['username'] = st.session_state.temp_user
-        log_entry['organization'] = st.session_state.temp_organization
+    if st.session_state.get("authentication_status"):
+        log_entry['username'] = st.session_state.get("username")
+        log_entry['name'] = st.session_state.get("name")
     
     # Add additional details
     if details:
@@ -8598,22 +8725,19 @@ def log_activity(action: str, details: dict = None):
             record_activity(log_entry.get('username'), log_entry.get('page', 'unknown'), action, details)
     except Exception:  # pragma: no cover
         pass
-    
-    # Auto-save session data after logging activity
-    save_session_snapshot()
 
 
 def save_session_snapshot():
     """Save a snapshot of current session data to session state for persistence"""
-    if 'temp_user' not in st.session_state:
+    if not st.session_state.get('authentication_status'):
         return
     
     # Create a comprehensive snapshot
     snapshot = {
         'user_info': {
-            'username': st.session_state.get('temp_user'),
-            'organization': st.session_state.get('temp_organization'),
-            'access_time': st.session_state.get('temp_access_time', datetime.now()).isoformat() if hasattr(st.session_state.get('temp_access_time', None), 'isoformat') else str(st.session_state.get('temp_access_time')),
+            'username': st.session_state.get('username'),
+            'name': st.session_state.get('name'),
+            'access_time': st.session_state.get('access_time', datetime.now()).isoformat() if hasattr(st.session_state.get('access_time', None), 'isoformat') else str(st.session_state.get('access_time')),
             'last_activity': datetime.now().isoformat(),
         },
         'design_data': {
@@ -8633,9 +8757,9 @@ def save_session_snapshot():
     st.session_state.last_save_time = datetime.now()
     # Persist design & randomization data if available
     try:
-        if st.session_state.get('temp_user'):
+        if st.session_state.get('username'):
             upsert_design_data(
-                st.session_state.temp_user,
+                st.session_state.username,
                 st.session_state.get('design_team_name'),
                 st.session_state.get('design_program_card'),
                 st.session_state.get('design_current_step', 1),
@@ -8645,7 +8769,7 @@ def save_session_snapshot():
                 rr = st.session_state.randomization_result
                 arms = [{'name': arm.name, 'size': arm.size} for arm in rr.treatment_arms]
                 upsert_randomization(
-                    st.session_state.temp_user,
+                    st.session_state.username,
                     rr.total_units,
                     arms,
                     rr.timestamp.isoformat() if hasattr(rr, 'timestamp') else None,
@@ -8656,20 +8780,20 @@ def save_session_snapshot():
 
 def restore_session_if_available():
     """Restore session data from snapshot if available (after page reload)"""
-    # Check if we have a saved snapshot but missing active session keys
-    if 'session_snapshot' in st.session_state and 'temp_user' not in st.session_state:
+    # Check if we have a saved snapshot and user is authenticated but session state is not fully populated
+    if 'session_snapshot' in st.session_state and st.session_state.get('authentication_status') and 'username' not in st.session_state:
         snapshot = st.session_state.session_snapshot
         
         # Restore user info
         if 'user_info' in snapshot:
-            st.session_state.temp_user = snapshot['user_info'].get('username')
-            st.session_state.temp_organization = snapshot['user_info'].get('organization')
+            st.session_state.username = snapshot['user_info'].get('username')
+            st.session_state.name = snapshot['user_info'].get('name')
             # Restore access time if available
             try:
                 from dateutil import parser
-                st.session_state.temp_access_time = parser.parse(snapshot['user_info'].get('access_time'))
+                st.session_state.access_time = parser.parse(snapshot['user_info'].get('access_time'))
             except Exception:
-                st.session_state.temp_access_time = datetime.now()
+                st.session_state.access_time = datetime.now()
         
         # Restore design data
         if 'design_data' in snapshot:
@@ -8689,7 +8813,7 @@ def restore_session_if_available():
             'timestamp': datetime.now().isoformat(),
             'action': 'session_restored_from_snapshot',
             'page': 'system',
-            'username': st.session_state.get('temp_user'),
+            'username': st.session_state.get('username'),
         })
 
 
@@ -8697,9 +8821,9 @@ def get_session_data() -> dict:
     """Compile all session data for download"""
     data = {
         'session_info': {
-            'username': st.session_state.get('temp_user', 'Anonymous'),
-            'organization': st.session_state.get('temp_organization', 'Not specified'),
-            'access_time': st.session_state.get('temp_access_time', datetime.now()).isoformat(),
+            'username': st.session_state.get('username', 'Anonymous'),
+            'name': st.session_state.get('name', 'Not specified'),
+            'access_time': st.session_state.get('access_time', datetime.now()).isoformat(),
             'export_time': datetime.now().isoformat(),
         },
         'activity_log': st.session_state.get('activity_log', []),
@@ -8736,217 +8860,38 @@ def get_session_data() -> dict:
     return data
 
 
-def require_temp_access(page_name: str) -> bool:
+def require_auth(page_name: str) -> bool:
     """
-    Check if page requires temporary access and if user has it.
-    Returns True if access is granted, False if access form should be shown.
+    Check if page requires authentication and if user has it.
+    Returns True if access is granted, False if login form should be shown.
     """
     # Public pages don't need access
     if page_name in PUBLIC_PAGES:
         return True
     
-    # Check if user already has temporary access
-    if 'temp_user' in st.session_state and st.session_state.temp_user:
-        # Log page visit (except admin pages)
-        if page_name not in ['userinfo', 'facilitator']:
-            log_activity(f'visited_{page_name}_page')
-        return True
+    # Admin pages have their own password protection, but still require a logged-in user
+    if page_name in ADMIN_PAGES:
+        return st.session_state.get("authentication_status")
     
-    # Show temporary access form
-    show_temp_access_form(page_name)
-    return False
+    # All other pages require authentication
+    return st.session_state.get("authentication_status")
 
 
-def show_temp_access_form(page_name: str):
-    """Display temporary access form for protected pages."""
-    
-    st.markdown("""
-    <style>
-    .access-container {
-        max-width: 500px;
-        margin: 80px auto;
-        padding: 40px;
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    .access-title {
-        color: #164a7f;
-        text-align: center;
-        margin-bottom: 10px;
-        font-size: 2em;
-    }
-    .access-subtitle {
-        color: #2fa6dc;
-        text-align: center;
-        margin-bottom: 30px;
-        font-size: 1.1em;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="access-container">', unsafe_allow_html=True)
-    
-    st.markdown('<h1 class="access-title">🎯 RCT Field Flow</h1>', unsafe_allow_html=True)
-    st.markdown(f'<p class="access-subtitle">Access Required: {page_name.replace("_", " ").title()}</p>', 
-                unsafe_allow_html=True)
-    
-    st.info("👤 Please provide your details to access this feature. No registration required!")
-    
-    # Temporary access form
-    with st.form("temp_access_form", clear_on_submit=False):
-        st.markdown("##### 📝 Your Information")
-        
-        username = st.text_input(
-            "Username *",
-            placeholder="e.g., johndoe or jane.smith",
-            help="Enter a username to identify your session",
-            key="temp_name_input"
-        )
-        
-        # Organization type selector
-        org_type = st.selectbox(
-            "Organization Type",
-            options=[
-                "Select...",
-                "University/Academic Institution",
-                "Research Organization",
-                "NGO/Non-Profit",
-                "Government Agency",
-                "Private Company",
-                "Independent Researcher",
-                "Student",
-                "Other"
-            ],
-            help="Select your organization type",
-            key="temp_org_input"
-        )
-        
-        # Consent checkbox
-        st.markdown("#### Consent")
-        consent_text = (
-            "I consent to the temporary storage of this session's data (design inputs, randomization summaries, "
-            "and activity logs) for analysis and improvement purposes."
-        )
-        consent = st.checkbox(consent_text, key="temp_consent_checkbox")
-        st.caption("You can request deletion/anonymization later via the User Information admin page.")
-        st.markdown("---")
-
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            submit = st.form_submit_button(
-                "✅ Continue to App",
-                use_container_width=True,
-                type="primary"
-            )
-        
-        if submit:
-            if username and username.strip():
-                if not consent:
-                    st.error("⚠️ Please provide consent to proceed.")
-                    st.stop()
-                # Store temporary access credentials
-                st.session_state.temp_user = username.strip()
-                st.session_state.temp_organization = org_type if org_type != "Select..." else None
-                st.session_state.temp_access_time = datetime.now()
-                # Persist user login
-                try:
-                    record_user_login(username.strip(), st.session_state.temp_organization, consent=True)
-                except Exception:  # pragma: no cover
-                    pass
-                
-                # Initialize activity log and log access
-                init_activity_log()
-                log_activity('user_access_granted', {
-                    'username': username.strip(),
-                    'organization': org_type,
-                    'target_page': page_name
-                })
-                
-                st.success(f"✅ Welcome, {username}! Redirecting...")
-                st.rerun()
-            else:
-                st.error("⚠️ Please enter a username to continue")
-    
-    st.markdown("---")
-    
-    # Information box
-    with st.expander("ℹ️ About Temporary Access"):
-        st.markdown("""
-        **How it works:**
-        - No registration or account creation required
-        - Enter a username to create a temporary session
-        - Your session lasts until you close your browser
-        - No passwords required or stored
-        
-        **Your privacy:**
-        - Username & organization stored with a hashed and optionally encrypted form
-        - Consent status recorded; you may request deletion/anonymization
-        - Data persists locally until deleted by an administrator
-        - Organization type helps understand user community; optional
-        """)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Footer
-    st.markdown("""
-    <div style='text-align: center; margin-top: 50px; color: #666; font-size: 0.85rem;'>
-        <p>RCT Field Flow | Developed by <strong>Aubrey Jolex</strong></p>
-        <p>📧 <a href='mailto:aubreyjolex@gmail.com'>aubreyjolex@gmail.com</a></p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def show_user_info_sidebar():
+def show_user_info_sidebar(authenticator):
     """Display current user info and logout button in sidebar."""
-    if 'temp_user' in st.session_state and st.session_state.temp_user:
+    if st.session_state.get("authentication_status"):
         st.sidebar.markdown("---")
         
         # Show current user
-        user_name = st.session_state.temp_user
-        user_org = st.session_state.get('temp_organization', None)
+        user_name = st.session_state.get("name")
+        username = st.session_state.get("username")
         
         st.sidebar.markdown("### 👤 Current Session")
         st.sidebar.markdown(f"**Name:** {user_name}")
-        if user_org:
-            st.sidebar.markdown(f"**Org:** {user_org}")
-        
-        # Show session time
-        if 'temp_access_time' in st.session_state:
-            access_time = st.session_state.temp_access_time
-            duration = datetime.now() - access_time
-            minutes = int(duration.total_seconds() / 60)
-            st.sidebar.caption(f"⏱️ Session: {minutes} min")
-        
-        # Show last save time
-        if 'last_save_time' in st.session_state:
-            last_save = st.session_state.last_save_time
-            seconds_ago = int((datetime.now() - last_save).total_seconds())
-            if seconds_ago < 60:
-                st.sidebar.caption(f"💾 Auto-saved: {seconds_ago}s ago")
-            else:
-                minutes_ago = seconds_ago // 60
-                st.sidebar.caption(f"💾 Auto-saved: {minutes_ago}m ago")
+        st.sidebar.markdown(f"**User:** {username}")
         
         # Logout button
-        if st.sidebar.button("� End Session", use_container_width=True):
-            # Log session end before clearing
-            if 'activity_log' in st.session_state:
-                log_activity('user_session_ended')
-            
-            # Clear temporary access and all session data
-            keys_to_clear = [
-                'temp_user', 'temp_organization', 'temp_code', 'temp_access_time',
-                'baseline_data', 'randomization_result', 'case_data', 
-                'quality_data', 'analysis_data', 'design_data',
-                'design_workbook_responses', 'design_program_card', 'activity_log',
-                'session_snapshot', 'last_save_time'
-            ]
-            for key in keys_to_clear:
-                st.session_state.pop(key, None)
-            
-            st.success("👋 Session ended. Redirecting to home...")
-            st.rerun()
+        authenticator.logout("Logout", "sidebar")
 
 
 # ----------------------------------------------------------------------------- #
@@ -8955,11 +8900,38 @@ def show_user_info_sidebar():
 
 
 def main() -> None:
-    # Initialize persistence then recover session if available
+    # Initialize persistence
     try:
         init_db()
     except Exception:  # pragma: no cover
         pass
+
+    # Initialize Authentication
+    authenticator = init_auth()
+    
+    # Check authentication status (this renders the login widget if needed)
+    # But we want to control the login page rendering separately if not logged in
+    # authenticator.login() is called inside render_login_page
+    
+    # We need to check if we are logged in. 
+    # streamlit-authenticator manages state in st.session_state["authentication_status"]
+    # But we need to call login() at least once to process the form submission?
+    # Actually, calling login() renders the form.
+    # If we are already logged in (cookie), login() returns the name/status without rendering form (usually).
+    # Let's use render_login_page which calls login().
+    
+    # However, if we are logged in, we don't want to show the login page tabs.
+    # So we call login() first to check status.
+    
+    # Hack: We call login() invisibly or check cookie? 
+    # authenticator.login() renders the widget.
+    # If we want a custom page, we render it.
+    
+    if not st.session_state.get("authentication_status"):
+        render_login_page(authenticator)
+        return
+
+    # If we are here, we are logged in
     restore_session_if_available()
     
     # Visible navigation menu for users
@@ -9031,7 +9003,7 @@ def main() -> None:
         st.rerun()
     
     # Show user info and session controls
-    show_user_info_sidebar()
+    show_user_info_sidebar(authenticator)
 
     # Add developer watermark to sidebar
     st.sidebar.markdown("---")
@@ -9049,10 +9021,10 @@ def main() -> None:
         unsafe_allow_html=True
     )
 
-    # Check temporary access for protected pages (skip admin pages)
+    # Check authentication for protected pages (redundant as we return early, but good for safety)
     if page in PROTECTED_PAGES and page not in ADMIN_PAGES:
-        if not require_temp_access(page):
-            return  # Show access form, don't render page
+        if not st.session_state.get("authentication_status"):
+             st.rerun()
     
     # Render the selected page
     if page == "home":

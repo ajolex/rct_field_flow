@@ -13,6 +13,7 @@ import os
 import hashlib
 import secrets
 from cryptography.fernet import Fernet
+import bcrypt
 
 DB_DIR = Path(__file__).parent / "persistent_data"
 DB_PATH = DB_DIR / "rct_field_flow.db"
@@ -28,6 +29,8 @@ SCHEMA = {
             username_hash TEXT,
             username_salt TEXT,
             encrypted_username TEXT,
+            password_hash TEXT,
+            name TEXT,
             consent_given INTEGER DEFAULT 0,
             consent_timestamp TIMESTAMP
         )
@@ -117,12 +120,14 @@ def init_db() -> None:
             existing = {row[1] for row in cur.fetchall()}
             for col, ddl_col in columns:
                 if col not in existing:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl_col}")
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_col}")
         ensure_columns("users", [
             ("user_id", "TEXT UNIQUE"),
             ("username_hash", "TEXT"),
             ("username_salt", "TEXT"),
             ("encrypted_username", "TEXT"),
+            ("password_hash", "TEXT"),
+            ("name", "TEXT"),
             ("consent_given", "INTEGER DEFAULT 0"),
             ("consent_timestamp", "TIMESTAMP"),
         ])
@@ -182,6 +187,88 @@ def record_user_login(username: str, organization: Optional[str], consent: bool)
         conn.commit()
     finally:
         conn.close()
+
+
+def create_user(username: str, password: str, name: str, organization: Optional[str]) -> bool:
+    """Register a new user with password (bcrypt hashed)."""
+    if not username or not password:
+        return False
+    
+    # Check if user exists
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if cur.fetchone():
+            return False  # User already exists
+            
+        now = datetime.utcnow().isoformat()
+        
+        # Hash password with bcrypt
+        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        
+        # Legacy fields
+        salt = secrets.token_hex(16)
+        username_hash = _hash_username(username, salt)
+        encrypted_username = _encrypt_username(username)
+        user_id = secrets.token_hex(12)
+        
+        cur.execute(
+            "INSERT INTO users (username, password_hash, name, organization, first_access, last_access, user_id, username_hash, username_salt, encrypted_username) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                username,
+                password_hash,
+                name,
+                organization,
+                now,
+                now,
+                user_id,
+                username_hash,
+                salt,
+                encrypted_username
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
+    """Verify username and password. Returns user dict if successful, None otherwise."""
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username, password_hash, username_salt, name, organization, user_id FROM users WHERE username = ?", (username,))
+        row = cur.fetchone()
+        if not row:
+            return None
+            
+        db_username, db_pwd_hash, salt, name, org, user_id = row
+        
+        # Verify password
+        if not db_pwd_hash or not salt:
+            return None # Legacy user without password
+            
+        check_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+        if check_hash == db_pwd_hash:
+            # Update last access
+            now = datetime.utcnow().isoformat()
+            conn.execute("UPDATE users SET last_access = ? WHERE username = ?", (now, username))
+            conn.commit()
+            
+            return {
+                "username": db_username,
+                "name": name,
+                "organization": org,
+                "user_id": user_id
+            }
+        return None
+    finally:
+        conn.close()
+
 
 
 def record_activity(username: Optional[str], page: str, action: str, details: Optional[Dict[str, Any]]) -> None:
@@ -417,5 +504,24 @@ def vacuum_db() -> None:
     conn = _connect()
     try:
         conn.execute("VACUUM")
+    finally:
+        conn.close()
+
+
+def fetch_users_for_auth() -> Dict[str, Dict[str, Any]]:
+    """Fetch all users with credentials for streamlit-authenticator."""
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT username, name, password_hash FROM users WHERE password_hash IS NOT NULL")
+        rows = cur.fetchall()
+        users = {}
+        for r in rows:
+            users[r[0]] = {
+                "name": r[1] or r[0],
+                "password": r[2],
+                "email": f"{r[0]}@example.com", # Placeholder as we don't store email yet
+            }
+        return users
     finally:
         conn.close()
