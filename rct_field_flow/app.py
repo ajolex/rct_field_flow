@@ -58,6 +58,8 @@ try:
         trim_variable,
         create_missing_indicators,
         check_balance,
+        generate_python_analysis_code,
+        generate_stata_analysis_code,
     )
     from .backcheck import BackcheckConfig, sample_backchecks
     from .report import generate_weekly_report
@@ -118,6 +120,8 @@ except ImportError:  # pragma: no cover
         trim_variable,
         create_missing_indicators,
         check_balance,
+        generate_python_analysis_code,
+        generate_stata_analysis_code,
     )
     from rct_field_flow.backcheck import BackcheckConfig, sample_backchecks  # type: ignore
     from rct_field_flow.report import generate_weekly_report  # type: ignore
