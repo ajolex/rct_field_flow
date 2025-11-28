@@ -46,7 +46,19 @@ try:
         prepare_data as mon_prepare_data,
         render_dashboard as mon_render_dashboard,
     )
-    from .analyze import AnalysisConfig, estimate_ate, heterogeneity_analysis, attrition_table
+    from .analyze import (
+        AnalysisConfig, 
+        estimate_ate, 
+        heterogeneity_analysis, 
+        attrition_table,
+        load_data,
+        run_data_diagnostics,
+        diagnose_outliers,
+        winsorize_variable,
+        trim_variable,
+        create_missing_indicators,
+        check_balance,
+    )
     from .backcheck import BackcheckConfig, sample_backchecks
     from .report import generate_weekly_report
     from .surveycto import SurveyCTO
@@ -99,6 +111,13 @@ except ImportError:  # pragma: no cover
         estimate_ate,
         heterogeneity_analysis,
         attrition_table,
+        load_data,
+        run_data_diagnostics,
+        diagnose_outliers,
+        winsorize_variable,
+        trim_variable,
+        create_missing_indicators,
+        check_balance,
     )
     from rct_field_flow.backcheck import BackcheckConfig, sample_backchecks  # type: ignore
     from rct_field_flow.report import generate_weekly_report  # type: ignore

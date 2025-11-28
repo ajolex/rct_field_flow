@@ -1,0 +1,1750 @@
+                                                      WPS6508
+
+
+Policy Research Working Paper                        6508
+
+
+
+
+   The Impact of Consulting Services on Small
+           and Medium Enterprises
+           Evidence from a Randomized Trial in Mexico
+
+                                  Miriam Bruhn
+                                   Dean Karlan
+                                 Antoinette Schoar
+
+
+
+
+The World Bank
+Development Research Group
+Finance and Private Sector Development Team
+June 2013
+Policy Research Working Paper 6508
+
+
+  Abstract
+  Using a randomized evaluation with 432 Mexican small                               security data, the analysis finds a large increase in
+  and medium enterprises, this paper shows that access to                            the number of employees and total wage bill several
+  management consulting led to better firm performance:                              years after the program. The paper documents large
+  one-year results show positive effects on return-on-assets                         heterogeneity in the specific managerial practices that
+  and total factor productivity. Owners also had large                               improved as a result of the consulting, but there is no
+  increases in “entrepreneurial spirit ? (an entrepreneurs’                           singular mechanism as a panacea for all firms.
+  managerial confidence index). Using Mexican social
+
+
+
+
+  This paper is a product of the Finance and Private Sector Development Team, Development Research Group. It is part of
+  a larger effort by the World Bank to provide open access to its research and make a contribution to development policy
+  discussions around the world. Policy Research Working Papers are also posted on the Web at http://econ.worldbank.org.
+  The authors may be contacted at mbruhn@worldbank.org.
+
+
+
+
+          The Policy Research Working Paper Series disseminates the findings of work in progress to encourage the exchange of ideas about development
+          issues. An objective of the series is to get the findings out quickly, even if the presentations are less than fully polished. The papers carry the
+          names of the authors and should be cited accordingly. The findings, interpretations, and conclusions expressed in this paper are entirely those
+          of the authors. They do not necessarily represent the views of the International Bank for Reconstruction and Development/World Bank and
+          its affiliated organizations, or those of the Executive Directors of the World Bank or the governments they represent.
+
+
+                                                        Produced by the Research Support Team
+      The Impact of Consulting Services on Small and Medium Enterprises: Evidence from a
+                                 Randomized Trial in Mexico 1
+
+                                                             Miriam Bruhn
+                                                             Dean Karlan
+                                                           Antoinette Schoar
+
+
+
+
+Keywords: enterprise growth; entrepreneurship; managerial capital
+JEL: D21, D24, L20, M13, O12
+
+
+
+
+1
+  Miriam Bruhn: The World Bank (mbruhn@worldbank.org), Dean Karlan: Yale University; Innovations for Poverty Action; Jameel Poverty Action
+Lab; NBER (dean.karlan@yale.edu), Antoinette Schoar: MIT Sloan; NBER; Ideas42 (aschoar@mit.edu). We are grateful to the management and
+staff of IPPC and would like to thank the field research management team at Innovations for Poverty Action (IPA), including Alissa Fishbane,
+Javier Gutiérrez, Ashley Pierson, Douglas Randall and Anna York, and Ximena Cadena at ideas42, for excellent research assistance. We also
+thank Judith Frías at IMSS for her support in analyzing the employment impacts of the project. Financial support for this project was provided
+by the Government of the State of Puebla, via the Consejo para el Desarrollo Industrial, Comercial y de Servicios, the Knowledge for Change
+trust fund of the World Bank, and the Bill and Melinda Gates Foundation via the Financial Access Initiative for funding. All opinions and errors in
+this paper are those of the authors and not of any of the donors or of the World Bank.
+1. Introduction
+        A large literature in development economics and entrepreneurship aims to understand the
+impediments to firm growth, especially for small and medium sized enterprises. Most of the focus thus
+far has been on financial constraints as a central obstacle to firm growth. For example, empirical studies
+have examined these constraints at the micro level (Banerjee et al. 2009; de Mel et al. 2008; Karlan and
+Zinman 2011; Karlan et al. 2012) as well as at the macro level (King and Levine 1993; Rajan and Zingales
+1998). However, capital alone cannot generate firm growth; one must also have the “managerial
+capital ? to know how to use it. We argue that managerial capital can directly affect the firm by
+improving strategic and operational decisions, but it also affects the productivity of other factors, such
+as physical capital and labor, by helping to use them more efficiently. Bruhn et al. (2010) discusses at
+more length the role of “managerial capital ? as a key component for enterprise development, distinct
+from human capital. The diffuse effect of managerial capital often makes it difficult to measure its
+impact empirically.
+        Recent work has shown enormous heterogeneity in management practices and CEO styles
+across firms, see for example Bertrand and Schoar (2003), Bloom and Van Reenen (2007 and 2010), and
+Bennedsen et al. (2007). But a central question remains: is this observed heterogeneity a reflection of an
+optimal match between the underlying fundamentals of different firms and the type of management
+that is needed given the firm’s state of development? Or is lack of managerial capital a first order
+impediment to firm growth and profitability? Managers in developing countries might be constrained in
+the acquisition of these skills, if such skills require either formal training or experience in other well-run
+enterprises, or both, see for example Gompers et al. (2005) or Caselli and Gennaioli (2005).
+        We test if alleviating the constraints on managerial capital has a first order effect on the
+performance and growth of small enterprises in emerging markets. We focus on micro, small, and
+medium enterprises since they are often seen as being the most affected by limitations in managerial
+capital and thus have the most potential for scale up if bottlenecks to their growth can be removed. In
+addition, for small businesses run by the owner-manager, it is simple to determine the appropriate
+target for a managerial capital intervention. Our intervention aims to expand the managerial skills of the
+owner-managers by giving them access to subsidized consulting and mentoring services. These services
+were provided by nine local consulting firms, which focus on SMEs, over a one-year period. We worked
+with the government of Puebla, an industrialized state close to Mexico City, to set up the experiment.
+        It is important to note that this intervention, like all skill building experiments which have been
+conducted thus far, is a joint test of two closely related hypotheses: On the one hand we aim to
+
+                                                      2
+establish if managerial capital is a limiting factor in the growth of enterprises. But at the same time, we
+can only find a positive answer if this knowledge can be conveyed via a consulting intervention in the
+first place. It could be that managerial capital is indeed a hindrance to growth, but it might not be
+possible to transfer this knowledge by simply providing consulting services. Therefore, failure to find a
+result here would not prove that managerial capital does not matter, but may simply mean that this
+program was not effective in the transmission of managerial skills (or that managerial skills are innate
+skills and simply not teachable). However, this exercise provides a lower bound on the potential impact
+of improvements in managerial capital, given the limitation of the efficacy of this particular intervention
+to actually improve managerial capital. We set up a randomized control trial in Puebla, Mexico, where
+432 micro, small, and medium sized enterprises applied to receive subsidized consulting services, and
+150 out of the 432 were randomly chosen to receive the treatment. The remaining 282 enterprises
+served as a control group that did not receive any subsidized consulting services. Treatment enterprises
+were matched with one of nine local consulting firms based on the specialized services they needed.
+Enterprises met with their consultants for four hours per week over a one year period. The enterprise
+owner and consulting firm decided jointly on the focus and scope of the consulting services based on a
+first daylong diagnostic consultation between the enterprise and the consulting firm.
+        We measure impacts on the firms and the owners/managers in two different ways: (1) we
+administer a self-reported baseline and a one-year follow-up survey, and (2) we obtain confidential
+government data on employment levels and total wages for the firms in our treatment and control
+groups using five years of annual data (two years prior to three years after the intervention) from the
+Mexican Social Security Institute (IMSS). We find that the consulting intervention had a positive short-
+run impact on the productivity of the enterprises in the treatment group in the one-year follow-up.
+Productivity and return on assets (ROA) both increased by one fifth of a standard deviation, compared
+to the control group. But we do not find an impact on sales, profits, or the number of workers employed
+within the first year. This is consistent with the idea that the impact of improved managerial skills is
+heterogeneous with respect to concrete channels through which the firms improved: for some, the
+impact may have been to increase revenues, for others to lower costs, for others to shed unproductive
+assets. No single channel dominated the sample to be statistically significant, but the comprehensive
+measures of productivity and ROA show positive short-run impacts within the first year.
+        In the longer run, the administrative data, collected from the Mexican Social Security Institute
+(IMSS), reveals important impacts on employment, with a 44% higher number of employees, and a 57%
+higher total wage bill. The point estimates of the positive treatment effects are quite large but we
+
+                                                    3
+believe that they are reasonable given the context of the intervention and the confidence interval: The
+enterprises in our sample were started by people who are not professional managers and many of them
+had not received any formal management training at all prior to our intervention; the majority of the
+firms were relatively small, so adding a single worker would have been a significant increase in
+employment. Furthermore, the confidence interval is quite large, although strictly above zero, i.e., the
+null result of zero is rejected.
+        When looking at the specific managerial improvements by which these changes were brought
+about, we find a variety of dimensions that are mentioned in the surveys but no one strong pattern. Out
+of 11 management practices that we asked about in the surveys, we find only two that are consistently
+mentioned and show statistically significant process changes after the intervention: (1) the likelihood to
+engage in marketing efforts, and (2) the likelihood to keep formal accounts about their firms. However,
+we show that as a whole these changes were important enough that they led to a significant
+improvement in the entrepreneurial spirit for the owners overall: We construct what we call an
+“entrepreneurial spirit ? index from a number of questions we asked owners/managers about their
+confidence in their management skills and their ability to grow their firm and handle difficulties. These
+questions were inspired by the “nexus of control ? literature in psychology.
+        We argue that it is not a great surprise that the intervention did not unearth one specific
+management dimension that all firms needed to improve given the complexity of managerial decisions.
+Instead, each firm seemed to be facing a number of different gaps in their managerial capital; the
+consultants were able to creatively problem solve with the entrepreneurs and find a way to supplement
+the knowledge they needed. To help us put more texture around the specific types of problems that
+were commonly addressed in the consultations, we turn to some qualitative evidence: We provide eight
+detailed narratives of the consulting advice provided to firms, and the perceptions by the owners and
+consultants of the impact of the advice on the businesses. These narratives tell a consistent story of
+complexity: SMEs needed support with a myriad of different problems. Overall, our results confirm that
+lack of managerial capital is a first order constraint for small and mid-sized enterprises. However, there
+is no one silver bullet, i.e., no one single mechanism, that when taught then unleashes growth for the
+enterprises.
+        Research and practice have recently seen a flurry of programs focused on developing
+managerial capital for microenterprises (i.e., enterprises typically with zero employees, or under five at
+the most). The interventions vary widely in the scope of the management skills that are transmitted and
+the type of enterprises that are targeted. The training is typically provided as in-class training, often
+
+                                                    4
+linked with a microcredit program. For example, Karlan and Valdivia (2011) and Cole and Zia (2011)
+evaluate what is best described as in-class programs. These papers show that traditional
+microenterprise training seems to affect the command of accounting practices for microenterprises, but
+has limited to no effects on actual firm outcomes and performance. More recently, Bruhn and Zia (2011)
+and Giné and Mansuri (2011) also find that in-class training for micro entrepreneurs leads to
+improvements in business practices but has only limited effects on business performance and sales.
+Drexler, Fischer, and Schoar (2011) show that training programs for SMEs increase in impact if they are
+targeted to the owner’s level of sophistication: A simple Rule-of-Thumb training has significant impact
+on real outcomes for micro entrepreneurs who have low educational attainment and poor business
+practices prior to the intervention, but not on more advanced businesses.
+        Bloom et al. (2011) is more closely rated to our study in that they evaluate the impact of
+intensive consulting services from an international management consulting firm on the business
+practices of large Indian textile firms. The average firm in their sample has about 270 employees,
+whereas the average number of employees in our study is 14. Bloom et al. find that even these larger
+firms were unaware of many modern management practices, and treated plants improved their
+management practices during the intervention. The approaches of Bloom et al. and this study are
+complementary in nature: Bloom et al. (2011) focuses on a small set of large firms in one industry,
+textile manufacturing, with a tightly defined intervention by a major international consulting firm. Such
+focus provides clear estimates, including mechanisms in terms of business practice changes, of a specific
+management intervention, but it does not allow the authors to test if lack of managerial capital is a
+widespread problem. Our current study includes a larger set of firms and industries (close to 400 firms
+compared to 20 experimental plants in Bloom et al.), and employs a heterogeneous set of local
+consulting firms. Therefore, we are able to establish that managerial capital constraints are important
+for a wider set of small businesses and affect business practices on many dimensions. We can provide
+proof of concept that general increases in managerial capital for small businesses significantly affect firm
+performance and growth. But the tradeoff is that we cannot estimate the returns to one specific
+management intervention, or specific changes in particular business practices.
+        The remainder of this paper is structured as follows: In Section 2, we describe the subsidized
+consulting program. Section 3 discusses the experimental setup, data collection, and characteristics of
+our sample. Section 4 gives the results, examining both business outcomes and business process
+variables. Section 5 asks why more enterprises do not use consulting services, i.e., given these results,
+what are the possible market failures in the consulting services industry? Section 6 concludes.
+
+                                                     5
+2. Consulting Program
+          The randomized control trial was conducted with the Puebla Institute for Competitive
+Productivity (known as IPPC, after its Spanish acronym), a training institute set up by the Ministry of
+Labor of the Mexican State of Puebla. IPPC implemented a business development program to provide
+participating enterprises with subsidized consulting services from one of a number of local consulting
+firms. The program, which started in March 2008 and ended in February 2009, aimed to include 100
+micro, 40 small, and 10 medium-sized enterprises 2 and actually included 108 micro enterprises, 34 small
+enterprises and 8 medium-sized enterprises. The primary goal was to help enterprises reach the next
+size category by the end of the program and thus contribute to job creation and economic growth of the
+region.
+          Consultants were asked to (1) diagnose the problems that prevented the enterprises from
+growing, (2) suggest solutions that would help to solve these problems and (3) assist enterprises in
+implementing the solutions. The consultants dedicated four hours per week to each enterprise. The
+program was originally intended to last two years but ended prematurely after one year due to
+government funding issues (no results from the study had been released when the funding decision was
+made; the decision was not related to perceived performance of the program). Thus the implementation
+phase was shortened.
+          The consulting services were highly subsidized by the State of Puebla. Micro enterprises paid
+only 10 percent of the market cost of the consulting services, small enterprises 20 percent, and medium
+sized enterprises about 30 percent. The unsubsidized cost of the consulting services varied by firm size
+but was equivalent to about US$57 3 per hour on average, amounting to US$11,856 per firm for one year
+(4 hours for 52 weeks).
+          Consulting firms were selected through a competitive bidding process. In response to a call for
+proposals put out by IPPC, eleven consulting firms submitted proposals to participate in the program.
+Two firms were eliminated based on inadequate references from former clients. The majority of the
+participating firms were private local consulting firms that usually work with micro, small, and medium
+sized enterprises. All consulting firms signed a contract with IPPC that required them to spend four
+hours per week with each enterprise. IPPC monitored consultants by requiring consultants and
+
+
+2
+  As defined by the Mexican Ministry of the Economy, micro enterprises have up to 10 full-time employees. Small
+enterprises have between 11 and 50 full-time employees in the manufacturing and services sectors and between
+11 and 30 full-time employees in the commerce sector. Medium size enterprises have up to 100 full-time
+employees in the service and commerce sectors and up to 250 full-time employees in the manufacturing sector.
+3
+  700 Mexican Pesos (MXP)
+
+                                                      6
+enterprises to periodically submit documentation related to the program. Enterprise owners also came
+to IPPC’s offices in person every quarter to pay their share of the program costs, which provided an
+opportunity to voice complaints. In addition, a local project supervisor from Innovations for Poverty
+Action (IPA), who was living in Puebla to manage the project evaluation, conducted monitoring visits to
+program enterprises.
+        At the beginning of the program, principal decision makers from all program enterprises, as well
+as most employees, completed a computerized test that determined their individual strengths and
+talents. This test was based on Gallup’s StrengthFinder method and IPPC was licensed to conduct this
+test in Puebla. IPPC encouraged enterprises to use the results of this test to help assign employees to
+responsibilities based on their strengths as identified by the StrengthFinder method. The consultants
+were trained to help the enterprises interpret and apply the results to their labor decisions. For
+example, one talent was “communication ? whereas another was “operations ?. Employees with the
+communication talent were particularly suited to interacting with clients, while employees with the
+operations talent would do well at record keeping and accounting.
+        Apart from the employee talent diagnostic, the content of the consulting varied across
+enterprises depending on their needs. In order to gain an understanding of the issues that enterprises
+worked on with their mentors, we conducted in-depth, qualitative case studies of eight treatment
+enterprises. Table 1 lists the areas that these eight enterprises covered with their consultants, along
+with the number of enterprises that worked on each topic. Almost all enterprises started by establishing
+mission and vision statements with their consultants, setting specific goals for what they wanted to
+achieve in the future and throughout the program. Most enterprises also worked on improving
+accounting and record keeping (through training and/or use of new software), clearly assigning staff
+responsibilities, and sales strategy and advertising. Apart from these common topics, the remaining
+topics covered are diverse, including optimizing the number and location of points of sale, quality
+control, access to credit or alternative financing solutions, pricing strategy, teamwork and leadership
+training. This reflects the fact that the consultants tailored their advice to each enterprise’s individual
+challenges, leading them to work on different areas with each enterprise.
+
+
+3. Experimental Setup and Data
+        IPPC advertised the program throughout the State of Puebla via business associations, at trade
+fairs, and various media outlets in order to attract an initial sample of interested micro, small, and
+
+
+
+                                                    7
+medium enterprises. 4 The program was open to enterprises that were formally registered with the
+government and were paying taxes. In response to the advertising, 432 enterprises expressed interest in
+the program and signed a letter of interest.
+        Data comes from two sources: first, a baseline and follow-up survey of these interested
+enterprises was conducted between October and December 2007 (baseline) and between March 2009
+and June 2009 (follow-up) 5. These surveys collected information on enterprise characteristics and
+performance, as well as on business practices and characteristics of the enterprise’s principal decision
+maker (typically the owner or manager). Second, from the Mexican Social Security Institute (IMSS), we
+secured wage and employment data for two pre-intervention years (2005 and 2006) and for three post-
+intervention years (2010, 2011, and 2012).
+        Using data from the baseline survey, 150 enterprises were randomly selected to participate in
+the program. 6 The randomization was stratified by sector (manufacturing, services, and commerce) and
+enterprise size (micro, small, and medium-sized) 7, and was conducted through a Stata program that was
+run on the premises of IPPC in the presence of government officials and a public notary, who certified
+that the assignment to the treatment group was random, i.e., not re-run depending on any particular
+assignment.
+
+4
+  We do not have data on the channel through which enterprises learned of the program, and thus cannot test any
+theories of heterogeneity with respect to this.
+5
+  The baseline survey was conducted by a local professional survey firm under the supervision of the Mexico
+country office of IPA. For the follow-up survey, IPA hired surveyors (graduate students and recent graduates)
+directly. IPA trained the surveyors and our local project staff managed and supervised the implementation of the
+follow-up survey.
+6
+  We originally had 434 observations in the randomization and assigned 150 of them to treatment, but we later
+discovered that two firms had expressed interest in the program twice under separate names. For this reason, we
+had to drop two observations, giving us 432 unique firms. In one of the cases, both separate names were in the
+control group, and we dropped one of these. In the other case, one name was assigned to the treatment group
+and the other to the control group. Here, we had to keep the firm in the treatment group since they had already
+been notified that they had been randomly selected to participate in the program.
+7
+  Within strata, we re-randomized as follows. We first allocated firms to the treatment and control group based on
+a randomly generated number. Using this allocation, we then calculated the maximum and the average t-statistics
+on the differences in averages across the treatment and control groups for the following variables: Within Puebla
+City dummy, business age, total asset value, profit margin, measured risk aversion, entrepreneurial spirit index,
+currently has a loan from a financial institution dummy, principal decision maker’s hours worked, principal
+decision maker’s age, principal decision maker’s gender, principal decision maker’s years of schooling, principal
+decision maker is of indigenous background dummy, as well as two dummies indicating whether the firm has
+participated in other IPPC programs. If the maximum t-statistic for these variables was higher than 1.25 or the
+average t-statistic was higher than 0.35, we drew a new random number and allocated firms to the treatment and
+control group based on this new number. We repeated this process until the maximum t-statistic was 1.25 or
+lower and the average t-statistic was 0.35 or lower. Research by Bruhn and McKenzie (2009) that was conducted
+after our randomization finds that this way of re-randomizing is no longer the preferred method. In our data
+analysis, we make the necessary adjustments for the randomization method suggested by Bruhn and McKenzie,
+i.e., in our regressions we control for all variables used in the re-randomization.
+
+                                                        8
+        Out of the 150 enterprises in the treatment group, 80 then took up the consulting services. 8 The
+remaining 70 treatment group enterprises declined to participate in the program although they had
+initially signed a letter of interest saying that they would participate if offered a spot. The take-up rate
+was higher among enterprises in the services and manufacturing sectors (56.6% and 53.5%,
+respectively), compared to enterprises in the commerce sector (48.7%). Most enterprises that chose not
+to participate said their financial situation had changed since they signed the letter of interest and they
+no longer had sufficient funds to pay the fee (albeit subsidized) for the consulting services. IPPC paired
+the 80 treatment group enterprises that took-up the program with consulting firms according to the
+consultants’ sector and enterprise-size expertise, as well as geographic restrictions. Figure 1 includes a
+comprehensive project timeline, illustrating how the dates for data collection, randomization, and
+program implementation line up.
+        Table 2 provides summary statistics of baseline characteristics for enterprises and their principal
+decision makers in the treatment and control groups. About 30% of enterprises in each group operated
+in the manufacturing sector, 25% in the commerce sector, and 45% in the services sector. On average,
+the enterprises in the study had about 14 full-time paid employees and were slightly over 10 years old.
+The enterprises’ principal decision makers were on average 43 years old, 72% of them were men, and on
+average completed 16 years of schooling.
+        Panel C of Table 2 displays our main measures of business performance, starting with sales
+(Appendix 1: Surveys and Data Definitions provides details of the survey questions and definitions). Our
+baseline measure of sales is the average of monthly sales in July, August, and September 2007. 9 This
+variable varies widely in our sample. At baseline, average sales in the treatment group were US$79,163
+with a standard deviation of 288,679, and US$55,258 in the control group, with a standard deviation of
+140,493. To reduce the noise in this variable, we winsorize the top 1% of outliers (i.e., we replace the
+top one percent of sales with the 99th percentile of sales). The averages of winsorized sales are more
+similar across the treatment and control groups (US$66,025 and US$54,923, respectively) than for the
+
+
+8
+  Due to an administrative error, there was also one control group firm that was invited to participate, and did, in
+the program. For analysis purposes, we adhere to the random assignment and this enterprise is included in the
+control group.
+9
+  About 2.5 percent of enterprises report zero sales for all three months (this percentage is not statistically
+different across the treatment and control group). Since these enterprises report having employees, as well as
+assets, and report non-zero hours worked and costs, we assume that they did not want to report their sales and
+thus replaced their sales with missing (it is unlikely that they had zero sales in all three months and are still in
+business). We apply the same procedure to the follow-up data, where about 3.5 percent of both treatment and
+control enterprises report zero sales for all three months (December 2008, January 2009, and February 2009 in the
+follow-up survey). Our measure of sales is thus greater than zero for all enterprises.
+
+                                                         9
+un-winsorized variables, although no differences are statistically significant for either the winsorized or
+un-winsorized data.
+        Our baseline measure of profits is calculated as September 2007 sales minus September 2007
+costs (unlike sales, we only collected costs for one month in the surveys). 10
+        We calculate two separate measures of enterprise productivity. The first is the residual from a
+regression of log sales on log employees and log business assets. The second is return on assets (ROA),
+defined as profits (calculated as sales minus costs) divided by business assets.
+        Similarly to sales, the variances of profits, productivity, and ROA are large. For this reason, we
+include the averages of the 1% winsorized variables in Table 2. We winsorized the top and bottom 1% of
+outliers for profits, productivity, and ROA (unlike sales, profits, productivity, and ROA are not bounded
+below by zero and have negative values, which is why we also winsorized the bottom 1%). After
+winsorizing, average baseline profits are the same in the treatment and control group (about
+US$10,000). Overall, we find no statistically significant differences in business performance variables at
+baseline.
+        Columns 4, 5, and 6 of Table 2 examine whether treatment group enterprises that took-up the
+program were significantly different at baseline from treatment group enterprises that did not take-up
+the program. We find that enterprises that took-up the program are more likely to be in manufacturing,
+have a larger number of employees, are more likely to have male decision makers, and are older. In
+addition, Panel C of Table 2 shows that enterprises that took-up the program were more productive at
+baseline than enterprises that did not take-up the program.
+        We conducted the follow-up survey between March and June 2009 (i.e., one to four months
+after the intervention ended, which is 12-16 months after the intervention began), re-interviewing 378
+enterprises or 88% of the 432 enterprises interviewed at baseline, to measure the impact of the
+consulting services on business outcomes. Out of the 54 enterprises that could not be re-interviewed,
+eleven enterprises were confirmed closed 11, 31 declined to participate in the interview 12 and seven
+enterprises could not be tracked down despite repeated contact attempts. The remaining five
+
+
+10
+   de Mel et al. (2009) suggests asking business owners what their profits are in one simple question as an
+alternative to calculating profits based on responses to specific components. We tried this approach but had a very
+high non-response rate to this question.
+11
+   We verified with the former principal decision maker and/or neighbors that these enterprises had indeed closed.
+The percentage of closed enterprises was lower in the treatment group (1.4%) than in the control group (3.3%).
+However, the difference is not statistically significant.
+12
+   The percentage of enterprises that refused the interview was slightly higher in the control group (8.7%) than in
+the treatment group (5.6%), but the difference is not statistically significant.
+
+                                                        10
+enterprises had merged with another enterprise—one of them with an enterprise outside our sample
+and two with two other enterprises in the sample. For these five enterprises, we were not able to obtain
+separate data for the unit corresponding to the original enterprise, and thus they are not included in the
+analysis. We provide an analysis of attrition rates and correlates with baseline information in Appendix
+Table 1. This analysis shows that there are no differential attrition rates in the follow-up survey across
+treatment and control groups; neither do we see compositional shifts (Column 3) 13.
+        Next, since all enterprises were formally registered with the tax authority, we secured
+administrative employment data (number of employees and total wage bill) from the Mexican Social
+Security Institute (IMSS), the equivalent of the US Social Security Administration. We collected each
+firm’s taxpayer number (RFC) during our baseline and follow-up surveys. Using these RFC numbers, we
+were able to obtain the mean and standard deviation in the treatment and control groups (but not
+individual firm level data) for two years prior to the intervention and three years following.
+        In Mexico, all enterprises are required to register their paid employees with IMSS, but in
+practice, not all enterprises register their workers, even if the enterprise itself is registered with the tax
+authority. Some enterprises also register only a fraction of their paid workers with IMSS. Close to 57% of
+the enterprises in our sample were matched with IMSS records. In addition to under-registration, two
+other potential reasons why enterprises are not found in the IMSS data are that (1) some firms in our
+sample do not have paid employees and (2) some RFC numbers may contain typos, although we tried to
+clean them up as much as possible. The percentage of matched enterprises is not statistically,
+significantly different in the treatment and the control group (58.7% and 56.7%, respectively).
+        We obtained IMSS data for two pre-intervention time periods (June 30, 2005 and June 30,
+2006), as well as three post-intervention time periods (June 30, 2010, June 30, 2011, and June 30, 2012),
+on (1) number of full-time employees, and (2) total daily wage bill paid to these employees. For
+confidentiality reasons, IMSS staff could not share enterprise level data. Instead, they provided averages
+and standard deviations for the treatment and control group. IMSS also provided a list of the firms that
+had successfully been matched with their database. Appendix Table 2 reports attrition analysis for IMSS
+data; we find neither differential attrition for treatment on average (Columns 1 and 2) nor compositional
+changes (Column 3, aggregate p-value of 0.122 for the F-test of joint significance all interaction terms).
+The analysis does suggest though that firms with a higher number of baseline employees are somewhat
+
+13
+  Not all enterprises that answered the follow-up survey responded to each question. For this reason, our business
+outcome variables are missing for part of the sample. We tested whether the likelihood of having missing business
+outcomes variables due to either attrition or non-response differed significantly across the treatment and control
+group and do not find this to be the case.
+
+                                                       11
+more likely to be found in the IMSS data in the control group compared to the treatment group. For this
+reason, average employment in the IMSS data before the intervention, i.e., both in 2005 and 2006, is
+higher in the control group (about 8 full-time employees) than in the treatment group (6.2 full-time
+employees).
+
+
+4. Results and Discussion
+        Table 3 reports the main specification, using OLS to compare treatment to control in the cross-
+section. All regressions include controls for the variables used for stratification (both the strata dummies
+as well as the re-randomization variables 14 as suggested in Bruhn and McKenzie (2009), and a control for
+the timing of the survey 15). In Column 1 we estimate the average intent to treat effect without
+controlling for the baseline value of the outcome variable, and in Column 2 we report the average intent
+to treat effect with controlling for the baseline value of the outcome variable. For observations where
+the baseline value of the outcome is missing, we replace this value with zero and include a dummy
+variable indicating that the value is missing, in order to keep the observation in the sample.
+
+
+4.1 Business Performance, Short Run and Long Run
+        Table 3 Columns 1 and 2 both show no short-term significant treatment effect on employment,
+sales, or profits. However, the results suggest that the consulting improved enterprise productivity as
+measured by the residual from a productivity regression and also as measured by return on assets
+(ROA), by about one fifth of a standard deviation for both measures (s.e. = 0.11 standard deviations and
+0.13 standard deviations, respectively). We performed three robustness checks of the results, which are
+reported in Appendix Tables 4, 5, and 6. First, we winsorized the outcome variables at the 1% and 5%
+levels to check whether the results are driven by outliers (Appendix Table 4). Second, we run all
+regressions only on the sample of 221 enterprises that report all outcomes variables at follow-up
+(Appendix Table 5). Third, we estimate a difference-in-difference specification, rather than a cross-
+sectional specification (Appendix Table 6). The robustness checks show very similar results to the ones
+
+14
+   Due to baseline data entry typos that were discovered and corrected after the randomization took place, a few
+values of the variables included in the randomization procedure do not correspond to the true baseline values. The
+strata dummies and re-randomization controls included in the regressions contain the values originally used in the
+randomization procedure. All other baseline data used in the summary statistics and regressions contains the
+correct baseline values.
+15
+   Appendix Table 3 shows that 70.4% of treatment group enterprises and 62.6% of control group enterprises were
+interviewed in March (p=0.12). Almost all of remaining enterprises were interviewed in April 2009 or May 2009,
+with only four enterprises being interviewed in June 2009. Treatment and control enterprises are equally likely to
+have been interviewed either in March or April (percentage point difference of 1.3 and p-value of 0.66).
+
+                                                       12
+reported in Table 3 16. In results not shown, we also found the results are not heterogeneous with
+respect to size of firm, however, statistical power is limited for this test.
+        One concern with the outcome data from the follow-up survey is that since the information is
+self-reported, treatment enterprises could have reported more positive outcomes to please the
+surveyors (for transparency reasons, enterprises were informed that the survey was linked to the
+consulting program). To address this concern, we test whether (1) treatment enterprises were more
+likely to provide alternative contact persons on the survey 17, and (2) treatment enterprises were less
+likely to not report sales on the follow-up survey, which should be the case if they wanted to please the
+interviewer. Appendix Table 8 displays the results for these tests. We find no significant differences in
+both measures across the treatment and control group, although we recognize that these are not
+dispositive tests.
+        Table 4 reports the long run impact on employment. As discussed above, for privacy reasons we
+do not have individual firm data, but rather just average number of employees and average wage bill for
+five years, separately for our treatment and control groups. Having administrative records rather than
+self-reported firm data we consider to be a major advantage and reconfirmation of our results. Given
+the five years of data, we use a difference-in-difference specification, with the treatment effect being
+identified by the interaction of treatment and post. We find an increase of 4.4 employees (s.e. = 1.7),
+which corresponds to 44% (average number of employees in the control group is 10.1 in the three post
+years), and an increase of US$99 in the daily wage bill (s.e. = $44), which is 57% (average daily wage bill
+in the control group is $172 in the three post years).
+        Figures 2 and 3 illustrate these results graphically. They show that both the average number of
+employees and the daily wage bill were similar across the treatment and control groups before the
+consulting program was implemented (in 2005 and 2006). Two to three years after the program (in 2011
+and 2012), the average number of employees and the average daily wage bill were about 45 and 55
+percent higher in the treatment group than in the control group, respectively.
+
+
+16
+   As an additional check, Appendix Table 7 displays average business outcomes from the follow-up survey in the
+treatment and control group, as well as in the group of treatment enterprises that took up the program. A simple
+comparison of follow-up survey means in the treatment and control group shows a positive effect of the consulting
+services on productivity. Comparing only enterprises that took up the program to control group enterprises shows
+even larger differences in both productivity and return on assets (this comparison is not causal, and in particular
+note that at baseline the enterprises that took-up the program already had higher productivity and return on
+assets than enterprises that did not take-up the program, as shown in Table 2).
+17
+   We asked for alternative contact persons in case we needed to get in touch with the enterprises at a later stage
+for clarifications or additional questions and could not reach the enterprise through our contact information on
+record.
+
+                                                        13
+        A caveat here is that when we compare number of full-time employees from the IMSS data to
+our follow-up survey data, the IMSS numbers are lower, suggesting that the enterprises in our sample
+did not register all their employees with IMSS (the follow-up survey suggests that our enterprises had
+about 15 full-time paid employees in 2009, and 2010 IMSS data shows about 10 employees). The
+increase in number of employees in the IMSS data could thus reflect more employees being registered
+instead of more employees being hired (this still is a desirable outcome though from a societal
+perspective). However, given that the increase in employees recorded in the IMSS data is long term, not
+merely a short-term increase after the training, it appears to be a genuine increase in actual
+employment at these firms.
+        Not all of the firms in our sample were found in IMSS records, so that the results in Table 4 are
+based on about 57 percent of our sample. To assess whether there are important compositional changes
+that influence our key results, Appendix Table 9 reports the main specifications for impact as measured
+by the follow-up survey, but restricted to the sample of firms for which we have IMSS data. The results
+are similar.
+
+
+4.2 Process Variables
+        In order to investigate the channels that drive the observed treatment effects, we now study
+how the consulting program changed processes within the enterprise. We measure these processes as
+follows. First, the surveys asked enterprise owners whether or not they implemented certain changes
+during the past year, such as developing new products, attracting new investors, and launching a new
+marketing campaign. Note that if treatment enterprises believed they should please the program by
+reporting process changes that did not actually occur, these estimates will be upwardly biased.
+        Table 5 displays the treatment effects on business process variables. We start with an all-
+encompassing standardized index, calculated as per Kling et al. (2007), and are not able to reject the null
+hypothesis of no change (0.072 standard deviation, s.e. = 0.104). We only find statistically significant
+improvements in two processes: made a new marketing effort (13 percentage points increase, s.e. = 5.5
+percentage points) and the percent of enterprises that keep formal accounts (7 percentage points
+increase, s.e. = 3 percentage points, where “formal ? is defined as using either an accountant or a
+computerized system as opposed to keeping handwritten records or no notes at all). The finding that the
+program increased marketing efforts and the use of formal accounting practices is consistent with the
+case study evidence mentioned above, which suggests that many enterprises worked with their mentors
+on accounting and record keeping, as well as sales strategy and advertising.
+
+                                                    14
+        Other processes examined, such as registering a patent, developing new products, or attracting
+new investors, do not appear to be changed significantly. These could be more difficult to detect since
+they are more heterogeneous across enterprises, or require a longer time to change than is observable
+in the treatment period. To measure human resource management practices, we created an index using
+Principle Component Analysis (PCA) based on the six questions listed in Appendix 1 18. We are not able to
+reject the null hypothesis of no effect on this index (-0.062, s.e. = 0.152). In summary, since the content
+of the consulting was tailored to each firm’s needs it is perhaps not surprising that we do not see
+improvements in most individual processes, nor the collection on average.
+
+
+4.3 Entrepreneurial Spirit
+        We constructed an entrepreneurial spirit index, developed in collaboration with IPPC. This index
+is based on the answers to the eight questions listed in Appendix 1, which intend to capture
+entrepreneurial attitudes of the principal decision maker, and is generated using PCA, and then a
+standardized index using the Kling et al. (2007) method. Thus the indices are a combined measure of
+answers to a set of questions on the enterprise owner’s beliefs about their ability to control the success
+of their business (or whether they are merely subject to external forces outside of their control) and on
+the owner’s drive for success.
+        Table 6 reports the results. We find a positive and statistically significant impact using the PCA
+method (0.237, s.e. = 0.140) and positive but not statistically significant impact using the Kling et al.
+method (0.130 standard deviation increase, s.e. = 0.103). The increase in this index might reflect the fact
+that enterprise owners set new goals as part of the program and that consultants helped to provide
+motivation and strategy for how to achieve these goals. In addition, enterprise owners’ increased
+confidence in their ability to control the success of their business could be driven by having better
+command of management tools such as marketing and bookkeeping.
+        We cannot distinguish whether the training had a direct effect on entrepreneurial spirit (e.g.,
+enterprise owners set new goals as part of the program and that consultants helped to provide
+motivation and strategy for how to achieve these goals), or whether the improvements in the business
+that led to higher productivity then improved the spirit of the entrepreneurs. Two of the questions used
+
+
+18
+  All PCA indices in this paper were created in Stata using the “pca ? command. This command computes the
+leading eigenvectors from the eigen decomposition of the covariance matrix of the variables used to create the
+index. We choose the first eigenvector as our PCA index. In other words, the PCA index is a weighted linear
+combination of the underlying variables, where the weights are optimal in the sense that they give the index the
+largest possible variance.
+
+                                                        15
+to construct the index we believe are particularly subject to this second interpretation (Questions d and
+e in Appendix 1). As a robustness check, we construct the index without these two questions, and the
+results do not change.
+
+
+4.4 Response to Economic Shocks
+        The program could have also improved enterprise performance by helping enterprises to better
+cope with the 2008 economic crisis. In the follow-up survey, about 89% of enterprises—both in the
+treatment and control group—reported that they had been affected by the crisis. We asked these
+enterprises what changes they made in response to the crisis. Table 7 reports the answers to these
+questions and examines whether the responses differed across the treatment and control groups. The
+results show that treatment enterprises are eight percentage points (s.e. = 4 percentage points) less
+likely than control enterprises to report that they had to cut production in response to the crisis. The
+ability to weather shocks more effectively could be a result of being able to more proactively engage in
+marketing activities and better control finances, as shown in the previous section. Enterprises that are
+less well trained in these skills might experience economic shocks more passively and do not have tools
+to counteract a shortfall in demand.
+        Other changes in response to the crisis were not statistically significant across the treatment and
+control groups, but one of magnitude (but not statistical significance) to note is a positive impact on
+seeking government assistance (a 5.6 percentage points increase, s.e. = 4.4 percentage points, relative
+to an average of 12.8% in the control group). For enterprises that reported seeking government
+assistance, we asked which program or agency they contacted and most answers indicated state or
+federal programs that provide funding or subsidies to micro, small, and medium sized enterprises.
+
+
+5. Cost-Effectiveness: Why Don’t More Enterprises Use Consulting Services?
+        Given the large increases in productivity, and eventual growth in employees, we ask why more
+firms do not use consulting services. In particular, a cost-effectiveness calculation suggests that the
+returns to hiring a consultant may be well worth the cost. The measured effect of the program on the
+daily wage bill of U$99 implies an increase in the annual wage bill of US$99 x 365 = US$36,135. The
+annual cost of the consulting services was US$11,856. Since the program was highly subsidized,
+participating enterprises only had to pay between 10% and 30% of this cost (depending on firm size).
+Among the enterprises in the treatment group, only 53% chose to participate in the subsidized
+consulting program once offered a spot. Although we do not attempt to translate the job growth to firm
+
+                                                    16
+profits, given the relative magnitude, we note that the annual return on labor to the firm need not be
+very high in order to justify the one-time consulting expenditure.
+        Several issues may hinder the market for consulting services. First, there may be no failure at all:
+those who opt-in may be the ones who can benefit, and those who do not opt-in would not benefit.
+Naturally we do not observe what the impact would have been on those who do not opt-in, but given
+the large increase in productivity and long term employment on simply the intent-to-treat, there seems
+to remain a failure for those who did opt-in, in that they had not taken-up the services before, even at
+the unsubsidized rate. It is important to emphasize that all enterprises in our study had initially
+expressed interest in the subsidized consulting program, and that their views are thus not
+representative of enterprises that do not have a pre-existing interest in consulting services. It could be
+that firms expressed an interest, learned more about the service, and then decided that this was unlikely
+to yield profitable results for them, and thus failure to take-up remains a rational and correct decision.
+        Second, there may be a credit market failure. In fact, most of the enterprises in the treatment
+group that declined participation in the program once offered a spot gave liquidity constraints as the
+reason. However, this does not fully satisfy the question: Why do we not observe consulting firms
+accepting delayed payment or working with financial services firms to provide credit to cover their
+services? Either way, it suggests a credit market failure is the source of the problem for some
+enterprises. This may be particularly relevant given the timing of the impacts, i.e., in the short run we do
+not observe higher profits but rather increased productivity. It is not until the long run that we see
+evidence of likely increase in firm size that could be useful for generating liquidity to pay for consulting
+services.
+        Third, entrepreneurs may be risk- or ambiguity-averse with respect to the potential returns from
+hiring a consultant. This could be perpetuated by lack of information in the market on the returns to
+consulting advice (and which consulting firms have difficulty credibly signaling).
+        To examine this issue, in the follow-up survey we included some qualitative questions for the
+control group on whether they were using any consulting or mentoring services, and if not, why not.
+About 21% of control group enterprises said that they were indeed using some services and provided
+the name of the consulting firm they were using. Examining these names reveals that only about half of
+these firms offer management consulting services similar to the consulting firms that worked with the
+treatment group enterprises. The other firms mentioned by the control group provide specialized
+services, such as accounting or technical assistance. Overall, the incidence of using management
+consulting services in the control group appears to be around 10%. Table 8 lists the self-reported
+
+                                                    17
+reasons why control group enterprises do not use consulting services. By far, the most frequently
+mentioned reason is lack of funds (46.3% of enterprises mention this reason), followed by uncertainty
+about the benefits of consulting services (22.2%), and simply not having considered hiring a consultant
+(18.5%). The response could be genuine disinterest in consulting services or ambiguity about a service
+whose quality is not assured. Our findings indicate that management consulting services can have high
+returns for micro, small, and medium enterprises, and we consider funding constraints and uncertainty
+about the benefits to be the most likely explanations for the lack of market transactions in consulting
+services.
+
+
+6. Discussion and Conclusion
+         Our results suggest that lack of managerial skills constitutes a significant constraint to firm
+growth and the ability of micro, small, and medium enterprises to withstand economic shocks. The
+documented effects of the experiment on productivity and return on assets in the short run, and
+employment in the long run, are large. However, the short run impact on productivity and return on
+assets, albeit significant at standard 10% levels, is similar to smaller point estimates from other studies.
+Thus, while we believe the magnitude of the impact is not unreasonable given that many enterprises in
+the sample had not received any formal management training prior to our intervention, we note that
+the confidence intervals exclude zero but also include fairly small but positive treatment effects.
+         The improvements seem to be most focused around improvements in marketing and financial
+controls. Consultants also appear to have helped enterprises to set clear goals and define a strategy for
+how to achieve these goals. We see that the overall “entrepreneurial spirit ? of confidence of the owners
+increases significantly as a result of the intervention. However, the evidence on any one specific
+mechanism is weak, with most individual dimensions of management practices not showing any
+significant impact. Although it would be desirable to identify specific mechanisms, we conjecture that
+such a one size fits all solution is not realistic. 19
+         Overall, our results confirm that managerial inputs have a large and important impact on firm
+performance and even hiring decisions in the intermediate run. However, there is still much to learn
+about the way this information affects firm performance as a whole, and more specifically, how it
+interacts with the marginal productivity of inputs such as labor and capital. In addition, while there may
+
+19
+  A study that separately taught or tackled one type of problem at a time is likely an unrealistic method for
+conducting randomized trials, as it would require massive sample sizes to tease out each mechanism separately.
+Even then, the external validity of any one discovered magic mechanism would be at risk of being context specific
+(e.g., to that particular regulatory, industry, macroeconomic, political, or natural resource environment).
+
+                                                         18
+be a lot of heterogeneity in effects, our sample is not large enough to allow us to look at all the firm
+level interactions that might be of interest, such as the competitive nature of the industry and sector;
+the age and gender of the owner; and the owner’s ambition level, risk taking ability, or general skill
+levels. We believe this is a critical area for further research.
+
+
+
+
+References
+
+Banerjee, Abhijit, Esther Duflo, Rachel Glennerster, and Cynthia Kinnan. 2009. “The Miracle of
+         Microfinance? Evidence from a Randomized Evaluation ?. Working paper.
+Bennedsen, Morten, Kasper Meisner Nielsen, Francisco Perez-Gonzalez, and Daniel Wolfenzon. 2007.
+         “Inside the Family Firm: The Role of Families in Succession Decisions and Performance. ?
+         Quarterly Journal of Economics 122 (2): 647–691.
+Bertrand, Marianne, and Antoinette Schoar. 2003. “Managing with Style: The Effect of Managers on
+         Firm Policies. ? Quarterly Journal of Economics 118 (4): 1169–1208.
+Bloom, Nicholas, Benn Eifert, Aprajit Mahajan, David McKenzie, and John Roberts. 2011. “Does
+         Management Matter? Evidence From India. ? World Bank Policy Research Working Paper No.
+         5573.
+Bloom, Nicholas, and John Van Reenen. 2007. “Measuring and Explaining Management Practices Across
+         Firms and Countries. ? Quarterly Journal of Economics 122 (4): 1341–1408.
+———. 2010. “Why Do Management Practices Differ Across Firms and Countries? ? Journal of Economic
+         Perspectives 24 (1): 203–224.
+Bruhn, Miriam, Dean Karlan, and Antoinette Schoar. 2010. “What Capital Is Missing in Developing
+         Countries? ? American Economic Review 100 (2) (May): 629–633. doi:10.1257/aer.100.2.629.
+Bruhn, Miriam, and David McKenzie. 2009. “In Pursuit of Balance: Randomization in Practice in
+         Development Field Experiments. ? American Economic Journal: Applied Economics 1 (4): 200–
+         232.
+Bruhn, Miriam, and Bilal Zia. 2011. “Stimulating Managerial Capital in Emerging Markets: The Impact of
+         Business and Financial Literacy for Young Entrepreneurs. ? World Bank Policy Research Working
+         Paper No. 5642.
+Caselli, Francesco, and Nicola Gennaioli. 2005. “Dynastic Management. ? Economic Inquiry, Forthcoming.
+Cole, Shawn, Thomas Sampson, and Bilal Zia. 2011. “Prices or Knowledge? What Drives Demand for
+         Financial Services in Emerging Markets? ? Journal of Finance 66 (6): 1933–1967.
+Gine, Xavier, and Ghazala Mansuri. 2011. “Money or Ideas? A Field Experiment on Constraints to
+         Entrepreneurship in Rural Pakistan. ?
+Gompers, Paul, Josh Lerner, and David Scharfstein. 2005. “Entrepreneurial Spawning: Public
+         Corporations and the Genesis of New Ventures, 1986 to 1999. ? Journal of Finance 60 (2): 577–
+         614.
+Karlan, Dean, Isaac Osei-Akoto, Robert Darko Osei, and Christopher R. Udry. 2012. “Agricultural
+         Decisions After Relaxing Credit and Risk Constraints. ? Yale University Economic Growth Center
+         Working Paper. doi:10.2139/ssrn.2169548. http://www.ssrn.com/abstract=2169548.
+Karlan, Dean, and Martin Valdivia. 2011. “Teaching Entrepreneurship: Impact of Business Training on
+         Microfinance Clients and Institutions. ? Review of Economics and Statistics 93 (2): 510–527.
+
+
+                                                       19
+Karlan, Dean, and Jonathan Zinman. 2011. “Microcredit in Theory and Practice: Using Randomized Credit
+         Scoring for Impact Evaluation. ? Science 332 (6035) (June 10): 1278–1284.
+King, R. G., and R. Levine. 1993. “Finance and Growth: Schumpeter Might Be Right. ? The Quarterly
+         Journal of Economics 108 (3) (August 1): 717–737. doi:10.2307/2118406.
+Kling, Jeffrey, Jeffrey Liebman, and Lawrence Katz. 2007. “Experimental Analysis of Neighborhood
+         Effects. ? Econometrica 75 (1) (January): 83–120.
+de Mel, Suresh, David J. McKenzie, and Christopher Woodruff. 2009. “Measuring Microenterprise
+         Profits: Must We Ask How the Sausage Is Made? ? Journal of Development Economics 88 (1)
+         (January): 19–31. doi:10.1016/j.jdeveco.2008.01.007.
+de Mel, Suresh, David McKenzie, and Christopher Woodruff. 2008. “Returns to Capital in
+         Microenterprises: Evidence from a Field Experiment. ? Quarterly Journal of Economics 123 (4):
+         1329–1372.
+Rajan, Raghuram, and Luigi Zingales. 1998. “Financial Dependence and Growth. ? American Economic
+         Review 88 (3): 559–586.
+
+
+
+
+                                                 20
+                                                           Figure 1: Timeline
+
+
+
+
+        Figure 2: Average Number of Employees in the Treatment and Control Group over Time
+                                      (Administrative Data)
+                                     16
+                                                                       Program implementation
+
+
+
+
+                                     14
+               Nubmer of employees
+
+
+
+
+                                     12
+                                     10
+                                      8
+                                      6
+                                      4
+                                      2
+                                      0
+                                          2005   2006    2007    2008                           2009   2010     2011      2012
+                                                                                 Year
+
+                                             Treatment group average                              Control group average
+
+Source: Administrative data on from the Mexican Social Security Institute (IMSS). Includes only the 253 firms
+in our sample that were found in IMSS records (89 treatment group firms and 164 control group firms).
+
+
+
+
+                                                                   21
+        Figure 3: Average Daily Wage Bill (USD) in the Treatment and Control Group over Time
+                                        (Administrative Data)
+                                       350
+
+
+
+
+                                                                           Program implementation
+                                       300
+               Daily wage bill (USD)   250
+                                       200
+                                       150
+                                       100
+                                       50
+                                        0
+                                              2005    2006    2007    2008                          2009   2010    2011      2012
+                                                                                      Year
+
+                                                 Treatment group average                             Control group average
+
+Source: Administrative data on from the Mexican Social Security Institute (IMSS). Includes only the 253 firms
+in our sample that were found in IMSS records (89 treatment group firms and 164 control group firms).
+
+
+
+
+                                             Table 1: Topics that Firms Worked on with Their Consultant
+                                              Based on Eight Qualitative Case Studies of Treated Firms
+ Topic                                                                                                            # of firms that covered this topic
+ Define mission and vision statements                                                                                              6
+ Accounting and record keeping (training and/or new software)                                                                      5
+ Clarify organizational structure, clearly assign responsibilities                                                                 5
+ Sales strategy and advertising (marketing)                                                                                        4
+ Strategically select location and number of sales points                                                                          2
+ Quality control                                                                                                                   2
+ Access to credit or alternative financing solutions                                                                               2
+ Human resources management and hiring practices                                                                                   2
+ Mediate family problems in family firms                                                                                           1
+ Pricing strategy                                                                                                                  1
+ Reduce costs (negotiate with suppliers, find alternative suppliers)                                                               1
+ Figure out which products are most profitable and focus on these                                                                  1
+ Team work and communications training for employees                                                                               1
+ Leadership training for firm owners                                                                                               1
+
+
+
+
+                                                                       22
+                                    Table 2: Baseline Summary Statistics and Take-Up Analysis
+                                                  Mean and Standard Deviations
+
+                                                                         Orthogonality
+                                                                          Verification
+                                                                             (1)-(2)                              (4)-(5)
+                                                                          Difference                 Did Not    Difference
+                                               Treatment      Control      (p-value)      Took-up    Take-up    (std. err.)
+Panel A: Stratification variables                  (1)          (2)            (3)           (4)        (5)         (6)
+Manufacturing sector dummy                        0.300        0.323         -0.023         0.363      0.229      0.134*
+                                                 (0.460)      (0.468)       (0.630)        (0.484)    (0.423)    (0.075)
+Commerce sector dummy                             0.253        0.230          0.023         0.225      0.286      -0.061
+                                                 (0.436)      (0.422)       (0.597)        (0.420)    (0.455)    (0.397)
+Services sector dummy                             0.447        0.447          0.000         0.413      0.486      -0.073
+                                                 (0.499)      (0.498)       (0.998)        (0.495)    (0.503)    (0.372)
+Full-time paid employees                         14.400       13.684          0.716        18.825      9.343      9.482*
+                                                (30.887)     (31.479)       (0.821)       (36.288)   (22.444)    (0.060)
+Panel B: Re-randomization variables
+Principal decision maker's age (years)           42.561       42.876         -0.315        42.443     42.696      -0.253
+                                                (10.212)      (9.878)       (0.756)        (9.540)   (10.999)    (0.881)
+Male principal decision maker dummy               0.727        0.720          0.007         0.800      0.643     0.157**
+                                                 (0.447)      (0.450)       (0.881)        (0.403)    (0.483)    (0.031)
+Principal decision maker's yrs of schooling      15.630       15.932         -0.302        16.138     15.050       1.088
+                                                 (4.919)      (5.196)       (0.559)        (4.472)    (5.358)    (0.177)
+Business age (years)                             11.053       13.652         -2.599        12.825      9.029     3.796**
+                                                (10.330)     (28.120)       (0.275)       (11.501)    (8.437)    (0.024)
+N                                                  150          282            432           80         70          150
+Note: Columns 1, 2, 4 and 5 present means and standard deviations (in parentheses). Column 3 shows the difference in
+means across the treatment and control group with the corresponding p-value in parentheses. Column 6 shows the
+difference in means across treatment enterprises that did and did not take-up the program with the corresponding p-value
+in parentheses. Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+
+                                                               23
+                          Table 2: Baseline Summary Statistics and Take-Up Analysis (continued)
+                                              Mean and Standard Deviations
+
+                                                                 Orthogonality
+                                                                  Verification
+                                                                      (1)-(2)                       Did Not       (4)-(5)
+                                                                   Difference       Took-up         Take-up     Difference
+Panel C: Other variables           Treatment         Control        (p-value)      Treatment       Treatment    (std. err.)
+- Business outcomes                     (1)             (2)             (3)            (4)              (5)         (6)
+Avg. sales Jul, Aug, and Sep 2007    79.163          55.258          23.905         105.916          48.260       57.656
+(1000s USD)                        (288.679)       (140.493)         (0.286)       (349.912)       (194.184)     (0.267)
+Avg. sales Jul, Aug, and Sep 2007    66.025          54.923          11.102          84.114          45.129       38.985
+(1000s USD), 1% winsorized         (188.367)       (137.581)         (0.520)       (200.838)       (172.209)     (0.250)
+Sep 2007 costs (1000s USD)           44.565          56.216          -11.651         58.736          26.974       31.762
+                                   (120.341)       (263.955)         (0.633)       (145.907)        (75.425)     (0.135)
+Sep 2007 costs (1000s USD),          44.275          40.049           4.226          58.212          26.974       31.238
+                                   (118.714)        (95.965)         (0.709)       (143.516)        (75.425)     (0.136)
+Profits (Sep 2007 sales minus        13.281           -3.797         17.078           8.375          19.365      -10.991
+costs, 1000s USD)                  (112.277)       (204.743)         (0.411)        (87.198)       (137.923)     (0.609)
+Profits (Sep 2007 sales minus        10.220          10.156           0.064          11.144            9.075      2.069
+costs, 1000s USD), 1% winsorized    (74.720)        (75.010)         (0.994)        (72.355)        (78.279)     (0.885)
+Business assets (1000s USD),        296.964         945.842         -648.879        341.570         246.574       94.996
+1% winsorized                      (767.969)      (7822.005)         (0.376)       (779.399)       (758.949)     (0.510)
+Business assets (1000s USD),        295.337         331.749          -36.412        338.505         246.574       91.931
+1% winsorized                      (756.984)       (770.078)         (0.685)       (758.886)       (758.949)     (0.518)
+Productivity residual                  0.028          -0.016          0.045           0.439           -0.437    0.876***
+                                     (1.349)         (1.253)         (0.787)         (1.477)         (1.017)     (0.001)
+Productivity residual,                 0.031          -0.015          0.046           0.444           -0.437    0.881***
+1% winsorized                        (1.317)         (1.239)         (0.776)         (1.419)         (1.017)     (0.001)
+Return on assets (ROA)                -0.026          0.152           -0.178          0.160           -0.254     0.414**
+                                     (0.956)         (0.817)         (0.120)         (0.366)         (1.342)     (0.042)
+Return on assets (ROA),                0.033          0.118           -0.085          0.160           -0.121     0.281**
+ 1% winsorized                       (0.596)         (0.640)         (0.305)         (0.366)         (0.770)     (0.026)
+N                                       150            282             432             80               70          150
+Note: Columns 1, 2, 4 and 5 present means and standard deviations (in parentheses). Column 3 shows the difference in
+means across the treatment and control group with the corresponding p-value in parentheses. Column 6 shows the
+difference in means across treatment enterprises that did and did not take-up the program with the corresponding p-value
+in parentheses. For the 1% winsorized variables, sales, costs, and assets are only winsorized at the top 1% since they are
+bounded below by zero. All other variables are winsorized at the top and bottom 1%. Significance levels: *10 percent, **5
+percent, ***1 percent.
+
+
+
+
+                                                            24
+               Table 3: ITT Treatment Effect Estimates, Short-Run Business Outcomes
+                                                 OLS
+                                                                                            Control
+                                                                      ITT treatment          group
+                                                                     effect estimates        mean
+Outcome variable                                                                          (std. dev.)
+                                                                        (1)     (2)            (3)
+Full-time paid employees                                               1.475  0.516         12.428
+                                                                     (1.421) (1.260)       (22.281)
+                                                                        378    378             243
+Avg. sales Dec 2008, Jan and Feb 2009 (1000s USD)                     -5.108 -11.886        63.384
+                                                                    (15.452) (10.876)     (163.643)
+                                                                        307    307             200
+Log (Avg. sales Dec 2008, Jan and Feb 2009 in 1000s USD)               0.006  0.050           2.391
+                                                                     (0.175) (0.144)        (2.023)
+                                                                        307    307             200
+Feb 2009 costs (1000s USD)                                             5.525  5.657         43.157
+                                                                    (14.694) (14.551)     (113.758)
+                                                                        304    304             204
+Profits (Feb 2009 sales minus costs, 1000s USD)                        5.802  5.330         11.460
+                                                                     (5.831) (5.705)       (97.044)
+                                                                        265    265             176
+Log (business assets)                                                 -0.055  -0.106          4.307
+                                                                     (0.176) (0.157)        (1.699)
+                                                                        319    319             203
+Productivity residual                                                0.270*   0.250*         -0.095
+ Residual from regression of log Feb 2009 sales                      (0.141) (0.130)        (1.272)
+ on log employees and log business assets                               250    250             174
+Return on assets (ROA)                                               0.105*   0.098           0.012
+ Feb 2009 sales minus costs divided by assets                        (0.060) (0.064)        (0.471)
+                                                                        236    236             154
+Controls for baseline value of outcome                                  No      Yes             -
+
+Note: Each row in Columns 1 and 2 contains the treatment effect point estimate, robust standard
+error, and number of observations, for a separate OLS estimation. For the regressions that control
+for the outcome variable measured at baseline (Column 2), when the baseline outcome variable is
+missing, the missing value is filled-in with zero and a dummy variable indicating that the baseline
+observation is missing is added to the model. All regressions include controls for strata dummies and
+re-randomization variables, as well as a dummy for having been surveyed in March 2009 (vs. April,
+May or June) at follow-up. Column 3 contains means and standard deviations for the control group
+at follow-up. Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+
+                                                  25
+                          Table 4: ITT Treatment Effect Estimates, Long-Run Business Outcomes
+                                              Difference-in-Difference OLS
+Panel A: ITT Regression results                                        Outcome Variable
+                                                    Number of employees                 Daily wage bill (USD)
+                                                (1)         (2)          (3)        (4)         (5)            (6)
+Treatment*Post                                                        4.429**                                98.74*
+                                                                      (1.686)                               (43.594)
+Treatment (=1 if mean is for treatment group)                        -1.766**                              -30.602**
+                                                                      (0.540)                               (10.379)
+Post (=1 for years 2010, 2011, and 2012)                             2.148***                               35.191**
+                                                                      (0.541)                               (10.182)
+                                                                        7.991***
+Constant                                                                                                       136.76***
+                                                                         (0.537)                                (7.251)
+Number of observations                                                     10                                     10
+                                            Treatment       Control                 Treatment      Control
+                                               Mean          Mean      Difference      Mean         Mean       Difference
+Panel B: Raw data                            (Std Dev)     (Std Dev)    (P-value)    (Std Dev)    (Std Dev)     (P-value)
+
+2005                                          6.169         7.402         -1.234       98.02       128.81         -30.79
+                                             (13.226)      (16.490)      (0.544)     (154.126)    (248.604)      (0.289)
+2006                                          6.281         8.579         -2.298      114.29       144.70         -30.41
+                                             (11.865)      (18.853)      (0.298)     (159.164)    (293.049)      (0.365)
+2010                                          9.787         10.262        -0.476      162.98       161.89          1.09
+                                             (35.958)      (21.181)      (0.895)     (353.039)    (311.735)      (0.980)
+2011                                          14.067        10.098        3.970       263.02       169.10         93.92
+                                             (66.707)      (19.916)      (0.480)     (717.155)    (321.992)      (0.153)
+2012                                          14.551        10.055        4.496       294.252      184.856       109.40
+                                             (67.984)      (20.668)      (0.434)     (798.781)    (343.924)      (0.131)
+Number of enterprises                           89           164           253          89           164           253
+
+Note: Administrative data from Mexico's Social Security Institute (IMSS) for years 2005, 2006, 2010, 2011, and 2012. All
+enterprises are required by law to register their workers with IMSS (although compliance is not universal). 57% of the
+enterprises in our sample were found in IMSS records. Both number of employees and daily wage bill refer to permanent
+employees with pay. Column 3 in Panel A displays the results from a regression of mean number of employees on a
+dummy for the mean being for the treatment group, a dummy for the post-consulting intervention period, and the
+interaction of these two dummies. Column 6 in Panel A shows results for the corresponding regression with the mean
+daily wage bill as the outcome variable. Panel B displays the raw data, where the means in Columns 1, 2, 4, and 5 are the
+observations used in the regressions in Panel A.
+
+
+
+
+                                                           26
+                           Table 5: ITT Treatment Effect Estimates, Business Processes
+                                                       OLS
+                                                                                                Control group
+                                                      ITT Treatment Effect
+                                                                               Observations         mean
+                                                            Estimates
+Outcome variable                                                                                 (std. dev.)
+                                                        (1)         (2)            (3)                 (4)
+                                                       0.072       0.035           378               -0.036
+Index of all process measures listed below
+                                                      (0.104)     (0.098)                           (0.975)
+
+Index components
+Developed new products during last year dummy          -0.048      -0.046          378               0.531
+                                                      (0.055)     (0.053)                           (0.500)
+Attracted new clients during last year dummy           -0.020      -0.033          376               0.789
+                                                      (0.046)     (0.045)                           (0.409)
+Implemented new process during last year dummy         -0.062      -0.070          378               0.617
+                                                      (0.053)     (0.052)                           (0.487)
+Attracted new investors during last year dummy          0.027      0.024           378               0.074
+                                                      (0.032)     (0.031)                           (0.262)
+Began process to register a patent during last year     0.045                      376               0.079
+dummy                                                 (0.034)                                       (0.270)
+Began certification process for an international       -0.024                      378               0.156
+standard (e.g. ISO)                                   (0.035)                                       (0.364)
+Made new marketing effort during last year            0.129**                      378               0.440
+dummy                                                 (0.055)                                       (0.497)
+Expanded installations during last year dummy          -0.030                      377               0.240
+                                                      (0.045)                                       (0.428)
+Remodeled installations during last year dummy          0.022                      377               0.459
+                                                      (0.054)                                       (0.499)
+Human resources management index                       -0.062      -0.061          363               0.022
+                                                      (0.152)     (0.146)                           (1.450)
+Keeps formal accounts dummy                           0.076**     0.069**          378               0.852
+                                                      (0.030)     (0.029)                           (0.356)
+Controls for baseline value of outcome                   No          Yes                               -
+
+Note: The index follows the methodology in Kling, Liebman, and Katz (2007) and is the normalized average of z-
+scores for all non-missing process measures, using mean and standard deviation in the control group to calculate
+the z-scores. Each row in Columns 1 and 2 contains the treatment effect point estimates and robust standard
+errors for separate OLS estimations. All regressions include controls for strata dummies and re-randomization
+variables, as well as a dummy for having been surveyed in March 2009 (vs. April, May or June) at follow-up. Some
+variables are not available at baseline, which is why the corresponding cells in Colum 2 are empty. Column 4
+contains means and standard deviations for the control group at follow-up. Significance levels: *10 percent, **5
+percent, ***1 percent.
+
+
+
+
+                                                       27
+                                 Table 6: ITT Treatment Effect Estimates, Entrepreneurial Spirit
+                                                              OLS
+                                                                                                                    Control
+                                                                       ITT Treatment Effect                          group
+                                                                                                   Observations
+                                                                             Estimates                               mean
+Outcome variable                                                                                                  (std. dev.)
+                                                                         (1)           (2)             (3)             (4)
+                                                                       0.237*         0.223            373           -0.094
+PCA entrepreneurial spirit index
+                                                                       (0.140)       (0.139)                        (1.371)
+                                                                       0.240*         0.208            373           -0.095
+PCA entrepreneurial spirit index w/o components d and e
+                                                                       (0.140)       (0.138)                        (1.343)
+                                                                        0.130         0.128            378           -0.055
+KLK entrepreneurial spirit index
+                                                                       (0.103)       (0.102)                        (0.964)
+                                                                        0.153         0.140            378           -0.064
+KLK entrepreneurial spirit index w/o components d and e
+                                                                       (0.107)       (0.105)                        (0.961)
+
+Index components
+a. I have professional goals.                                          0.114*        0.112*            378          4.531
+                                                                       (0.060)       (0.060)                       (0.651)
+b. I revise my goals periodically.                                       0.128         0.115           378          4.029
+                                                                       (0.085)       (0.082)                       (0.840)
+c. If I don’t reach a goal in the way I wanted to I try again.          -0.033        -0.035           378          4.374
+                                                                       (0.077)       (0.077)                       (0.683)
+d. I can’t motivate my business partners.^                               0.064         0.055           376          2.277
+                                                                       (0.121)       (0.121)                       (1.086)
+e. Everything I need for success lies in myself.                         0.074         0.090           378          3.938
+                                                                       (0.112)       (0.108)                       (1.025)
+f. I prefer to do routine tasks instead of doing something new in       -0.013        -0.017           376          2.000
+my work.^                                                              (0.104)       (0.103)                       (0.964)
+g. I think the government should give me opportunities.^                -0.061        -0.075           377          3.545
+                                                                       (0.139)       (0.132)                       (1.215)
+h. I have to reach some goals every day to feel satisfied.               0.126         0.114           378          3.897
+                                                                       (0.109)       (0.107)                       (1.076)
+Controls for baseline value of outcome                                    No            Yes                           -
+
+Note: Components marked with ^ are reverse coded in the indices. The PCA index is generated using Principal Components
+Analysis. The KLK index follows the methodology in Kling, Liebman, and Katz (2007) and is the normalized average of z-
+scores for all non-missing process measures, using mean and standard deviation in the control group to calculate the z-
+scores. Each row in Columns 1 and 2 contains the treatment effect point estimates and robust standard errors for separate
+OLS estimations. All regressions include controls for strata dummies and re-randomization variables, as well as a dummy
+for having been surveyed in March 2009 (vs. April, May or June) at follow-up. Column 4 contains means and standard
+deviations for the control group at follow-up. Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+                                                                 28
+               Table 7: ITT Treatment Effect Estimates, Changes in Response to Crisis
+                                                 OLS
+                                                                                 Control group
+                                         ITT Treatment
+                                                             Observations            mean
+                                        Effect Estimates
+Outcome variable                                                                  (std. dev.)
+                                                (1)              (2)                      (3)
+Laid off staff or cut down on hiring           0.047             340                     0.257
+                                             (0.051)                                    (0.438)
+Lowered employee salaries                     -0.026             340                     0.092
+                                             (0.032)                                    (0.289)
+Cut production                              -0.080**             340                     0.206
+                                             (0.040)                                    (0.406)
+Diversified business activities               -0.015             340                     0.431
+                                             (0.057)                                    (0.496)
+Sought government assistance                   0.056             340                     0.128
+                                             (0.044)                                    (0.335)
+None                                          -0.006             340                     0.115
+                                             (0.037)                                    (0.319)
+Other                                          0.043             340                     0.216
+                                             (0.050)                                    (0.412)
+Number of changes made                         0.025             340                     1.330
+                                             (0.092)                                    (0.810)
+
+
+Note: Column 1 contains the treatment effect point estimates and robust standard errors for
+separate OLS estimations. All outcome variables, except for "number of changes made", are binary
+variables for the responses to the question "Which changes has your firm made in response to the
+current economic situation?" (multiple answers were allowed). This question was asked at follow-
+up in reference to the recent economic crisis. "Number of changes made" is a count of the number
+of changes reported in response to the question above. These questions were not asked at
+baseline, which is why we do not control for the baseline outcome variable in this table. All
+regressions include controls for strata dummies and re-randomization variables, as well as a
+dummy for having been surveyed in March 2009 (vs. April, May or June) at follow-up. Column 3
+contains means and standard deviations for the control group at follow-up. Significance levels: *10
+percent, **5 percent, ***1 percent.
+
+
+
+
+                                                  29
+    Table 8: Self-Reported Reasons for Not Using Consulting Services in Control Group Firms
+                                                                 % of enterprises mentioning
+Reasons for not using consulting services
+                                                                this reason (multiple mention)
+Would be a good investment, but don't have funds                            46.3
+Don't know what the benefits would be                                       22.2
+Simply hadn't considered it                                                 18.5
+Didn't need the services                                                    13.9
+Other                                                                       11.1
+Didn't know these services existed                                           7.4
+Not worth the cost                                                           5.6
+N                                                                           108
+
+Note: This table includes all control group firms that, at the time of the follow-up survey,
+reported never having used consulting services.
+
+
+
+
+                                                 30
+                           Appendix Table 1: Analysis of Attrition in Follow-Up Survey
+                                                      OLS
+                                                                                     Dependent variable:
+                                                                                Binary=1 if enterprise was not
+                                                                                interviewed or not confirmed
+                                                                                     closed at follow-up
+                                                                                   (1)         (2)        (3)
+Treatment                                                                        -0.020      -0.017      0.141
+                                                                                (0.029)     (0.030)    (0.157)
+Commerce sector dummy                                                                         0.021      0.047
+                                                                                            (0.039)    (0.049)
+Services sector dummy                                                                         0.041    0.072*
+                                                                                            (0.033)    (0.042)
+Full-time paid employees                                                                      0.001      0.001
+                                                                                            (0.001)    (0.001)
+Age of principal decision maker (years)                                                       0.001      0.001
+                                                                                            (0.001)    (0.002)
+Male principal decision maker dummy                                                          -0.043     -0.020
+                                                                                            (0.036)    (0.045)
+Business age (years)                                                                          0.000      0.000
+                                                                                            (0.000)    (0.000)
+Log (Avg. sales Jul, Aug and Sep 2007 in 1000s USD)                                           0.002      0.000
+                                                                                            (0.008)    (0.011)
+Profits (Sep 2007 sales minus costs, 1000s USD)                                              -0.000     -0.000
+                                                                                            (0.000)    (0.000)
+Return on assets (ROA)                                                                        0.002     -0.021
+                                                                                            (0.025)    (0.038)
+Commerce sector dummy*Treatment                                                                         -0.071
+                                                                                                       (0.080)
+Services sector dummy*Treatment                                                                         -0.094
+                                                                                                       (0.073)
+Full-time paid employees*Treatment                                                                       0.000
+                                                                                                       (0.002)
+Age of principal decision maker (years)*Treatment                                                       -0.001
+                                                                                                       (0.003)
+Male principal decision maker dummy*Treatment                                                           -0.078
+                                                                                                       (0.074)
+Business age (years)*Treatment                                                                          -0.000
+                                                                                                       (0.003)
+Log (Avg. sales)*Treatment                                                                               0.006
+                                                                                                       (0.017)
+Profits*Treatment                                                                                       -0.000
+
+
+                                                   31
+                                                                                                    (0.000)
+Return on assets (ROA)*Treatment                                                                     0.057
+                                                                                                    (0.045)
+Constant                                                                       0.106***    0.056     0.003
+                                                                                (0.018)   (0.076)   (0.102)
+R-squared                                                                        0.001     0.039     0.053
+N                                                                                 432       432       432
+F-test p-value: joint significance of interaction terms                                              0.850
+Mean of dependent variable                                                      0.100     0.101      0.101
+
+Note: All explanatory variables are measured at baseline. Binary control variables included for when
+covariate is missing, and then missing covariate coded as zero. Variables with *Treatment at the end are
+interacted with a treatment group dummy. Robust standard errors in parentheses. Significance levels: *10
+percent, **5 percent, ***1 percent.
+
+
+
+
+                       Appendix Table 2: Analysis of Matching with IMSS Data
+                                                OLS
+                                                                       Dependent variable:
+                                                                    Binary=1 if enterprise was
+                                                                     matched with IMSS data
+                                                                    (1)            (2)      (3)
+Treatment                                                          0.019          0.014   -0.011
+                                                                  (0.050)       (0.049)  (0.258)
+Commerce sector dummy                                                            -0.018    0.016
+                                                                                (0.062)  (0.076)
+Services sector dummy                                                             0.042    0.087
+                                                                                (0.055)  (0.069)
+Full-time paid employees                                                          0.000 0.002***
+                                                                                (0.001)  (0.001)
+Age of principal decision maker (years)                                          -0.001   -0.002
+                                                                                (0.002)  (0.003)
+Male principal decision maker dummy                                             0.102*     0.036
+                                                                                (0.053)  (0.064)
+Business age (years)                                                             -0.000   -0.001
+                                                                                (0.001)  (0.001)
+Log (Avg. sales Jul, Aug and Sep 2007 in 1000s USD)                            0.083*** 0.084***
+                                                                                (0.014)  (0.017)
+Profits (Sep 2007 sales minus costs, 1000s USD)                                   0.000  0.000*
+                                                                                (0.000)  (0.000)
+Return on assets (ROA)                                                           -0.004   -0.020
+
+                                                    32
+                                                                              (0.030)      (0.043)
+Commerce sector dummy*Treatment                                                             -0.073
+                                                                                           (0.133)
+Services sector dummy*Treatment                                                             -0.075
+                                                                                           (0.120)
+Full-time paid employees*Treatment                                                        -0.006**
+                                                                                           (0.002)
+Age of principal decision maker (years)*Treatment                                            0.001
+                                                                                           (0.005)
+Male principal decision maker dummy*Treatment                                                0.146
+                                                                                           (0.110)
+Business age (years)*Treatment                                                               0.005
+                                                                                           (0.004)
+Log (Avg. sales)*Treatment                                                                   0.008
+                                                                                           (0.035)
+Profits*Treatment                                                                           -0.000
+                                                                                           (0.000)
+Return on assets (ROA)*Treatment                                                             0.010
+                                                                                           (0.057)
+Constant                                                           0.567*** 0.329***       0.332**
+                                                                    (0.030)  (0.121)       (0.149)
+R-squared                                                            0.000    0.113          0.144
+N                                                                     432      427            427
+F-test p-value: joint significance of interaction terms                                      0.122
+Average of dependent variable                                       0.574         0.569      0.569
+
+Note: All explanatory variables are measured at baseline. Binary control variables included for
+when covariate is missing, and then missing covariate coded as zero. Variables with *Treatment
+at the end are interacted with a treatment group dummy. Robust standard errors in parentheses.
+Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+
+           Appendix Table 3: Number of Enterprises Surveyed Each Month (Follow-Up Survey)
+       Survey month              # treatment         % treatment      # control       % control
+       Mar-09                         95                70.37            152           62.55
+       Apr-09                         29                21.48            68            27.98
+       May-09                         10                 7.41            20             8.23
+       Jun-09                          1                 0.74             3             1.23
+
+
+
+
+                                                    33
+                Appendix Table 4: ITT Treatment Effect Estimates, Short-Run Business Outcomes, Winsorized
+                                                            OLS
+
+                                                                                                              Non-winsorized
+                                                      1%               1%           5%             5%          control group
+                                                   winsorized       winsorized   winsorized     winsorized          mean
+                                                                                                                 (std. dev.)
+Outcome variable
+                                                       (1)             (2)           (3)             (4)             (5)
+Full-time paid employees                              1.310           0.552         0.025          -0.187          12.428
+                                                     (1.339)         (1.156)       (0.835)        (0.811)         (22.281)
+                                                       378             378           378            378             243
+Avg. sales Dec 2008, Jan and Feb 2009 (1000s
+                                                     -7.380          -11.616        -3.758        -5.770           63.384
+USD)
+                                                    (10.235)         (8.353)       (6.454)       (5.956)         (163.643)
+                                                        307             307           307           307               200
+Log (Avg. sales Dec 2008, Jan and Feb 2009 in          0.004           0.047         0.013         0.055             2.391
+1000s USD)                                           (0.174)         (0.143)       (0.171)       (0.141)           (2.023)
+                                                        307             307           307           307               200
+Feb 2009 costs (1000s USD)                            -1.918          -2.242        -2.341        -2.410           43.157
+                                                     (8.319)         (8.010)       (4.061)       (3.938)         (113.758)
+                                                        304             304           304           304               204
+Profits (Feb 2009 sales minus costs, 1000s USD)        5.743           5.718         3.924         4.027           11.460
+                                                     (5.061)         (5.008)       (2.620)       (2.576)          (97.044)
+                                                        265             265           265           265               176
+Log (business assets)                                 -0.049          -0.100        -0.064        -0.115             4.307
+                                                     (0.175)         (0.157)       (0.172)       (0.154)           (1.699)
+                                                        319             319           319           319               203
+Productivity residual                                0.262*          0.243*        0.244**       0.230**            -0.095
+  Residual from regression of log Feb 2009           (0.137)         (0.127)       (0.118)       (0.111)           (1.272)
+sales on log employees and log business assets          250             250           250           250               174
+Return on assets (ROA)                               0.084*            0.079       0.067**       0.064*              0.012
+  Feb 2009 sales minus costs divided by assets       (0.050)         (0.054)       (0.034)       (0.036)           (0.471)
+                                                        236             236           236           236               154
+Controls for baseline value of outcome                  No              Yes           No            Yes                -
+
+Note: Each cell in Columns 1 through 4 contains the treatment effect point estimate, robust standard error, and number of
+observations, for a separate OLS estimation. For the regressions that control for the outcome variable measured at baseline
+(Columns 2 and 4), when the baseline outcome variable is missing, the missing value is filled-in with zero and a dummy
+variable indicating that the baseline observation is missing is added to the model. All regressions include controls for strata
+dummies and re-randomization variables, as well as a dummy for having been surveyed in March 2009 (vs. April, May or June)
+at follow-up. Full-time paid employees, sales, costs, and assets, are only winsorized at the top x% since they are bounded
+below by zero. All other variables are winsorized at the top and bottom x%. Column 5 contains non-winsorized means and
+standard deviations for the control group at follow-up. Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+                                                               34
+     Appendix Table 5: ITT Treatment Effect Estimates, Short-Run Business Outcomes, Restricted Sample
+                                                    OLS
+                                                                                            Control group
+                                                                        ITT treatment
+                                                                                                mean
+                                                                       effect estimates
+Outcome variable                                                                             (std. dev.)
+                                                                          (1)        (2)           (3)
+Full-time paid employees                                                -1.771     -1.341       13.182
+                                                                       (1.389)    (1.103)      (19.925)
+                                                                          221        221           143
+Avg. sales Dec 2008, Jan and Feb 2009 (1000s USD)                      -14.720    -11.426       69.450
+                                                                      (14.976)   (12.218)     (181.105)
+                                                                          221        221           143
+Log (Avg. sales Dec 2008, Jan and Feb 2009 in 1000s USD)                -0.016     -0.019         2.520
+                                                                       (0.211)    (0.176)       (1.985)
+                                                                          221        221           143
+Feb 2009 costs (1000s USD)                                             -12.367    -13.203       46.598
+                                                                      (11.412)   (10.956)     (111.674)
+                                                                          221        221           143
+Profits (Feb 2009 sales minus costs, 1000s USD)                          3.793      3.788       13.161
+                                                                       (6.628)    (6.332)     (102.459)
+                                                                          221        221           143
+Log (business assets)                                                   -0.078     -0.118         4.432
+                                                                       (0.192)    (0.169)       (1.738)
+                                                                          221        221           143
+Productivity residual                                                   0.261*     0.249*        -0.073
+ Residual from regression of log Feb 2009 sales                        (0.158)    (0.146)       (1.302)
+ on log employees and log business assets                                 221        221           143
+Return on assets (ROA)                                                  0.118*      0.112         0.018
+ Feb 2009 sales minus costs divided by assets                          (0.065)    (0.068)       (0.487)
+                                                                          221        221           143
+Controls for baseline value of outcome                                    No         Yes            -
+
+Note: This tables included only enterprises that report all outcome variables. Each cell in Columns 1 and 2
+contains the treatment effect point estimate, robust standard error, and number of observations, for a
+separate OLS estimation. For the regressions that control for the outcome variable measured at baseline
+(Column 2), when the baseline outcome variable is missing, the missing value is filled-in with zero and a
+dummy variable indicating that the baseline observation is missing is added to the model. All regressions
+include controls for strata dummies and re-randomization variables, as well as a dummy for having been
+surveyed in March 2009 (vs. April, May or June) at follow-up. Column 3 contains means and standard
+deviations for the control group at follow-up. Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+                                                  35
+   Appendix Table 6: ITT Treatment Effect Estimates, Short-Run Business Outcomes, Difference-in-
+                                             Difference
+                                                 OLS
+                                                                                     Control group
+                                                                 ITT treatment
+                                                                                         mean
+                                                                effect estimates
+Outcome variable                                                                      (std. dev.)
+                                                                        (1)                 (2)
+Full-time paid employees                                              0.578              12.428
+                                                                     (2.351)            (22.281)
+                                                                       810                 243
+Avg. sales Dec 2008, Jan and Feb 2009 (1000s USD)                    -14.464             63.384
+                                                                    (23.358)           (163.643)
+                                                                       675                 200
+Log (Avg. sales Dec 2008, Jan and Feb 2009 in 1000s USD)              0.017               2.391
+                                                                     (0.237)             (2.023)
+                                                                       675                 200
+Feb 2009 costs (1000s USD)                                            27.333             43.157
+                                                                    (25.419)           (113.758)
+                                                                       681                 204
+Profits (Feb 2009 sales minus costs, 1000s USD)                      -15.357             11.460
+                                                                    (20.485)            (97.044)
+                                                                       602                 176
+Log (business assets)                                                 -0.098              4.307
+                                                                     (0.227)             (1.699)
+                                                                       627                 203
+Productivity residual                                                 0.306               -0.095
+ Residual from regression of log Feb 2009 sales                      (0.217)             (1.272)
+ on log employees and log business assets                              515                 174
+Return on assets (ROA)                                              0.272**               0.012
+ Feb 2009 sales minus costs divided by assets                        (0.133)             (0.471)
+                                                                       488                 154
+
+Note: Each cell in Column 1 contains the treatment effect point estimate, robust standard error, and
+number of observations, for a separate OLS difference-in-difference estimation. Each regressions uses
+the full sample of enterprises at baseline and follow-up and includes a dummy for being in the
+treatment group, a dummy for the follow-up period, an interaction term between the treatment and
+follow-up dummies, as well as controls for strata dummies, re-randomization variables, and a dummy
+for having been surveyed in March 2009 (vs. April, May or June) at follow-up. The point estimates
+displayed in Column 1 are coefficients on the interaction term between treatment and follow-up.
+Column 2 contains means and standard deviations for the control group at follow-up. Significance
+levels: *10 percent, **5 percent, ***1 percent.
+
+
+                                                  36
+                    Appendix Table 7: Follow-Up Summary Statistics - Short-Run Business Outcomes
+                                            Mean and Standard Deviations
+                                                                          (1)-(2)                            (4)-(2)
+                                                                        Difference      Treatment &       Difference
+                                         Treatment         Control      (p-value)         Took-up          (p-value)
+                                             (1)              (2)           (3)              (4)               (5)
+Avg. sales Dec 2008, Jan and Feb 2009      53.889          63.384         -9.495           61.075            -2.309
+(1000s USD)                              (160.545)       (163.643)       (0.626)         (103.216)          (0.919)
+Avg. sales Dec 2008, Jan and Feb 2009      45.905          56.203        -10.298           61.075             4.872
+(1000s USD), 1% winsorized                (99.329)       (116.830)       (0.439)         (103.216)          (0.775)
+Feb 2009 costs (1000s USD)                 42.353          43.157         -0.804           42.882            -0.275
+                                         (167.711)       (113.758)       (0.961)          (85.825)          (0.987)
+Feb 2009 costs (1000s USD) , 1%            31.887          38.951         -7.064           42.882             3.931
+winsorized                                (81.698)        (83.323)       (0.485)          (85.825)          (0.765)
+Profits (Feb 2009 sales minus costs,       10.964          11.460         -0.496           15.804             4.344
+1000s USD)                                (45.858)        (97.044)       (0.964)          (57.117)          (0.767)
+Profits (Feb 2009 sales minus costs,       10.964           6.918         4.046            15.804             8.886
+1000s USD), 1% winsorized                 (45.858)        (47.129)       (0.506)          (57.117)          (0.271)
+Business assets (1000s USD)               258.923         331.416        -72.493          313.187           -18.229
+                                         (508.865)      (1236.195)       (0.547)         (560.688)          (0.912)
+Business assets (1000s USD), 1%           258.923         242.534         16.389          313.187            70.653
+winsorized                               (508.865)       (446.492)       (0.765)         (560.688)          (0.312)
+Productivity residual                       0.163           -0.095        0.257*            0.429         0.524***
+                                           (0.967)         (1.272)       (0.095)           (0.854)          (0.008)
+Productivity residual, 1% winsorized        0.157           -0.090        0.247*            0.419         0.509***
+                                           (0.951)         (1.226)       (0.097)           (0.820)          (0.008)
+Return on assets (ROA)                      0.091           0.012         0.080             0.174           0.162**
+                                           (0.402)         (0.471)       (0.195)           (0.429)          (0.043)
+Return on assets (ROA), 1%                  0.088           0.030         0.058             0.174           0.144**
+winsorized                                 (0.388)         (0.292)       (0.198)           (0.429)          (0.011)
+Note: Columns 1, 2, and 4 present means and standard deviations (in parentheses). Column 3 shows the difference in
+means across the treatment and control group with the corresponding p-value in parentheses. Column 5 shows the
+non-experimental difference between those who took-up in treatment minus those in control, and the corresponding p-
+value in parentheses. For the 1% winsorized variables, sales, costs, and assets are only winsorized at the top 1% since
+they are bounded below by zero. All other variables are winsorized at the top and bottom 1%. Significance levels: *10
+percent, **5 percent, ***1 percent.
+
+
+
+
+                                                          37
+                     Appendix Table 8: Non-Response on Follow-up Survey
+                                                                                         (1)-(2)
+                                                                                      Difference
+                                                             Treatment     Control     (p-value)
+                                                                 (1)         (2)           (3)
+% That Did not provide alternative contact person              16.296      18.519        -2.222
+                                                                                        (0.589)
+% That Did not report Dec 2008, Jan and Feb 2009 sales         20.741      17.695         3.045
+                                                                                        (0.469)
+N                                                               135          243           378
+
+Note: Columns 1 and 2 show the percentage of enterprises in the treatment and control group,
+respectively, that did not provide an alternative contact person or sales on the follow-up survey,
+conditional on participating in the survey. Column 3 shows the difference in percentages
+between the treatment and control group with the corresponding p-value in parentheses.
+Significance levels: *10 percent, **5 percent, ***1 percent.
+
+
+
+
+                                                    38
+       Appendix Table 9: ITT Treatment Effect Estimates, Short-Run Business Outcomes, IMSS Sample
+                                                   OLS
+                                                                                             Control group
+                                                                          ITT treatment
+                                                                                                 mean
+                                                                         effect estimates
+Outcome variable                                                                              (std. dev.)
+                                                                            (1)     (2)             (3)
+Full-time paid employees                                                   0.764   0.380         15.932
+                                                                         (1.841) (1.405)        (25.703)
+                                                                            229     229             148
+Avg. sales Dec 2008, Jan and Feb 2009 (1000s USD)                        -17.701 -16.381         77.325
+                                                                        (23.164) (14.531)      (161.353)
+                                                                            187     187             125
+Log (Avg. sales Dec 2008, Jan and Feb 2009 in 1000s USD)                  -0.182  -0.104           3.045
+                                                                         (0.204) (0.168)         (1.713)
+                                                                            187     187             125
+Feb 2009 costs (1000s USD)                                                -1.529  -3.804         63.156
+                                                                        (23.042) (19.729)      (141.134)
+                                                                            176     176             120
+Profits (Feb 2009 sales minus costs, 1000s USD)                            5.566   5.904           2.321
+                                                                         (8.197) (8.102)        (43.806)
+                                                                            160     160             109
+Log (business assets)                                                     -0.012  -0.008           4.655
+                                                                         (0.208) (0.202)         (1.624)
+                                                                            187     187             121
+Productivity residual                                                      0.080   0.088           0.116
+ Residual from regression of log Feb 2009 sales                          (0.181) (0.170)         (1.154)
+ on log employees and log business assets                                   152     152             99
+Return on assets (ROA)                                                   0.173*   0.197*          -0.001
+ Feb 2009 sales minus costs divided by assets                            (0.098) (0.113)         (0.574)
+                                                                            140     140             95
+Controls for baseline value of outcome                                      No      Yes              -
+
+Note: This tables included only enterprises that were successfully matched with IMSS data. Each cell in
+Columns 1 and 2 contains the treatment effect point estimate, robust standard error, and number of
+observations, for a separate OLS estimation. For the regressions that control for the outcome variable
+measured at baseline (Column 2), when the baseline outcome variable is missing, the missing value is filled-
+in with zero and a dummy variable indicating that the baseline observation is missing is added to the model.
+All regressions include controls for strata dummies and re-randomization variables, as well as a dummy for
+having been surveyed in March 2009 (vs. April, May or June) at follow-up. Column 3 contains means and
+standard deviations for the control group at follow-up. Significance levels: *10 percent, **5 percent, ***1
+percent.
+
+
+
+                                                  39
+                                 Appendix 1: Surveys and Data Definitions
+
+Survey Questions for Entrepreneurial Spirit Index
+
+                                                       Strongly                                Strongly
+                                                                  Disagree   Neutral   Agree
+                                                       disagree                                 agree
+ a.   I have professional goals.                           1         2         3        4         5
+ b.   I revise my goals periodically.                      1         2         3        4         5
+      If I don’t reach a goal in the way I wanted
+ c.                                                        1         2         3        4         5
+      to I try again.
+ d.   I can’t motivate my business partners.*              1         2         3        4         5
+ e.   Everything I need for success lies in myself.        1         2         3        4         5
+     I prefer to do routine tasks instead of
+ f.                                                        1         2         3        4         5
+     doing something new in my work.*
+     I think the government should give me
+ g.                                                        1         2         3        4         5
+     opportunities.*
+     I have to reach some goals every day to
+ h.                                                        1         2         3        4         5
+     feel satisfied.
+*Reverse coded
+
+
+Survey Questions for Human Resources Management Index
+
+                                                       Strongly                                Strongly
+                                                                  Disagree   Neutral   Agree
+                                                       disagree                                agree
+    The employees identify with the objectives
+ a.                                                        1          2         3        4         5
+    of the company.
+    The firm lets its employees know if they
+ b.                                                        1          2         3        4         5
+    have done something wrong.
+      All responsibilities are clearly assigned for
+ c.                                                        1          2         3        4         5
+      each of the members of the firm.
+ d. All decisions are made by the same person.             1          2         3        4         5
+    The firm gives positive recognition to its
+ e.                                                        1          2         3        4         5
+    employees.
+    There is low turnover of employees in the
+ f.                                                        1          2         3        4         5
+    firm.
+
+
+
+
+                                                      40
+Definitions of Financial Variables
+
+ Variable           Definition
+                    Average of non-missing observation for December 2008, January 2009, and
+ Sales
+                    February 2009 sales (from survey question 29)
+ Costs              February 2009 costs (from survey question 22)
+ Profits            February 2009 sales minus February 2009 costs (from survey questions 22 and 29c)
+                    Residual from a regression of log(February 2009 sales) on log(total employees) and
+ Productivity       log(assets), where “February 2009 sales ? comes from survey question 29c, “total
+ residual           employees ? comes from question 17, and “assets ? is the sum of questions 21.a.2
+                    through 21.f.2
+ ROA – return       February 2009 sales minus February 2009 costs (from survey questions 22 and 29c)
+ on assets          divided assets (sum of questions 21.a.2 through 21.f.2)
+Note: Definitions are the same for the baseline survey, with the reference months being July 2007,
+August 2007, and September 2007 instead of December 2008, January 2009, and February 2009.
+
+
+ Survey Questions Used to Calculate Financial Variables
+
+ Employees
+ 17. ¿Cuántos empleados tiene la empresa en total (incluyéndolo a usted y personal en todos los
+ establecimientos)? Incluye todos los tipos de empleados. Escriba el número en el espacio dado.
+ How many employees does the business have (including yourself and staff in all establishments)? Include all
+ types of employees. Write the number in the space below.
+     ____ ____ ____ empleados employees
+
+ Sales
+ 29. ¿Cuáles fueron las ventas/ingresos totales aproximadas de su negocio en diciembre 2008, enero
+ 2009, y febrero 2009, por mes? Escriba los números en el espacio dado.
+ Approximately how much were your firm’s total monthly sales/income in December, January and February?
+ Write the numbers in the space below.
+   a) Diciembre 2008                                     997 No sabe         998 No quiere contestar
+   December                                   pesos Don´t know             Refuse to answer
+   b) Enero 2009                                         997 No sabe         998 No quiere contestar
+   January                                    pesos Don´t know             Refuse to answer
+   c) Febrero 2009                                    997 No sabe            998 No quiere contestar
+   February                                   pesos Don´t know             Refuse to answer
+
+
+ Costs
+ 22. ¿Cuánto fueron los costos/gastos aproximados totales del negocio en febrero 2009? Escriba el
+ número. What were the total approximate costs of your business in February 2009? Write the number.
+
+ __________________pesos        997 No sabe Don’t know        998 No quiere contester Refuse to answer
+
+                                                       41
+Assets
+21. Lea la pregunta (a) para cada fila. Verifique que se trata solamente de bienes del negocio y no del
+hogar. Si el empresario no tiene estos activos, puede pasar a la siguiente fila sin preguntar (b). Read
+question (a) for every row. Verify that we are talking about assets of the business only and not the home. If the
+business person does not have these assets, you can go on to the next row without asking (b).
+
+
+
+
+                                         1. ¿En este momento,
+                                         tiene esta empresa…?            2. Si tuviera que reponer todo su…,
+                                        At the moment, does the        ¿cuánto le costaría, aproximadamente,
+                                            business have…?             comprarlo en condiciones similares?
+                                      1 = Sí  Pase a (2)               If you had to replace all of your …, how
+                                      1= Yes Go to (2)                 much would it cost to buy it in a similar
+                                      2 = No  Pase a (b)-(f)                          condition?
+                                      2= No  Go to (b)-(f)
+                                                                                      997 No sabe Don’t know
+     Maquinaria                                      997 No sabe
+a.                                                                                    998 No quiere contestar
+     Machinery                                       Don’t know
+                                                                                    Refuse to answer
+     Herramientas o utensilios                                                        997 No sabe Don’t know
+                                                     997 No sabe
+b.   de trabajo                                                                       998 No quiere contestar
+                                                     Don’t know
+     Tools                                                                          Refuse to answer
+     Mobiliario y equipo
+                                                                                      997 No sabe Don’t know
+     (ejemplo: computadoras)                         997 No sabe
+c.                                                                                    998 No quiere contestar
+     Furniture and equipment                         Don’t know
+                                                                                    Refuse to answer
+     (example: computers)
+                                                                                      997 No sabe Don’t know
+     Vehículos del negocio                           997 No sabe
+d.                                                                                    998 No quiere contestar
+     Business vehicles                               Don’t know
+                                                                                    Refuse to answer
+     Local propio (edificio y                                                         997 No sabe Don’t know
+                                                     997 No sabe
+e.   terreno)                                                                         998 No quiere contestar
+                                                     Don’t know
+     Property (buildings and land)                                                  Refuse to answer
+     Otros activos no
+                                                                                      997 No sabe Don’t know
+     inventarios (especifique):                      997 No sabe
+f.                                                                                    998 No quiere contestar
+     Other non-inventory goods                       Don’t know
+                                                                                    Refuse to answer
+     (specify):
+
+
+
+
+                                                        42
+

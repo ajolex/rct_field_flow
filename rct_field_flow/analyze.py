@@ -110,3 +110,218 @@ def one_click_analysis(
                 }
         results[outcome] = arm_estimates
     return results
+
+
+# ========================================
+# DATA LOADING UTILITIES
+# ========================================
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """
+    Load data from CSV or Stata .dta files
+    
+    Args:
+        file_path: Path to data file (.csv or .dta)
+    
+    Returns:
+        DataFrame with loaded data
+    """
+    if file_path.endswith('.dta'):
+        # Disable convert_categoricals to avoid issues with duplicate category labels
+        return pd.read_stata(file_path, convert_categoricals=False)
+    elif file_path.endswith('.csv'):
+        return pd.read_csv(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path}. Use .csv or .dta files.")
+
+
+# ========================================
+# DATA DIAGNOSTICS
+# ========================================
+
+def diagnose_outliers(series: pd.Series, name: str = "variable") -> Dict:
+    """
+    Diagnose potential outliers and provide recommendations
+    
+    Args:
+        series: Pandas series to analyze
+        name: Variable name for display
+    
+    Returns:
+        Dictionary with statistics, outlier info, and recommendations
+    """
+    # Basic statistics
+    stats = {
+        'variable': name,
+        'n': int(series.count()),
+        'n_missing': int(series.isna().sum()),
+        'mean': float(series.mean()),
+        'median': float(series.median()),
+        'std': float(series.std()),
+        'min': float(series.min()),
+        'max': float(series.max()),
+        'skewness': float(series.skew()),
+        'kurtosis': float(series.kurtosis())
+    }
+    
+    # Count outliers at different levels
+    outliers = {}
+    for pct in [1, 5, 10]:
+        lower = series.quantile(pct/100)
+        upper = series.quantile(1 - pct/100)
+        mask = (series < lower) | (series > upper)
+        outliers[f'{pct}pct'] = {
+            'lower_bound': float(lower),
+            'upper_bound': float(upper),
+            'n_outliers': int(mask.sum()),
+            'pct_outliers': float(mask.mean() * 100)
+        }
+    
+    # Generate recommendation
+    if stats['skewness'] > 2 or stats['kurtosis'] > 7:
+        recommendation = "⚠️ High skewness/kurtosis detected. Winsorization recommended."
+        severity = 'high'
+    elif outliers['1pct']['pct_outliers'] > 5:
+        recommendation = "⚠️ Multiple extreme values detected. Consider winsorization or trimming."
+        severity = 'medium'
+    else:
+        recommendation = "✅ Data appears well-behaved. Cleaning may not be necessary."
+        severity = 'low'
+    
+    return {
+        'statistics': stats,
+        'outliers': outliers,
+        'recommendation': recommendation,
+        'severity': severity
+    }
+
+
+def run_data_diagnostics(data: pd.DataFrame, outcome_vars: List[str]) -> Dict[str, Dict]:
+    """
+    Run diagnostics on all outcome variables
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_vars: List of outcome variable names to diagnose
+    
+    Returns:
+        Dictionary mapping variable names to diagnostic results
+    """
+    diagnostics = {}
+    for var in outcome_vars:
+        if var in data.columns:
+            diagnostics[var] = diagnose_outliers(data[var], name=var)
+        else:
+            diagnostics[var] = {
+                'error': f'Variable {var} not found in data'
+            }
+    return diagnostics
+
+
+# ========================================
+# DATA CLEANING FUNCTIONS
+# ========================================
+
+def winsorize_variable(series: pd.Series, lower: float = 1, upper: float = 99) -> pd.Series:
+    """
+    Winsorize a variable at specified percentiles
+    
+    Args:
+        series: Pandas series to winsorize
+        lower: Lower percentile threshold (default 1)
+        upper: Upper percentile threshold (default 99)
+    
+    Returns:
+        Winsorized series
+    """
+    lower_bound = series.quantile(lower/100)
+    upper_bound = series.quantile(upper/100)
+    return series.clip(lower=lower_bound, upper=upper_bound)
+
+
+def trim_variable(series: pd.Series, lower: float = 1, upper: float = 99) -> pd.Series:
+    """
+    Trim extreme values by setting them to NaN
+    
+    Args:
+        series: Pandas series to trim
+        lower: Lower percentile threshold (default 1)
+        upper: Upper percentile threshold (default 99)
+    
+    Returns:
+        Trimmed series with extremes set to NaN
+    """
+    lower_bound = series.quantile(lower/100)
+    upper_bound = series.quantile(upper/100)
+    mask = (series >= lower_bound) & (series <= upper_bound)
+    return series.where(mask, pd.NA)
+
+
+def create_missing_indicators(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """
+    Create dummy variables for missing values and fill with 0
+    
+    Args:
+        df: DataFrame to process
+        columns: List of column names to create indicators for
+    
+    Returns:
+        DataFrame with missing indicators and filled values
+    """
+    df_copy = df.copy()
+    for col in columns:
+        if col in df_copy.columns:
+            df_copy[f'{col}_missing'] = df_copy[col].isna().astype(int)
+            df_copy[col] = df_copy[col].fillna(0)
+    return df_copy
+
+
+# ========================================
+# BALANCE TESTS
+# ========================================
+
+def check_balance(
+    data: pd.DataFrame, 
+    treatment_col: str, 
+    covariates: List[str]
+) -> pd.DataFrame:
+    """
+    Check balance of covariates across treatment arms
+    
+    Args:
+        data: DataFrame containing the data
+        treatment_col: Name of treatment column
+        covariates: List of covariate names to check
+    
+    Returns:
+        DataFrame with balance test results
+    """
+    from scipy import stats as scipy_stats
+    
+    results = []
+    for var in covariates:
+        if var not in data.columns:
+            continue
+            
+        # Calculate means by treatment arm
+        treat_vals = data[data[treatment_col] == 1][var].dropna()
+        control_vals = data[data[treatment_col] == 0][var].dropna()
+        
+        # t-test
+        t_stat, p_val = scipy_stats.ttest_ind(treat_vals, control_vals)
+        
+        results.append({
+            'variable': var,
+            'treatment_mean': treat_vals.mean(),
+            'treatment_sd': treat_vals.std(),
+            'treatment_n': len(treat_vals),
+            'control_mean': control_vals.mean(),
+            'control_sd': control_vals.std(),
+            'control_n': len(control_vals),
+            'difference': treat_vals.mean() - control_vals.mean(),
+            't_statistic': t_stat,
+            'p_value': p_val
+        })
+    
+    return pd.DataFrame(results)
+
