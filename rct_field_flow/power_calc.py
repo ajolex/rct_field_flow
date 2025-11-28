@@ -520,6 +520,11 @@ from scipy import stats
 import math
 
 # ========================================
+# SET RANDOM SEED FOR REPRODUCIBILITY
+# ========================================
+np.random.seed(123456)
+
+# ========================================
 # ASSUMPTIONS
 # ========================================
 alpha = {assumptions.alpha}  # Significance level (two-sided)
@@ -726,6 +731,11 @@ def generate_stata_code(assumptions: PowerAssumptions, results: dict) -> str:
 
 clear all
 set more off
+
+* ========================================
+* SET RANDOM SEED FOR REPRODUCIBILITY
+* ========================================
+set seed 123456
 
 * ========================================
 * ASSUMPTIONS
