@@ -7142,6 +7142,285 @@ def render_analysis() -> None:
 
 
 # ----------------------------------------------------------------------------- #
+# ADVANCED ANALYSIS (Academic-Grade)                                           #
+# ----------------------------------------------------------------------------- #
+
+
+def render_advanced_analysis() -> None:
+    """Render the Advanced Analysis page with academic-grade features"""
+    st.title("🎓 Advanced Analysis & Results")
+    st.markdown("Academic-grade RCT analysis with diagnostics, reproducible code generation, and publication-ready outputs")
+    
+    # ========================================
+    # DATA UPLOAD
+    # ========================================
+    st.markdown("## 1. Load Data")
+    
+    uploaded_file = st.file_uploader(
+        "Upload your analysis data",
+        type=['csv', 'dta'],
+        help="Supports CSV and Stata .dta files"
+    )
+    
+    if not uploaded_file:
+        st.info("👆 Upload your data file to begin analysis")
+        st.markdown("""
+        **Supported formats:**
+        - CSV (.csv)
+        - Stata (.dta)
+        
+        **Features:**
+        - Data diagnostics (outliers, skewness, kurtosis)
+        - Optional winsorization/trimming
+        - Balance tests
+        - Python & Stata code generation
+        """)
+        return
+    
+    # Load data
+    try:
+        if uploaded_file.name.endswith('.dta'):
+            data = pd.read_stata(uploaded_file, convert_categoricals=False)
+            st.success(f"✅ Loaded Stata file: {len(data):,} observations, {len(data.columns)} variables")
+        else:
+            data = pd.read_csv(uploaded_file)
+            st.success(f"✅ Loaded CSV file: {len(data):,} observations, {len(data.columns)} variables")
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
+        return
+    
+    # ========================================
+    # VARIABLE SELECTION
+    # ========================================
+    st.markdown("## 2. Select Variables")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        treatment_col = st.selectbox(
+            "Treatment variable",
+            options=data.columns.tolist(),
+            help="Binary treatment indicator (0=control, 1=treatment)"
+        )
+    
+    with col2:
+        outcome_vars = st.multiselect(
+            "Outcome variables",
+            options=data.columns.tolist(),
+            help="Select one or more outcome variables to analyze"
+        )
+    
+    baseline_outcome = st.selectbox(
+        "Baseline outcome (optional)",
+        options=['None'] + data.columns.tolist(),
+        help="Baseline value of outcome for ANCOVA specification"
+    )
+    
+    covariates = st.multiselect(
+        "Covariates for balance tests (optional)",
+        options=data.columns.tolist(),
+        help="Select baseline characteristics to test for balance"
+    )
+    
+    if not outcome_vars:
+        st.warning("Please select at least one outcome variable")
+        return
+    
+    # ========================================
+    # DATA DIAGNOSTICS
+    # ========================================
+    st.markdown("## 3. Data Diagnostics")
+    st.info("🔍 Check if your data needs cleaning before analysis")
+    
+    if st.button("Run Diagnostics", type="primary"):
+        with st.spinner("Running diagnostics..."):
+            diagnostics = run_data_diagnostics(data, outcome_vars)
+        
+        for var, diag in diagnostics.items():
+            if 'error' in diag:
+                st.error(f"{var}: {diag['error']}")
+                continue
+            
+            with st.expander(f"📊 {var}", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**Statistics**")
+                    stats_df = pd.DataFrame([diag['statistics']]).T
+                    stats_df.columns = ['Value']
+                    st.dataframe(stats_df, use_container_width=True)
+                
+                with col2:
+                    st.markdown("**Outlier Analysis**")
+                    for level, info in diag['outliers'].items():
+                        st.metric(
+                            f"Outliers at {level}",
+                            f"{info['n_outliers']} ({info['pct_outliers']:.1f}%)"
+                        )
+                
+                with col3:
+                    st.markdown("**Recommendation**")
+                    if diag['severity'] == 'high':
+                        st.error(diag['recommendation'])
+                    elif diag['severity'] == 'medium':
+                        st.warning(diag['recommendation'])
+                    else:
+                        st.success(diag['recommendation'])
+        
+        # Store diagnostics in session state
+        st.session_state['diagnostics'] = diagnostics
+    
+    # ========================================
+    # DATA CLEANING (Optional)
+    # ========================================
+    if 'diagnostics' in st.session_state:
+        st.markdown("## 4. Data Cleaning (Optional)")
+        
+        apply_winsorization = st.checkbox(
+            "Apply winsorization",
+            help="Replace extreme values with percentile bounds"
+        )
+        
+        if apply_winsorization:
+            winsor_level = st.slider(
+                "Winsorization level (%)",
+                min_value=1,
+                max_value=10,
+                value=1,
+                help="Trim/cap values at this percentile (e.g., 1% = 99th percentile)"
+            )
+            
+            if st.button("Apply Winsorization"):
+                for var in outcome_vars:
+                    data[f'{var}_w'] = winsorize_variable(
+                        data[var], 
+                        lower=winsor_level,
+                        upper=100-winsor_level
+                    )
+                st.success(f"✅ Created winsorized versions: {', '.join([f'{v}_w' for v in outcome_vars])}")
+    else:
+        apply_winsorization = False
+    
+    # ========================================
+    # BALANCE TESTS
+    # ========================================
+    if covariates:
+        st.markdown("## 5. Balance Tests")
+        
+        if st.button("Check Balance"):
+            with st.spinner("Running balance tests..."):
+                balance_results = check_balance(data, treatment_col, covariates)
+            
+            st.markdown("### Treatment vs Control Balance")
+            st.dataframe(
+                balance_results.style.format({
+                    'treatment_mean': '{:.3f}',
+                    'control_mean': '{:.3f}',
+                    'difference': '{:.3f}',
+                    'p_value': '{:.3f}'
+                }).background_gradient(subset=['p_value'], cmap='RdYlGn_r', vmin=0, vmax=0.1),
+                use_container_width=True
+            )
+            
+            # Highlight imbalanced variables
+            imbalanced = balance_results[balance_results['p_value'] < 0.05]
+            if len(imbalanced) > 0:
+                st.warning(f"⚠️ {len(imbalanced)} variable(s) show significant imbalance (p < 0.05):")
+                st.dataframe(imbalanced[['variable', 'p_value']], use_container_width=True)
+            else:
+                st.success("✅ All variables are balanced (p ≥ 0.05)")
+    
+    # ========================================
+    # CODE GENERATION & DOWNLOAD
+    # ========================================
+    st.markdown("## 6. Download Analysis Code")
+    st.info("📥 Generate reproducible Python and Stata scripts for your analysis")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    baseline_val = None if baseline_outcome == 'None' else baseline_outcome
+    
+    with col1:
+        python_code = generate_python_analysis_code(
+            treatment_col=treatment_col,
+            outcome_vars=outcome_vars,
+            baseline_outcome=baseline_val,
+            covariates=covariates,
+            apply_winsorization=apply_winsorization
+        )
+        
+        st.download_button(
+            label="🐍 Python Script",
+            data=python_code,
+            file_name="rct_analysis.py",
+            mime="text/x-python",
+            help="Download complete Python analysis script",
+            use_container_width=True
+        )
+    
+    with col2:
+        stata_code = generate_stata_analysis_code(
+            treatment_col=treatment_col,
+            outcome_vars=outcome_vars,
+            baseline_outcome=baseline_val,
+            covariates=covariates,
+            apply_winsorization=apply_winsorization
+        )
+        
+        st.download_button(
+            label="📈 Stata Do-File",
+            data=stata_code,
+            file_name="rct_analysis.do",
+            mime="text/plain",
+            help="Download complete Stata analysis script",
+            use_container_width=True
+        )
+    
+    with col3:
+        # Data download
+        csv_data = data.to_csv(index=False)
+        st.download_button(
+            label="📊 Cleaned Data (CSV)",
+            data=csv_data,
+            file_name="cleaned_data.csv",
+            mime="text/csv",
+            help="Download cleaned dataset",
+            use_container_width=True
+        )
+    
+    with col4:
+        # Configuration JSON
+        config = {
+            'treatment_col': treatment_col,
+            'outcome_vars': outcome_vars,
+            'baseline_outcome': baseline_val,
+            'covariates': covariates
+        }
+        config_json = json.dumps(config, indent=2)
+        st.download_button(
+            label="⚙️ Configuration",
+            data=config_json,
+            file_name="analysis_config.json",
+            mime="application/json",
+            help="Download analysis configuration",
+            use_container_width=True
+        )
+    
+    # ========================================
+    # FOOTER
+    # ========================================
+    st.markdown("---")
+    st.markdown("""
+    **📚 Analysis Standards:**
+    - Robust standard errors (HC1)
+    - Balance tests with t-statistics
+    - Optional winsorization for outliers
+    - Reproducible code with fixed seed (123456)
+    - Baseline control specifications (ANCOVA)
+    """)
+
+
+# ----------------------------------------------------------------------------- #
 # BACKCHECK SELECTION                                                           #
 # ----------------------------------------------------------------------------- #
 
@@ -9399,6 +9678,8 @@ def main() -> None:
         render_quality_checks()
     elif page == "analysis":
         render_analysis()
+    elif page == "advanced_analysis":
+        render_advanced_analysis()
     elif page == "backcheck":
         render_backcheck()
     elif page == "reports":
