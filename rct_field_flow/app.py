@@ -8565,6 +8565,323 @@ def render_user_information():
     st.caption("🔒 Administrator Access Only | Password: admin2025")
 
 
+def render_analytics_dashboard():
+    """Render the Analytics Dashboard page - admin only."""
+    
+    st.title("📊 Analytics Dashboard")
+    st.markdown("---")
+    
+    # Check if current user is admin
+    is_admin = st.session_state.get("username") == "aj-admin"
+    
+    # Password protection
+    if 'analytics_authenticated' not in st.session_state:
+        st.session_state.analytics_authenticated = False
+    
+    if not is_admin and not st.session_state.analytics_authenticated:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        with st.form("analytics_password_form"):
+            st.markdown("### Enter Admin Password")
+            password = st.text_input("Password", type="password", key="analytics_pwd", label_visibility="collapsed", placeholder="Enter admin password")
+            submit = st.form_submit_button("Unlock", use_container_width=True, type="primary")
+            
+            if submit:
+                if password == "admin2025":  # Admin password
+                    st.session_state.analytics_authenticated = True
+                    st.success("✅ Access granted!")
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect password")
+        return
+    
+    # Logout button for admin
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔓 Lock Page", use_container_width=True):
+            st.session_state.analytics_authenticated = False
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Import analytics functions
+    try:
+        from .persistence import (
+            fetch_all_users,
+            fetch_user_activity,
+        )
+        
+        # Create database connection helper
+        import sqlite3
+        from pathlib import Path
+        
+        DB_PATH = Path(__file__).parent / "persistent_data" / "rct_field_flow.db"
+        
+        def get_analytics_data(query):
+            """Helper to execute analytics queries"""
+            if not DB_PATH.exists():
+                return pd.DataFrame()
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                df = pd.read_sql_query(query, conn)
+                return df
+            except Exception as e:
+                st.error(f"Query error: {e}")
+                return pd.DataFrame()
+            finally:
+                conn.close()
+        
+        # User Overview Section
+        st.markdown("### 📊 User Overview")
+        
+        user_summary_query = """
+        SELECT 
+            COUNT(*) as total_users,
+            COUNT(CASE WHEN password_hash IS NOT NULL THEN 1 END) as registered_users,
+            COUNT(CASE WHEN consent_given = 1 THEN 1 END) as users_with_consent,
+            MIN(first_access) as first_user_date,
+            MAX(last_access) as last_activity_date
+        FROM users
+        """
+        
+        user_summary = get_analytics_data(user_summary_query)
+        
+        if not user_summary.empty:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Users", int(user_summary['total_users'].values[0]))
+            with col2:
+                st.metric("Registered", int(user_summary['registered_users'].values[0]))
+            with col3:
+                st.metric("With Consent", int(user_summary['users_with_consent'].values[0]))
+            with col4:
+                if user_summary['first_user_date'].values[0]:
+                    first_date = pd.to_datetime(user_summary['first_user_date'].values[0]).strftime("%Y-%m-%d")
+                    st.metric("First User", first_date)
+        
+        st.markdown("---")
+        
+        # Activity Overview
+        st.markdown("### ⚡ Activity Overview")
+        
+        activity_summary_query = """
+        SELECT 
+            COUNT(*) as total_activities,
+            COUNT(DISTINCT username) as active_users,
+            COUNT(DISTINCT page) as pages_accessed,
+            COUNT(DISTINCT DATE(timestamp)) as active_days
+        FROM activities
+        """
+        
+        activity_summary = get_analytics_data(activity_summary_query)
+        
+        if not activity_summary.empty and activity_summary['total_activities'].values[0] > 0:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Activities", int(activity_summary['total_activities'].values[0]))
+            with col2:
+                st.metric("Active Users", int(activity_summary['active_users'].values[0]))
+            with col3:
+                st.metric("Pages Accessed", int(activity_summary['pages_accessed'].values[0]))
+            with col4:
+                st.metric("Active Days", int(activity_summary['active_days'].values[0]))
+        else:
+            st.info("No activity data recorded yet")
+        
+        st.markdown("---")
+        
+        # Tab navigation for detailed analytics
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["👥 Users", "📈 Activity", "📄 Pages", "🎲 Randomization", "📊 Export"])
+        
+        with tab1:
+            st.markdown("#### All Users")
+            users_query = """
+            SELECT 
+                username,
+                name,
+                organization,
+                first_access,
+                last_access,
+                consent_given,
+                CASE WHEN password_hash IS NOT NULL THEN 'Yes' ELSE 'No' END as has_password
+            FROM users
+            ORDER BY last_access DESC
+            """
+            users_df = get_analytics_data(users_query)
+            
+            if not users_df.empty:
+                # Format timestamps
+                users_df['first_access'] = pd.to_datetime(users_df['first_access']).dt.strftime('%Y-%m-%d %H:%M')
+                users_df['last_access'] = pd.to_datetime(users_df['last_access']).dt.strftime('%Y-%m-%d %H:%M')
+                users_df['consent_given'] = users_df['consent_given'].apply(lambda x: '✅' if x == 1 else '❌')
+                
+                st.dataframe(users_df, use_container_width=True, hide_index=True)
+                
+                # User detail selector
+                st.markdown("#### User Details")
+                selected_user = st.selectbox("Select user to view activity:", users_df['username'].tolist())
+                
+                if selected_user:
+                    activity_query = f"""
+                    SELECT 
+                        timestamp,
+                        page,
+                        action,
+                        details
+                    FROM activities
+                    WHERE username = '{selected_user}'
+                    ORDER BY timestamp DESC
+                    LIMIT 100
+                    """
+                    user_activity = get_analytics_data(activity_query)
+                    
+                    if not user_activity.empty:
+                        user_activity['timestamp'] = pd.to_datetime(user_activity['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        st.dataframe(user_activity, use_container_width=True, hide_index=True)
+                    else:
+                        st.info(f"No activity recorded for {selected_user}")
+            else:
+                st.info("No users found")
+        
+        with tab2:
+            st.markdown("#### Activity by User")
+            activity_by_user_query = """
+            SELECT 
+                u.username,
+                u.name,
+                COUNT(a.id) as total_activities,
+                COUNT(DISTINCT a.page) as unique_pages,
+                MIN(a.timestamp) as first_activity,
+                MAX(a.timestamp) as last_activity
+            FROM users u
+            LEFT JOIN activities a ON u.username = a.username
+            GROUP BY u.username, u.name
+            HAVING total_activities > 0
+            ORDER BY total_activities DESC
+            """
+            activity_user_df = get_analytics_data(activity_by_user_query)
+            
+            if not activity_user_df.empty:
+                activity_user_df['first_activity'] = pd.to_datetime(activity_user_df['first_activity']).dt.strftime('%Y-%m-%d %H:%M')
+                activity_user_df['last_activity'] = pd.to_datetime(activity_user_df['last_activity']).dt.strftime('%Y-%m-%d %H:%M')
+                st.dataframe(activity_user_df, use_container_width=True, hide_index=True)
+                
+                # Activity chart
+                if len(activity_user_df) > 0:
+                    st.bar_chart(activity_user_df.set_index('username')['total_activities'])
+            else:
+                st.info("No activity data available")
+            
+            st.markdown("#### Activity by Action")
+            action_query = """
+            SELECT 
+                action,
+                COUNT(*) as count,
+                COUNT(DISTINCT username) as unique_users
+            FROM activities
+            GROUP BY action
+            ORDER BY count DESC
+            """
+            action_df = get_analytics_data(action_query)
+            
+            if not action_df.empty:
+                st.dataframe(action_df, use_container_width=True, hide_index=True)
+        
+        with tab3:
+            st.markdown("#### Page Visits")
+            page_query = """
+            SELECT 
+                page,
+                COUNT(*) as visits,
+                COUNT(DISTINCT username) as unique_users
+            FROM activities
+            GROUP BY page
+            ORDER BY visits DESC
+            """
+            page_df = get_analytics_data(page_query)
+            
+            if not page_df.empty:
+                st.dataframe(page_df, use_container_width=True, hide_index=True)
+                
+                # Page visit chart
+                st.bar_chart(page_df.set_index('page')['visits'])
+            else:
+                st.info("No page visit data available")
+        
+        with tab4:
+            st.markdown("#### Randomization Usage")
+            random_query = """
+            SELECT 
+                u.username,
+                u.organization,
+                r.total_units,
+                r.timestamp as randomization_date
+            FROM randomization r
+            JOIN users u ON r.username = u.username
+            ORDER BY r.timestamp DESC
+            """
+            random_df = get_analytics_data(random_query)
+            
+            if not random_df.empty:
+                random_df['randomization_date'] = pd.to_datetime(random_df['randomization_date']).dt.strftime('%Y-%m-%d %H:%M')
+                st.dataframe(random_df, use_container_width=True, hide_index=True)
+                
+                # Stats
+                st.markdown("#### Statistics")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Randomizations", len(random_df))
+                with col2:
+                    st.metric("Total Units", int(random_df['total_units'].sum()))
+                with col3:
+                    st.metric("Avg Units/Randomization", int(random_df['total_units'].mean()))
+            else:
+                st.info("No randomization data available")
+        
+        with tab5:
+            st.markdown("#### Export Analytics Data")
+            st.info("Export comprehensive analytics reports to CSV files")
+            
+            if st.button("📁 Generate & Export All Reports", type="primary"):
+                from datetime import datetime
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                export_dir = Path(__file__).parent.parent / "analytics_reports"
+                export_dir.mkdir(exist_ok=True)
+                
+                # Export all tables
+                tables = {
+                    f"user_summary_{timestamp}.csv": user_summary,
+                    f"all_users_{timestamp}.csv": users_df,
+                    f"activity_by_user_{timestamp}.csv": activity_user_df,
+                    f"activity_by_action_{timestamp}.csv": action_df,
+                    f"page_visits_{timestamp}.csv": page_df,
+                    f"randomization_{timestamp}.csv": random_df,
+                }
+                
+                files_created = []
+                for filename, df in tables.items():
+                    if df is not None and not df.empty:
+                        filepath = export_dir / filename
+                        df.to_csv(filepath, index=False)
+                        files_created.append(filename)
+                
+                if files_created:
+                    st.success(f"✅ Exported {len(files_created)} reports to `analytics_reports/`")
+                    for filename in files_created:
+                        st.text(f"  • {filename}")
+                else:
+                    st.warning("No data available to export")
+    
+    except ImportError as e:
+        st.error(f"Analytics module not available: {e}")
+    except Exception as e:
+        st.error(f"Error loading analytics: {e}")
+        import traceback
+        with st.expander("Error details"):
+            st.code(traceback.format_exc())
+
+
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 # AUTHENTICATION & ACTIVITY LOGGING                                             #
@@ -8579,7 +8896,7 @@ PROTECTED_PAGES = ["design", "power", "random", "cases", "visualize", "quality",
                    "backcheck", "reports", "monitor", "home"]
 
 # Admin pages
-ADMIN_PAGES = ["facilitator", "userinfo"]
+ADMIN_PAGES = ["facilitator", "userinfo", "analytics"]
 
 
 def init_auth():
@@ -9053,6 +9370,8 @@ def main() -> None:
         render_user_information()
     elif page == "facilitator":
         render_facilitator_dashboard()
+    elif page == "analytics":
+        render_analytics_dashboard()
     
     # Clear the programmatic navigation flag after rendering
     if 'current_page' in st.session_state and st.session_state.current_page:
