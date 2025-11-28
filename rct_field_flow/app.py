@@ -3279,45 +3279,45 @@ def render_power_calculations() -> None:
             )
         
         # Simulation-specific parameters
-            if calculation_method == "simulation":
-                st.markdown("---")
-                st.markdown("##### Simulation Parameters")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    num_simulations = st.number_input(
-                        "Number of Simulations",
-                        min_value=100,
-                        max_value=10000,
-                        value=1000,
-                        step=100,
-                        help="Monte Carlo iterations. More iterations = more accurate but slower (1000 recommended)"
-                    )
-                
-                with col2:
-                    sim_seed = st.number_input(
-                        "Random Seed",
-                        min_value=1,
-                        max_value=999999,
-                        value=123456,
-                        help="For reproducibility. Same seed = same results"
-                    )
-                
-                if design_type == "cluster":
-                    within_cluster_var = st.number_input(
-                        "Within-Cluster Variance",
-                        min_value=0.01,
-                        value=1.0,
-                        step=0.1,
-                        help="Variance of individual-level errors within clusters"
-                    )
-                else:
-                    within_cluster_var = 1.0  # Not used for individual design
+        if calculation_method == "simulation":
+            st.markdown("---")
+            st.markdown("##### Simulation Parameters")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                num_simulations = st.number_input(
+                    "Number of Simulations",
+                    min_value=100,
+                    max_value=10000,
+                    value=1000,
+                    step=100,
+                    help="Monte Carlo iterations. More iterations = more accurate but slower (1000 recommended)"
+                )
+            
+            with col2:
+                sim_seed = st.number_input(
+                    "Random Seed",
+                    min_value=1,
+                    max_value=999999,
+                    value=123456,
+                    help="For reproducibility. Same seed = same results"
+                )
+            
+            if design_type == "cluster":
+                within_cluster_var = st.number_input(
+                    "Within-Cluster Variance",
+                    min_value=0.01,
+                    value=1.0,
+                    step=0.1,
+                    help="Variance of individual-level errors within clusters"
+                )
             else:
-                # Default values for analytical method
-                num_simulations = 1000
-                sim_seed = 123456
-                within_cluster_var = 1.0
+                within_cluster_var = 1.0  # Not used for individual design
+        else:
+            # Default values for analytical method
+            num_simulations = 1000
+            sim_seed = 123456
+            within_cluster_var = 1.0
         
         calculate_button = st.form_submit_button("⚡ Calculate", use_container_width=True)
 
