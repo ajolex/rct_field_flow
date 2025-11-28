@@ -1,13 +1,13 @@
 """Persistence layer for RCT Field Flow.
-Stores user sessions and activity logs in a local SQLite database for
-retrospective access after browser sessions end.
+Stores user sessions and activity logs in a database.
+Supports both SQLite (local) and PostgreSQL (production).
 """
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import json
 import os
 import hashlib
@@ -15,10 +15,79 @@ import secrets
 from cryptography.fernet import Fernet
 import bcrypt
 
+# Try to import PostgreSQL driver
+try:
+    import psycopg2
+    import psycopg2.extras
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+
+# Try to import streamlit for secrets access
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+
 DB_DIR = Path(__file__).parent / "persistent_data"
 DB_PATH = DB_DIR / "rct_field_flow.db"
 
-SCHEMA = {
+# PostgreSQL schemas (SERIAL instead of AUTOINCREMENT)
+SCHEMA_POSTGRES = {
+    "users": """
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            organization TEXT,
+            first_access TIMESTAMP,
+            last_access TIMESTAMP,
+            user_id TEXT UNIQUE,
+            username_hash TEXT,
+            username_salt TEXT,
+            encrypted_username TEXT,
+            password_hash TEXT,
+            name TEXT,
+            consent_given INTEGER DEFAULT 0,
+            consent_timestamp TIMESTAMP
+        )
+    """,
+    "activities": """
+        CREATE TABLE IF NOT EXISTS activities (
+            id SERIAL PRIMARY KEY,
+            username TEXT,
+            user_id TEXT,
+            timestamp TIMESTAMP,
+            page TEXT,
+            action TEXT,
+            details TEXT,
+            FOREIGN KEY(username) REFERENCES users(username)
+        )
+    """,
+    "design_data": """
+        CREATE TABLE IF NOT EXISTS design_data (
+            username TEXT PRIMARY KEY,
+            user_id TEXT,
+            team_name TEXT,
+            program_card TEXT,
+            current_step INTEGER,
+            workbook_json TEXT,
+            FOREIGN KEY(username) REFERENCES users(username)
+        )
+    """,
+    "randomization": """
+        CREATE TABLE IF NOT EXISTS randomization (
+            username TEXT PRIMARY KEY,
+            user_id TEXT,
+            total_units INTEGER,
+            arms_json TEXT,
+            timestamp TIMESTAMP,
+            FOREIGN KEY(username) REFERENCES users(username)
+        )
+    """,
+}
+
+# SQLite schemas (AUTOINCREMENT)
+SCHEMA_SQLITE = {
     "users": """
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -70,6 +139,9 @@ SCHEMA = {
     """,
 }
 
+# Choose schema based on database type
+SCHEMA = SCHEMA_SQLITE  # Default to SQLite
+
 # Optional encryption key loading
 _FERNET: Optional[Fernet] = None
 KEY_ENV = "PERSISTENCE_ENCRYPT_KEY"
@@ -85,6 +157,7 @@ def _init_fernet() -> None:
         else:
             # Generate new key and persist to file for reuse
             key = Fernet.generate_key().decode()
+            DB_DIR.mkdir(parents=True, exist_ok=True)
             key_file.write_text(key)
     try:
         _FERNET = Fernet(key.encode())
@@ -100,28 +173,107 @@ def _encrypt_username(username: str) -> Optional[str]:
     return _FERNET.encrypt(username.encode()).decode()
 
 
-def _connect() -> sqlite3.Connection:
+def _use_postgres() -> bool:
+    """Determine if we should use PostgreSQL based on environment."""
+    if not POSTGRES_AVAILABLE:
+        return False
+    
+    # Check if running on Streamlit Cloud with database secrets
+    if STREAMLIT_AVAILABLE:
+        try:
+            db_secrets = st.secrets.get("database", {})
+            return bool(db_secrets.get("host"))
+        except Exception:
+            return False
+    
+    return False
+
+
+def _connect() -> Union[sqlite3.Connection, Any]:
+    """Connect to database (PostgreSQL or SQLite based on environment)."""
+    if _use_postgres():
+        # PostgreSQL connection
+        try:
+            db_config = st.secrets["database"]
+            conn = psycopg2.connect(
+                host=db_config["host"],
+                port=db_config.get("port", 5432),
+                database=db_config.get("database", "postgres"),
+                user=db_config["user"],
+                password=db_config["password"],
+                sslmode=db_config.get("sslmode", "require")
+            )
+            # Enable autocommit for DDL operations
+            conn.autocommit = False
+            return conn
+        except Exception as e:
+            print(f"PostgreSQL connection failed: {e}, falling back to SQLite")
+            # Fall through to SQLite
+    
+    # SQLite connection (local development)
     DB_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute(_query("PRAGMA journal_mode=WAL;"))
     return conn
+
+
+def _get_placeholder() -> str:
+    """Get the correct placeholder style for the current database."""
+    return "%s" if _use_postgres() else "?"
+
+
+def _query(sql: str) -> str:
+    """Convert SQL query placeholders based on database type."""
+    if _use_postgres():
+        # Convert ? to %s for PostgreSQL
+        return sql.replace("?", "%s")
+    return sql
 
 
 def init_db() -> None:
     """Initialize database schema and apply migrations for new columns."""
+    global SCHEMA
     _init_fernet()
+    
+    # Select appropriate schema
+    use_pg = _use_postgres()
+    SCHEMA = SCHEMA_POSTGRES if use_pg else SCHEMA_SQLITE
+    
     conn = _connect()
     try:
+        # Create tables
         for ddl in SCHEMA.values():
-            conn.execute(ddl)
+            if use_pg:
+                with conn.cursor() as cur:
+                    cur.execute(ddl)
+            else:
+                conn.execute(ddl)
+        
         # Ensure required columns exist (idempotent migration)
-        def ensure_columns(table: str, columns: List[str]):
+        def ensure_columns_sqlite(table: str, columns: List[tuple]):
             cur = conn.execute(f"PRAGMA table_info({table})")
             existing = {row[1] for row in cur.fetchall()}
             for col, ddl_col in columns:
                 if col not in existing:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_col}")
-        ensure_columns("users", [
+        
+        def ensure_columns_postgres(table: str, columns: List[tuple]):
+            with conn.cursor() as cur:
+                # Check existing columns using information_schema
+                cur.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = %s
+                """, (table,))
+                existing = {row[0] for row in cur.fetchall()}
+                
+                for col, ddl_col in columns:
+                    if col not in existing:
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_col}")
+        
+        ensure_fn = ensure_columns_postgres if use_pg else ensure_columns_sqlite
+        
+        ensure_fn("users", [
             ("user_id", "TEXT UNIQUE"),
             ("username_hash", "TEXT"),
             ("username_salt", "TEXT"),
@@ -131,9 +283,10 @@ def init_db() -> None:
             ("consent_given", "INTEGER DEFAULT 0"),
             ("consent_timestamp", "TIMESTAMP"),
         ])
-        ensure_columns("activities", [("user_id", "TEXT")])
-        ensure_columns("design_data", [("user_id", "TEXT")])
-        ensure_columns("randomization", [("user_id", "TEXT")])
+        ensure_fn("activities", [("user_id", "TEXT")])
+        ensure_fn("design_data", [("user_id", "TEXT")])
+        ensure_fn("randomization", [("user_id", "TEXT")])
+        
         conn.commit()
     finally:
         conn.close()
@@ -149,15 +302,14 @@ def record_user_login(username: str, organization: Optional[str], consent: bool)
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT user_id, username_salt FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT user_id, username_salt FROM users WHERE username = ?"), (username,))
         existing = cur.fetchone()
         if existing:
             # Preserve existing user_id & salt for stability
             existing_user_id, existing_salt = existing
             hashed = _hash_username(username, existing_salt) if existing_salt else hashed
             user_id = existing_user_id or user_id
-            cur.execute(
-                "UPDATE users SET organization = ?, last_access = ?, username_hash = ?, encrypted_username = ?, consent_given = ?, consent_timestamp = ? WHERE username = ?",
+            cur.execute(_query("UPDATE users SET organization = ?, last_access = ?, username_hash = ?, encrypted_username = ?, consent_given = ?, consent_timestamp = ? WHERE username = ?"),
                 (
                     organization,
                     now,
@@ -169,8 +321,7 @@ def record_user_login(username: str, organization: Optional[str], consent: bool)
                 ),
             )
         else:
-            cur.execute(
-                "INSERT INTO users (username, organization, first_access, last_access, user_id, username_hash, username_salt, encrypted_username, consent_given, consent_timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            cur.execute(_query("INSERT INTO users (username, organization, first_access, last_access, user_id, username_hash, username_salt, encrypted_username, consent_given, consent_timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)"),
                 (
                     username,
                     organization,
@@ -198,7 +349,7 @@ def create_user(username: str, password: str, name: str, organization: Optional[
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT username FROM users WHERE username = ?"), (username,))
         if cur.fetchone():
             return False  # User already exists
             
@@ -213,8 +364,7 @@ def create_user(username: str, password: str, name: str, organization: Optional[
         encrypted_username = _encrypt_username(username)
         user_id = secrets.token_hex(12)
         
-        cur.execute(
-            "INSERT INTO users (username, password_hash, name, organization, first_access, last_access, user_id, username_hash, username_salt, encrypted_username) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        cur.execute(_query("INSERT INTO users (username, password_hash, name, organization, first_access, last_access, user_id, username_hash, username_salt, encrypted_username) VALUES (?,?,?,?,?,?,?,?,?,?)"),
             (
                 username,
                 password_hash,
@@ -241,7 +391,7 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username, password_hash, username_salt, name, organization, user_id FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT username, password_hash, username_salt, name, organization, user_id FROM users WHERE username = ?"), (username,))
         row = cur.fetchone()
         if not row:
             return None
@@ -256,7 +406,7 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
         if check_hash == db_pwd_hash:
             # Update last access
             now = datetime.utcnow().isoformat()
-            conn.execute("UPDATE users SET last_access = ? WHERE username = ?", (now, username))
+            conn.execute(_query("UPDATE users SET last_access = ? WHERE username = ?"), (now, username))
             conn.commit()
             
             return {
@@ -278,11 +428,10 @@ def record_activity(username: Optional[str], page: str, action: str, details: Op
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT user_id FROM users WHERE username = ?"), (username,))
         row = cur.fetchone()
         user_id = row[0] if row and row[0] else None
-        conn.execute(
-            "INSERT INTO activities (username, user_id, timestamp, page, action, details) VALUES (?,?,?,?,?,?)",
+        conn.execute(_query("INSERT INTO activities (username, user_id, timestamp, page, action, details) VALUES (?,?,?,?,?,?)"),
             (
                 username,
                 user_id,
@@ -301,19 +450,17 @@ def upsert_design_data(username: str, team_name: Optional[str], program_card: Op
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT user_id FROM users WHERE username = ?"), (username,))
         user_row = cur.fetchone()
         user_id = user_row[0] if user_row else None
-        cur.execute("SELECT username FROM design_data WHERE username = ?", (username,))
+        cur.execute(_query("SELECT username FROM design_data WHERE username = ?"), (username,))
         workbook_json = json.dumps(workbook_responses or {})
         if cur.fetchone():
-            cur.execute(
-                "UPDATE design_data SET team_name = ?, program_card = ?, current_step = ?, workbook_json = ?, user_id = ? WHERE username = ?",
+            cur.execute(_query("UPDATE design_data SET team_name = ?, program_card = ?, current_step = ?, workbook_json = ?, user_id = ? WHERE username = ?"),
                 (team_name, program_card, current_step, workbook_json, user_id, username),
             )
         else:
-            cur.execute(
-                "INSERT INTO design_data (username, user_id, team_name, program_card, current_step, workbook_json) VALUES (?,?,?,?,?,?)",
+            cur.execute(_query("INSERT INTO design_data (username, user_id, team_name, program_card, current_step, workbook_json) VALUES (?,?,?,?,?,?)"),
                 (username, user_id, team_name, program_card, current_step, workbook_json),
             )
         conn.commit()
@@ -325,20 +472,18 @@ def upsert_randomization(username: str, total_units: int, arms: List[Dict[str, A
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT user_id FROM users WHERE username = ?"), (username,))
         user_row = cur.fetchone()
         user_id = user_row[0] if user_row else None
-        cur.execute("SELECT username FROM randomization WHERE username = ?", (username,))
+        cur.execute(_query("SELECT username FROM randomization WHERE username = ?"), (username,))
         arms_json = json.dumps(arms or [])
         ts = timestamp or datetime.utcnow().isoformat()
         if cur.fetchone():
-            cur.execute(
-                "UPDATE randomization SET total_units = ?, arms_json = ?, timestamp = ?, user_id = ? WHERE username = ?",
+            cur.execute(_query("UPDATE randomization SET total_units = ?, arms_json = ?, timestamp = ?, user_id = ? WHERE username = ?"),
                 (total_units, arms_json, ts, user_id, username),
             )
         else:
-            cur.execute(
-                "INSERT INTO randomization (username, user_id, total_units, arms_json, timestamp) VALUES (?,?,?,?,?)",
+            cur.execute(_query("INSERT INTO randomization (username, user_id, total_units, arms_json, timestamp) VALUES (?,?,?,?,?)"),
                 (username, user_id, total_units, arms_json, ts),
             )
         conn.commit()
@@ -350,7 +495,7 @@ def fetch_all_users() -> List[Dict[str, Any]]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username, organization, first_access, last_access, user_id, consent_given, username_hash, encrypted_username FROM users ORDER BY last_access DESC")
+        cur.execute(_query("SELECT username, organization, first_access, last_access, user_id, consent_given, username_hash, encrypted_username FROM users ORDER BY last_access DESC"))
         rows = cur.fetchall()
         return [
             {
@@ -373,7 +518,7 @@ def fetch_user_session(username: str) -> Dict[str, Any]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username, organization, first_access, last_access, user_id, consent_given, consent_timestamp FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT username, organization, first_access, last_access, user_id, consent_given, consent_timestamp FROM users WHERE username = ?"), (username,))
         row = cur.fetchone()
         return {
             "username": row[0],
@@ -392,8 +537,7 @@ def fetch_user_activity(username: str) -> List[Dict[str, Any]]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT timestamp, page, action, details FROM activities WHERE username = ? ORDER BY timestamp ASC",
+        cur.execute(_query("SELECT timestamp, page, action, details FROM activities WHERE username = ? ORDER BY timestamp ASC"),
             (username,),
         )
         rows = cur.fetchall()
@@ -414,8 +558,7 @@ def fetch_user_design(username: str) -> Dict[str, Any]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT team_name, program_card, current_step, workbook_json FROM design_data WHERE username = ?",
+        cur.execute(_query("SELECT team_name, program_card, current_step, workbook_json FROM design_data WHERE username = ?"),
             (username,),
         )
         row = cur.fetchone()
@@ -435,8 +578,7 @@ def fetch_user_randomization(username: str) -> Dict[str, Any]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT total_units, arms_json, timestamp FROM randomization WHERE username = ?",
+        cur.execute(_query("SELECT total_units, arms_json, timestamp FROM randomization WHERE username = ?"),
             (username,),
         )
         row = cur.fetchone()
@@ -454,10 +596,10 @@ def fetch_user_randomization(username: str) -> Dict[str, Any]:
 def delete_user(username: str) -> None:
     conn = _connect()
     try:
-        conn.execute("DELETE FROM activities WHERE username = ?", (username,))
-        conn.execute("DELETE FROM design_data WHERE username = ?", (username,))
-        conn.execute("DELETE FROM randomization WHERE username = ?", (username,))
-        conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.execute(_query("DELETE FROM activities WHERE username = ?"), (username,))
+        conn.execute(_query("DELETE FROM design_data WHERE username = ?"), (username,))
+        conn.execute(_query("DELETE FROM randomization WHERE username = ?"), (username,))
+        conn.execute(_query("DELETE FROM users WHERE username = ?"), (username,))
         conn.commit()
     finally:
         conn.close()
@@ -469,7 +611,7 @@ def anonymize_user(username: str) -> Optional[str]:
     try:
         cur = conn.cursor()
         # Fetch existing fields to preserve user_id
-        cur.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+        cur.execute(_query("SELECT user_id FROM users WHERE username = ?"), (username,))
         row = cur.fetchone()
         if not row:
             return None
@@ -477,8 +619,7 @@ def anonymize_user(username: str) -> Optional[str]:
         salt = secrets.token_hex(16)
         hashed = _hash_username(new_username, salt)
         encrypted = _encrypt_username(new_username)
-        cur.execute(
-            "UPDATE users SET username = ?, username_hash = ?, username_salt = ?, encrypted_username = ? WHERE user_id = ?",
+        cur.execute(_query("UPDATE users SET username = ?, username_hash = ?, username_salt = ?, encrypted_username = ? WHERE user_id = ?"),
             (new_username, hashed, salt, encrypted, user_id),
         )
         # Update child tables
@@ -493,7 +634,7 @@ def prune_activities(before_iso_timestamp: str) -> int:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM activities WHERE timestamp < ?", (before_iso_timestamp,))
+        cur.execute(_query("DELETE FROM activities WHERE timestamp < ?"), (before_iso_timestamp,))
         deleted = cur.rowcount
         conn.commit()
         return deleted
@@ -503,7 +644,7 @@ def prune_activities(before_iso_timestamp: str) -> int:
 def vacuum_db() -> None:
     conn = _connect()
     try:
-        conn.execute("VACUUM")
+        conn.execute(_query("VACUUM"))
     finally:
         conn.close()
 
@@ -513,7 +654,7 @@ def fetch_users_for_auth() -> Dict[str, Dict[str, Any]]:
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username, name, password_hash FROM users WHERE password_hash IS NOT NULL")
+        cur.execute(_query("SELECT username, name, password_hash FROM users WHERE password_hash IS NOT NULL"))
         rows = cur.fetchall()
         users = {}
         for r in rows:

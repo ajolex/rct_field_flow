@@ -1,82 +1,58 @@
-__pycache__
-*.pyc
-.env
-.env.local
-.DS_Store
-*.log
-data/
-*.csv
-# keep one small, synthetic example baseline in version control
-!examples/sample_baseline.csv
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Fix scripts
-*fix.py
-*_fix.py
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Deployment & Docker files (local use only)
-.dockerignore
-Dockerfile
-docker-compose.yml
-docker-compose.*.yml
-.devcontainer/
-.github/
-deploy.ps1
-deploy.sh
-launch_ui.bat
-launch_ui.sh
+# Virtual environments
+venv/
+ENV/
+env/
 
-# Streamlit config (keep only what's needed for Streamlit Cloud)
-.streamlit/
-.env.example
-
-# Deployment documentation (keep locally, not in public repo)
-DEPLOYMENT*.md
-DEPLOYMENT*.txt
-STREAMLIT_CLOUD*.md
-STREAMLIT_CLOUD*.txt
-00_START_HERE.txt
-WHY_DOCKERFILE_REMOVED.md
-
-# All markdown files except README and docs/
-*.md
-!README.md
-!docs/*.md
-
-# Developer documentation (local only)
-developer-docs/
-
-# Setup files (not needed for Streamlit Cloud deployment)
-setup.py
-pyproject.toml
-
-# Example configs (not needed in public repo)
-examples/config_example.yaml
-
-# Auto-generated images
-rct_field_flow/config/image/
-rct_field_flow/image/
-
-# IDE & Editor files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
-
-# Package/build artifacts
-dist/
-build/
-*.egg-info/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# OS files
-Thumbs.db
+# OS
 .DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+rct_field_flow/persistent_data/
+
+# Streamlit secrets (contains database credentials)
+.streamlit/secrets.toml
+
+# Test files
+test_*.py
+
+# Logs
+*.log
+
+# Documentation builds
+docs/_build/

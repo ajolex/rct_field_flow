@@ -1,0 +1,5 @@
+submission_date	enumerator	treatment	participant_id	duration	gps_lat	gps_lon	community
+2025-10-28	Seliano	control	1234	1800	-1.2921	36.8219	Mbwelera
+2025-10-28	Maya	treatment	9876	2100	-0.0917	34.7679	Kasiya
+2025-10-29	Seliano	control	5432	1650	-1.2921	36.8219	Mbwelera
+2025-10-29	Maya	treatment	6789	2400	-0.0917	34.7679	Kasiya

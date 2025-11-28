@@ -8938,6 +8938,16 @@ def render_login_page(authenticator):
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         background-color: #ffffff;
     }
+    /* Green toggle bar styling */
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+        background-color: #28a745 !important;
+        color: white !important;
+        border: none !important;
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+        background-color: #218838 !important;
+        color: white !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -8983,8 +8993,11 @@ def render_login_page(authenticator):
                         st.error("Username already exists or error creating account.")
         
         # Toggle to login
-        st.markdown("---")
-        if st.button("Already registered? Log in", use_container_width=True):
+        st.markdown("""
+        <div style='background-color: #28a745; padding: 10px; border-radius: 5px; text-align: center; margin-top: 20px;'>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Already registered? Log in", use_container_width=True, type="secondary"):
             st.session_state.auth_mode = 'login'
             st.rerun()
     
@@ -9004,8 +9017,11 @@ def render_login_page(authenticator):
             pass  # Don't show warning, let the form speak for itself
         
         # Toggle to register
-        st.markdown("---")
-        if st.button("Need an account? Register", use_container_width=True):
+        st.markdown("""
+        <div style='background-color: #28a745; padding: 10px; border-radius: 5px; text-align: center; margin-top: 20px;'>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Need an account? Register", use_container_width=True, type="secondary"):
             st.session_state.auth_mode = 'register'
             st.rerun()
 

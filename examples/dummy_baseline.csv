@@ -1,0 +1,7 @@
+participant_id,district,gender,age,hh_size,team,community
+1234,Mchinji,M,33,5,team_a,Mbwelera
+9876,Lilongwe,F,45,3,team_b,Kasiya
+5432,Mchinji,F,28,4,team_a,Mbwelera
+6789,Lilongwe,M,51,6,team_b,Kasiya
+6781,Mchinji,F,37,5,team_a,Mbwelera
+2345,Lilongwe,M,29,2,team_b,Kasiya

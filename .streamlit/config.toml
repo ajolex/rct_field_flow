@@ -1,0 +1,18 @@
+[client]
+showErrorDetails = false
+maxMessageSize = 200
+
+[logger]
+level = "info"
+
+[theme]
+base = "light"
+primaryColor = "#1f77b4"
+
+[server]
+maxUploadSize = 200
+enableXsrfProtection = true
+enableCORS = true
+
+[browser]
+gatherUsageStats = false
