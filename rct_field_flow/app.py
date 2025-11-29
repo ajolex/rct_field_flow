@@ -747,14 +747,14 @@ di "============================================================================
 {chr(10).join([f'''
 di "Treatment Arm: {name} (Expected: {prop*100:.1f}%)"
 quietly summarize prob_{name}, detail
-di "  Mean probability:  " %6.4f r(mean) " (expected: {prop:.4f})"
-di "  Std deviation:     " %6.4f r(sd)
-di "  Min probability:   " %6.4f r(min)
-di "  Max probability:   " %6.4f r(max)
+di "  Mean probability:  " %-6.4f r(mean) " (expected: {prop:.4f})"
+di "  Std deviation:     " %-6.4f r(sd)
+di "  Min probability:   " %-6.4f r(min)
+di "  Max probability:   " %-6.4f r(max)
 local mean_{name.replace(" ", "_")} = r(mean)
 local expected_{name.replace(" ", "_")} = {prop}
 if abs(`mean_{name.replace(" ", "_")}' - `expected_{name.replace(" ", "_")}') > 0.05 {{
-    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%!"
+    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%%!"
 }}
 di ""''' for name, prop in zip(arms_names, arms_props)])}
 
@@ -764,7 +764,7 @@ local warning_count = 0
 quietly count if prob_{name} < {prop} - 0.30 | prob_{name} > {prop} + 0.30
 if r(N) > 0 {{
     di as error "⚠ WARNING: " r(N) " observations have extreme probabilities for '{name}'"
-    di as error "  (>30% deviation from expected {prop*100:.1f}%)"
+    di as error "  (>30%% deviation from expected {prop*100:.1f}%%)"
     local warning_count = `warning_count' + 1
 }}''' for name, prop in zip(arms_names, arms_props)])}
 
@@ -1061,7 +1061,7 @@ di "Balance covariates: {', '.join(config.balance_covariates)}" _n
 forvalues i = 1/{config.iterations} {{
     * Display progress every 1000 iterations
     if mod(`i', 1000) == 0 {{
-        di "  Iteration " %6.0f `i' " / {config.iterations:,} (best p-value so far: " %6.4f `bestp' ")"
+        di "  Iteration " %%6.0f `i' " / {config.iterations:,} (best p-value so far: " %%6.4f `bestp' ")"
     }}
     
     * Generate random numbers and sort within strata
@@ -1102,7 +1102,7 @@ di _n "=========================================================================
 di "RERANDOMIZATION COMPLETE"
 di "================================================================================"
 di "Best iteration: " `best_iter' " out of {config.iterations:,}"
-di "Best min p-value: " %6.4f `bestp'
+di "Best min p-value: " %%6.4f `bestp'
 di "  → Higher p-values indicate better balance"
 di "  → This is the MINIMUM p-value across all tested covariates"
 di "  → Selected assignment has best overall balance" _n
@@ -1150,7 +1150,7 @@ foreach arm in {' '.join([f'"{arm.name}"' for arm in config.arms])} {{
     count if {config.treatment_column} == `arm'
     local n_`arm' = r(N)
     local pct_`arm' = (r(N) / _N) * 100
-    di "  `arm': " r(N) " observations (" %4.1f `pct_`arm'' "%)"
+    di "  `arm': " r(N) " observations (" %%4.1f `pct_`arm'' "%%)"
 }}
 
 '''
@@ -1192,10 +1192,10 @@ di "============================================================================
     
     * Highlight imbalance
     if r(p) < 0.05 {{
-        di as error "  ⚠ WARNING: Significant imbalance detected (p = " %6.4f r(p) ")"
+        di as error "  ⚠ WARNING: Significant imbalance detected (p = " %%6.4f r(p) ")"
     }}
     else {{
-        di as text "  ✓ Acceptable balance (p = " %6.4f r(p) ")"
+        di as text "  ✓ Acceptable balance (p = " %%6.4f r(p) ")"
     }}
 }}''' if config.balance_covariates else '* No balance covariates specified'}
 
