@@ -1074,7 +1074,22 @@ di "============================================================================
         
         # Build progress display code (with Stata format codes) outside f-string
         progress_code = f'di "  Iteration " %6.0f `i\' " / {config.iterations:,} (best p-value so far: " %6.4f `bestp\' ")"'
-        bestp_code = f'di "Best min p-value: " %6.4f `bestp\''
+        bestp_code = 'di "Best min p-value: " %6.4f `bestp\''
+        
+        # Build strata-related code outside f-string to avoid nested f-string issues
+        sort_code = f'sort {" ".join(config.strata)} rand, stable' if config.strata else 'sort rand'
+        strata_comment = ' within strata' if config.strata else ''
+        
+        # Build treatment assignment code for each arm
+        treatment_lines = []
+        for idx, arm in enumerate(config.arms):
+            if idx < len(config.arms) - 1:
+                prefix = f'bysort {" ".join(config.strata)}: ' if config.strata else ''
+                cutoff = sum([a.proportion for a in config.arms[:idx+1]])
+                treatment_lines.append(f'    {prefix}replace {config.treatment_column}_temp = "{arm.name}" if _n <= {cutoff:.6f} * _N')
+            else:
+                treatment_lines.append(f'    replace {config.treatment_column}_temp = "{arm.name}" if {config.treatment_column}_temp == ""')
+        treatment_assign_code = chr(10).join(treatment_lines)
         
         code += f'''
 * RERANDOMIZATION WITH BALANCE OPTIMIZATION
@@ -1099,11 +1114,11 @@ forvalues i = 1/{config.iterations} {{
     
     * Generate random numbers and sort within strata
     gen rand = runiform()
-    {f'sort {" ".join(config.strata)} rand, stable' if config.strata else 'sort rand'}
+    {sort_code}
     
-    * Assign treatments{' within strata' if config.strata else ''}
+    * Assign treatments{strata_comment}
     gen {config.treatment_column}_temp = ""
-{chr(10).join([f'    {"bysort " + " ".join(config.strata) + ": " if config.strata else ""}replace {config.treatment_column}_temp = "{arm.name}" if _n <= {sum([a.proportion for a in config.arms[:idx+1]]):.6f} * _N' if idx < len(config.arms) - 1 else f'    replace {config.treatment_column}_temp = "{arm.name}" if {config.treatment_column}_temp == ""' for idx, arm in enumerate(config.arms)])}
+{treatment_assign_code}
     
     * Reset minimum p-value for this iteration
     local minp = 1
@@ -1230,6 +1245,14 @@ restore
     else:
         balance_check_code = '* No balance covariates specified'
     
+    # Build strata/cluster notes outside f-string
+    if config.strata:
+        strata_note_final = f'di "  4. All {" x ".join([f"N({var})" for var in config.strata])} strata combinations have observations"'
+    else:
+        strata_note_final = ''
+    
+    cluster_note_final = 'di "  5. All clusters are assigned to a single treatment arm"' if config.cluster else ''
+    
     code += f'''
 di _n "================================================================================"
 di "BALANCE CHECK SUMMARY"
@@ -1255,8 +1278,8 @@ di "Review the output above to verify:"
 di "  1. Treatment proportions match specified targets"
 di "  2. No excessive missing data warnings"
 di "  3. Balance tests show acceptable p-values (>0.05 preferred)"
-{f'di "  4. All {" x ".join([f"N({var})" for var in config.strata])} strata combinations have observations"' if config.strata else ''}
-{'di "  5. All clusters are assigned to a single treatment arm"' if config.cluster else ''}
+{strata_note_final}
+{cluster_note_final}
 di "================================================================================" _n
 '''
     
