@@ -1066,6 +1066,10 @@ di "============================================================================
     if config.iterations > 1 and config.balance_covariates:
         balance_vars = " ".join(config.balance_covariates)
         
+        # Build progress display code (with Stata format codes) outside f-string
+        progress_code = f'di "  Iteration " %6.0f `i\' " / {config.iterations:,} (best p-value so far: " %6.4f `bestp\' ")"'
+        bestp_code = f'di "Best min p-value: " %6.4f `bestp\''
+        
         code += f'''
 * RERANDOMIZATION WITH BALANCE OPTIMIZATION
 * Initialize tracking variables
@@ -1084,7 +1088,7 @@ di "Balance covariates: {', '.join(config.balance_covariates)}" _n
 forvalues i = 1/{config.iterations} {{
     * Display progress every 1000 iterations
     if mod(`i', 1000) == 0 {{
-        di "  Iteration " %%6.0f `i' " / {config.iterations:,} (best p-value so far: " %%6.4f `bestp' ")"
+        {progress_code}
     }}
     
     * Generate random numbers and sort within strata
@@ -1125,7 +1129,7 @@ di _n "=========================================================================
 di "RERANDOMIZATION COMPLETE"
 di "================================================================================"
 di "Best iteration: " `best_iter' " out of {config.iterations:,}"
-di "Best min p-value: " %%6.4f `bestp'
+{bestp_code}
 di "  → Higher p-values indicate better balance"
 di "  → This is the MINIMUM p-value across all tested covariates"
 di "  → Selected assignment has best overall balance" _n
@@ -1173,7 +1177,7 @@ foreach arm in {' '.join([f'"{arm.name}"' for arm in config.arms])} {{
     count if {config.treatment_column} == `arm'
     local n_`arm' = r(N)
     local pct_`arm' = (r(N) / _N) * 100
-    di "  `arm': " r(N) " observations (" %%4.1f `pct_`arm'' "%%)"
+    di "  `arm': " r(N) " observations (" %4.1f `pct_`arm'' "%%)"
 }}
 
 '''
@@ -1215,10 +1219,10 @@ di "============================================================================
     
     * Highlight imbalance
     if r(p) < 0.05 {{
-        di as error "  ⚠ WARNING: Significant imbalance detected (p = " %%6.4f r(p) ")"
+        di as error "  ⚠ WARNING: Significant imbalance detected (p = " %6.4f r(p) ")"
     }}
     else {{
-        di as text "  ✓ Acceptable balance (p = " %%6.4f r(p) ")"
+        di as text "  ✓ Acceptable balance (p = " %6.4f r(p) ")"
     }}
 }}''' if config.balance_covariates else '* No balance covariates specified'}
 
