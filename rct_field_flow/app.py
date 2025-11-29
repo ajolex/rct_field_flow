@@ -5319,8 +5319,12 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
         
     Returns:
         dict: Keys are filenames (e.g., 'level_1_roster.csv'), Values are DataFrames.
+              Also includes 'level_0_household.csv' for non-repeated variables.
     """
     import re
+    
+    # Track original column order (for preserving order in output)
+    original_col_order = list(df.columns)
     
     # 1. Regex to capture Stub + Suffix (supports any depth: _1, _1_2, _1_2_3)
     pattern = re.compile(r'^(.+?)_(\d+(?:_\d+)*)$')
@@ -5328,6 +5332,7 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
     # 2. Scan columns and Group by Depth
     stub_depths = {}
     stub_cols = {}
+    matched_cols = set()  # Track columns that match pattern
 
     for col in df.columns:
         if col == id_col:
@@ -5345,6 +5350,7 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
             if stub not in stub_cols:
                 stub_cols[stub] = []
             stub_cols[stub].append(col)
+            matched_cols.add(col)
 
     # Group stubs by their Max Depth
     groups = {}
@@ -5352,14 +5358,55 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
         if depth not in groups:
             groups[depth] = []
         groups[depth].append(stub)
+    
+    # 2b. Identify Level 0 (non-repeated) variables
+    # These are columns that don't match any pattern (household-level vars)
+    level_0_cols = [col for col in df.columns if col != id_col and col not in matched_cols]
+    
+    # Helper function to get stub order based on first appearance in original data
+    def get_stub_order(stubs_list):
+        """Return stubs sorted by their first column's position in original data."""
+        stub_first_pos = {}
+        for stub in stubs_list:
+            cols_for_stub = stub_cols.get(stub, [])
+            if cols_for_stub:
+                # Find the earliest position of any column with this stub
+                positions = [original_col_order.index(c) for c in cols_for_stub if c in original_col_order]
+                if positions:
+                    stub_first_pos[stub] = min(positions)
+                else:
+                    stub_first_pos[stub] = float('inf')
+            else:
+                stub_first_pos[stub] = float('inf')
+        return sorted(stubs_list, key=lambda s: stub_first_pos.get(s, float('inf')))
 
     results = {}
+    
+    # 2c. Process Level 0 (non-repeated household-level variables) FIRST
+    if level_0_cols:
+        # Create dataset with id + non-repeated variables, deduplicated by ID
+        level_0_df = df[[id_col] + level_0_cols].copy()
+        
+        # Order columns by original appearance
+        ordered_level_0_cols = [col for col in original_col_order if col in level_0_cols]
+        level_0_df = level_0_df[[id_col] + ordered_level_0_cols]
+        
+        # Drop duplicates by ID (keep first occurrence)
+        level_0_df = level_0_df.drop_duplicates(subset=[id_col], keep='first')
+        
+        # Sort by ID
+        level_0_df = level_0_df.sort_values(id_col).reset_index(drop=True)
+        
+        results["level_0_household.csv"] = level_0_df
 
     # 3. Process Each Group (Batch Reshape)
     for depth, stubs in groups.items():
+        # Sort stubs by their first appearance in original data
+        stubs_ordered = get_stub_order(stubs)
+        
         # Collect all columns for this depth group
         target_cols = []
-        for s in stubs:
+        for s in stubs_ordered:
             target_cols.extend(stub_cols.get(s, []))
             
         if not target_cols:
@@ -5430,13 +5477,20 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
         # Cleanup
         wide_df_clean = wide_df_clean.drop(columns=['__temp_id'], errors='ignore')
         
+        # F. Reorder columns: id, level_*, then data columns in original stub order
+        # Data columns should follow the order of stubs_ordered
+        final_col_order = [id_col] + level_cols + stubs_ordered
+        # Only include columns that exist in wide_df_clean
+        final_col_order = [c for c in final_col_order if c in wide_df_clean.columns]
+        wide_df_clean = wide_df_clean[final_col_order]
+        
         # Sort for cleanliness
         wide_df_clean = wide_df_clean.sort_values([id_col] + level_cols)
         
         # Generate descriptive filename
-        stub_sample = stubs[:3] if len(stubs) <= 3 else stubs[:2] + ['...']
+        stub_sample = stubs_ordered[:3] if len(stubs_ordered) <= 3 else stubs_ordered[:2] + ['...']
         stub_desc = '_'.join(stub_sample).replace('...', 'etc')
-        filename = f"level_{depth}_data_{stub_desc}.csv"
+        filename = f"level_{depth}_{stub_desc}.csv"
         
         results[filename] = wide_df_clean.reset_index(drop=True)
 
@@ -5459,9 +5513,15 @@ def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
     """
     import re
     
+    # Track original column order
+    original_col_order = list(df.columns)
+    
     # Reuse the scanning logic to identify groups
     pattern = re.compile(r'^(.+?)_(\d+(?:_\d+)*)$')
     stub_depths = {}
+    stub_cols = {}
+    matched_cols = set()
+    
     for col in df.columns:
         if col == id_col:
             continue
@@ -5472,12 +5532,34 @@ def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
             depth = suffix.count('_') + 1
             if stub not in stub_depths or depth > stub_depths[stub]:
                 stub_depths[stub] = depth
+            if stub not in stub_cols:
+                stub_cols[stub] = []
+            stub_cols[stub].append(col)
+            matched_cols.add(col)
 
     groups = {}
     for stub, depth in stub_depths.items():
         if depth not in groups:
             groups[depth] = []
         groups[depth].append(stub)
+    
+    # Identify Level 0 (non-repeated) variables
+    level_0_cols = [col for col in df.columns if col != id_col and col not in matched_cols]
+    
+    # Helper to order stubs by first appearance
+    def get_stub_order(stubs_list):
+        stub_first_pos = {}
+        for stub in stubs_list:
+            cols_for_stub = stub_cols.get(stub, [])
+            if cols_for_stub:
+                positions = [original_col_order.index(c) for c in cols_for_stub if c in original_col_order]
+                if positions:
+                    stub_first_pos[stub] = min(positions)
+                else:
+                    stub_first_pos[stub] = float('inf')
+            else:
+                stub_first_pos[stub] = float('inf')
+        return sorted(stubs_list, key=lambda s: stub_first_pos.get(s, float('inf')))
 
     # Generate Code
     code = "// " + "="*70 + "\n"
@@ -5489,16 +5571,44 @@ def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
     code += "// TODO: Load your wide-format dataset\n"
     code += "// use \"your_data.dta\", clear\n"
     code += "// OR: import delimited \"your_data.csv\", clear\n\n"
+    
+    # Level 0: Non-repeated (household-level) variables
+    if level_0_cols:
+        level_0_ordered = [col for col in original_col_order if col in level_0_cols]
+        level_0_str = " ".join(level_0_ordered)
+        code += "\n"
+        code += "// " + "-"*70 + "\n"
+        code += "// LEVEL 0: HOUSEHOLD-LEVEL (NON-REPEATED) VARIABLES\n"
+        code += "// Variables: " + str(len(level_0_cols)) + " columns\n"
+        code += "// " + "-"*70 + "\n"
+        code += "preserve\n"
+        code += "    keep " + id_col + " " + level_0_str + "\n"
+        code += "\n"
+        code += "    // Remove duplicates (keep one row per ID)\n"
+        code += "    duplicates drop " + id_col + ", force\n"
+        code += "\n"
+        code += "    // Order and sort\n"
+        code += "    order " + id_col + " " + level_0_str + "\n"
+        code += "    sort " + id_col + "\n"
+        code += "\n"
+        code += "    // Save\n"
+        code += "    save \"level_0_household.dta\", replace\n"
+        code += "    export delimited using \"level_0_household.csv\", replace\n"
+        code += "restore\n"
+        code += "\n"
 
     for depth, stubs in sorted(groups.items()):
+        # Sort stubs by original column order
+        stubs_ordered = get_stub_order(stubs)
+        
         # Create a list of stubs for the reshape command
-        stubs_str = " ".join([s + "_" for s in stubs])
-        clean_stubs_str = " ".join(stubs)
+        stubs_str = " ".join([s + "_" for s in stubs_ordered])
+        clean_stubs_str = " ".join(stubs_ordered)
         
         code += "\n"
         code += "// " + "-"*70 + "\n"
-        code += "// LEVEL " + str(depth) + " BATCH (e.g. " + stubs[0] + "...)\n"
-        code += "// Variables: " + str(len(stubs)) + " stubs\n"
+        code += "// LEVEL " + str(depth) + " BATCH (e.g. " + stubs_ordered[0] + "...)\n"
+        code += "// Variables: " + str(len(stubs_ordered)) + " stubs\n"
         code += "// " + "-"*70 + "\n"
         code += "preserve\n"
         code += "    keep " + id_col + " " + stubs_str + "*\n"
@@ -5509,7 +5619,7 @@ def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
         code += "    // 2. Drop Empty Rows (Optimization)\n"
         code += "    // Check if all variables of interest are missing\n"
         code += "    egen _miss_count = rowmiss(" + clean_stubs_str + ")\n"
-        code += "    drop if _miss_count == " + str(len(stubs)) + "\n"
+        code += "    drop if _miss_count == " + str(len(stubs_ordered)) + "\n"
         code += "    drop _miss_count\n"
         code += "\n"
         code += "    // 3. Split Index into Levels\n"
@@ -5519,17 +5629,22 @@ def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
         code += "    // 4. Rename variables (remove trailing underscore)\n"
         code += "    rename (" + stubs_str + ") (" + clean_stubs_str + ")\n"
         code += "\n"
-        code += "    // 5. Save\n"
-        code += "    order " + id_col + " level_*\n"
+        code += "    // 5. Order columns and Save\n"
+        code += "    order " + id_col + " level_* " + clean_stubs_str + "\n"
         code += "    sort " + id_col + " level_*\n"
         code += "    save \"level_" + str(depth) + "_data.dta\", replace\n"
         code += "    export delimited using \"level_" + str(depth) + "_data.csv\", replace\n"
         code += "restore\n"
         code += "\n"
     
+    total_datasets = len(groups) + (1 if level_0_cols else 0)
     code += "\n// " + "="*70 + "\n"
     code += "// END OF BATCH RESHAPE\n"
-    code += "// Generated " + str(len(groups)) + " level-based dataset(s)\n"
+    code += "// Generated " + str(total_datasets) + " dataset(s):\n"
+    if level_0_cols:
+        code += "//   - level_0_household (non-repeated variables)\n"
+    for depth in sorted(groups.keys()):
+        code += "//   - level_" + str(depth) + "_data (depth " + str(depth) + " nested variables)\n"
     code += "// " + "="*70 + "\n"
     
     return code
