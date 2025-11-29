@@ -5302,6 +5302,224 @@ def build_reshaped_download_payloads(datasets: Dict[str, pd.DataFrame]) -> Dict[
     }
 
 
+# ----------------------------------------------------------------------------- #
+# BATCH RESHAPE FUNCTIONS (Melt & Split Strategy)
+# ----------------------------------------------------------------------------- #
+
+def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.DataFrame]:
+    """
+    Automated N-Level Reshape using 'Melt & Split' strategy.
+    
+    This solves the "hundreds of files" problem by grouping variables by their 
+    depth (Level 1, Level 2...) and processing them in batches.
+    
+    Args:
+        df: DataFrame in wide format with columns like var_1, var_1_2, etc.
+        id_col: Column to use as unique identifier
+        
+    Returns:
+        dict: Keys are filenames (e.g., 'level_1_roster.csv'), Values are DataFrames.
+    """
+    import re
+    
+    # 1. Regex to capture Stub + Suffix (supports any depth: _1, _1_2, _1_2_3)
+    pattern = re.compile(r'^(.+?)_(\d+(?:_\d+)*)$')
+    
+    # 2. Scan columns and Group by Depth
+    stub_depths = {}
+    stub_cols = {}
+
+    for col in df.columns:
+        if col == id_col:
+            continue
+        match = pattern.match(col)
+        if match:
+            stub = match.group(1)
+            suffix = match.group(2)
+            depth = suffix.count('_') + 1
+            
+            # Update max depth for this stub
+            if stub not in stub_depths or depth > stub_depths[stub]:
+                stub_depths[stub] = depth
+            
+            if stub not in stub_cols:
+                stub_cols[stub] = []
+            stub_cols[stub].append(col)
+
+    # Group stubs by their Max Depth
+    groups = {}
+    for stub, depth in stub_depths.items():
+        if depth not in groups:
+            groups[depth] = []
+        groups[depth].append(stub)
+
+    results = {}
+
+    # 3. Process Each Group (Batch Reshape)
+    for depth, stubs in groups.items():
+        # Collect all columns for this depth group
+        target_cols = []
+        for s in stubs:
+            target_cols.extend(stub_cols.get(s, []))
+            
+        if not target_cols:
+            continue
+
+        # A. Melt (Wide -> Long)
+        # Use a temp index to preserve row uniqueness during melt
+        df_temp = df.copy()
+        df_temp['__temp_id'] = range(len(df_temp))
+        long_df = pd.melt(
+            df_temp,
+            id_vars=['__temp_id', id_col],
+            value_vars=target_cols,
+            var_name='temp_raw',
+            value_name='value'
+        )
+        
+        # B. Extract Stub & Suffix
+        extracted = long_df['temp_raw'].str.extract(pattern)
+        long_df['stub'] = extracted[0]
+        long_df['suffix'] = extracted[1]
+        
+        # C. Split Suffix into Levels
+        split_indices = long_df['suffix'].str.split('_', expand=True)
+        level_cols = ["level_" + str(i+1) for i in range(depth)]
+        
+        # Handle edge cases where split creates fewer columns than depth
+        for i, col_name in enumerate(level_cols):
+            if i < split_indices.shape[1]:
+                long_df[col_name] = pd.to_numeric(split_indices[i], errors='ignore')
+            else:
+                long_df[col_name] = 1  # Default index if missing
+        
+        # D. Pivot (Long -> Wide-ish)
+        # We pivot so Stubs become columns again
+        pivot_index = ['__temp_id', id_col] + level_cols
+        
+        wide_df = long_df.pivot_table(
+            index=pivot_index,
+            columns='stub',
+            values='value',
+            aggfunc='first'
+        ).reset_index()
+        
+        # E. Optimization: Drop Empty Rows
+        # Drop rows where all variable columns are NaN
+        data_cols = [c for c in wide_df.columns if c not in pivot_index]
+        if data_cols:
+            wide_df_clean = wide_df.dropna(subset=data_cols, how='all')
+        else:
+            wide_df_clean = wide_df
+        
+        # Cleanup
+        wide_df_clean = wide_df_clean.drop(columns=['__temp_id'], errors='ignore')
+        
+        # Sort for cleanliness
+        wide_df_clean = wide_df_clean.sort_values([id_col] + level_cols)
+        
+        # Generate descriptive filename
+        stub_sample = stubs[:3] if len(stubs) <= 3 else stubs[:2] + ['...']
+        stub_desc = '_'.join(stub_sample).replace('...', 'etc')
+        filename = f"level_{depth}_data_{stub_desc}.csv"
+        
+        results[filename] = wide_df_clean.reset_index(drop=True)
+
+    return results
+
+
+def generate_stata_batch_code(df: pd.DataFrame, id_col: str) -> str:
+    """
+    Generates Stata code that reshapes variables in batches based on depth.
+    
+    This approach prevents the "hundreds of files" issue in Stata by grouping
+    variables with the same nesting depth together.
+    
+    Args:
+        df: DataFrame in wide format
+        id_col: ID column for reshape
+        
+    Returns:
+        String containing Stata do-file code
+    """
+    import re
+    
+    # Reuse the scanning logic to identify groups
+    pattern = re.compile(r'^(.+?)_(\d+(?:_\d+)*)$')
+    stub_depths = {}
+    for col in df.columns:
+        if col == id_col:
+            continue
+        match = pattern.match(col)
+        if match:
+            stub = match.group(1)
+            suffix = match.group(2)
+            depth = suffix.count('_') + 1
+            if stub not in stub_depths or depth > stub_depths[stub]:
+                stub_depths[stub] = depth
+
+    groups = {}
+    for stub, depth in stub_depths.items():
+        if depth not in groups:
+            groups[depth] = []
+        groups[depth].append(stub)
+
+    # Generate Code
+    code = "// " + "="*70 + "\n"
+    code += "// Automated Batch Reshape for " + id_col + "\n"
+    code += "// Generated by RCT Field Flow\n"
+    code += "// " + "="*70 + "\n\n"
+    code += "set more off\n"
+    code += "clear all\n\n"
+    code += "// TODO: Load your wide-format dataset\n"
+    code += "// use \"your_data.dta\", clear\n"
+    code += "// OR: import delimited \"your_data.csv\", clear\n\n"
+
+    for depth, stubs in sorted(groups.items()):
+        # Create a list of stubs for the reshape command
+        stubs_str = " ".join([s + "_" for s in stubs])
+        clean_stubs_str = " ".join(stubs)
+        
+        code += "\n"
+        code += "// " + "-"*70 + "\n"
+        code += "// LEVEL " + str(depth) + " BATCH (e.g. " + stubs[0] + "...)\n"
+        code += "// Variables: " + str(len(stubs)) + " stubs\n"
+        code += "// " + "-"*70 + "\n"
+        code += "preserve\n"
+        code += "    keep " + id_col + " " + stubs_str + "*\n"
+        code += "\n"
+        code += "    // 1. Reshape Long (String option handles 1_1_1 suffixes)\n"
+        code += "    reshape long " + stubs_str + ", i(" + id_col + ") j(idx_string) string\n"
+        code += "\n"
+        code += "    // 2. Drop Empty Rows (Optimization)\n"
+        code += "    // Check if all variables of interest are missing\n"
+        code += "    egen _miss_count = rowmiss(" + clean_stubs_str + ")\n"
+        code += "    drop if _miss_count == " + str(len(stubs)) + "\n"
+        code += "    drop _miss_count\n"
+        code += "\n"
+        code += "    // 3. Split Index into Levels\n"
+        code += "    split idx_string, parse(_) destring generate(level_)\n"
+        code += "    drop idx_string\n"
+        code += "\n"
+        code += "    // 4. Rename variables (remove trailing underscore)\n"
+        code += "    rename (" + stubs_str + ") (" + clean_stubs_str + ")\n"
+        code += "\n"
+        code += "    // 5. Save\n"
+        code += "    order " + id_col + " level_*\n"
+        code += "    sort " + id_col + " level_*\n"
+        code += "    save \"level_" + str(depth) + "_data.dta\", replace\n"
+        code += "    export delimited using \"level_" + str(depth) + "_data.csv\", replace\n"
+        code += "restore\n"
+        code += "\n"
+    
+    code += "\n// " + "="*70 + "\n"
+    code += "// END OF BATCH RESHAPE\n"
+    code += "// Generated " + str(len(groups)) + " level-based dataset(s)\n"
+    code += "// " + "="*70 + "\n"
+    
+    return code
+
+
 def clean_and_convert_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean and convert data types:
@@ -5710,9 +5928,104 @@ def render_data_visualization() -> None:
     - `var_1_1`, `var_1_2`, ... → Long with `var`, `repeat_1`, `repeat_2`
     """)
     
+    # Reshape mode selection
+    reshape_mode = st.radio(
+        "Reshape Mode",
+        ["Standard (Pattern-based)", "Batch (Level-based)"],
+        horizontal=True,
+        key="reshape_mode",
+        help="Standard: Groups patterns by name. Batch: Groups by nesting depth (faster for complex data)"
+    )
+    
     enable_reshape = st.checkbox("Enable automatic reshaping", value=False, key="enable_reshape")
     
-    if enable_reshape and id_col:
+    # ------------------------------------------------------------------------ #
+    # BATCH RESHAPE MODE (Melt & Split Strategy)
+    # ------------------------------------------------------------------------ #
+    if enable_reshape and id_col and reshape_mode == "Batch (Level-based)":
+        st.markdown("---")
+        st.markdown("#### ⚡ Batch Reshape (Melt & Split Strategy)")
+        st.info("""
+        **Batch Mode** groups variables by nesting depth (Level 1, 2, 3...) and processes them together.
+        This is much faster for datasets with many repeated patterns and prevents the "hundreds of files" problem.
+        """)
+        
+        if st.button("🚀 Auto-Detect & Reshape", type="primary", key="batch_reshape_btn"):
+            with st.spinner("Analyzing structure and reshaping..."):
+                try:
+                    # Run Python Reshape
+                    reshaped_files = automated_reshape_grouped(data, id_col)
+                    
+                    # Run Stata Code Gen
+                    stata_syntax = generate_stata_batch_code(data, id_col)
+                    
+                    if reshaped_files:
+                        st.success(f"✅ Successfully reshaped into {len(reshaped_files)} relational datasets!")
+                        
+                        # Store in session state
+                        st.session_state.viz_data_reshaped = reshaped_files
+                        st.session_state.viz_batch_stata_code = stata_syntax
+                        
+                        # Tabs for Preview
+                        tabs = st.tabs(list(reshaped_files.keys()))
+                        for name, tab in zip(reshaped_files.keys(), tabs):
+                            with tab:
+                                st.dataframe(reshaped_files[name].head(20), use_container_width=True)
+                                st.caption(f"Shape: {reshaped_files[name].shape[0]:,} rows × {reshaped_files[name].shape[1]} columns")
+
+                        # Download Everything (ZIP)
+                        st.markdown("---")
+                        st.markdown("#### 📥 Download Reshaped Data")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Combine CSVs and Stata code into one ZIP
+                            zip_buffer = BytesIO()
+                            with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                # Add CSVs
+                                for name, df_data in reshaped_files.items():
+                                    csv_data = df_data.to_csv(index=False).encode('utf-8')
+                                    zf.writestr(name, csv_data)
+                                
+                                # Add Stata Do-file
+                                zf.writestr("reshape_script.do", stata_syntax)
+                            
+                            st.download_button(
+                                label="📦 Download All (ZIP)",
+                                data=zip_buffer.getvalue(),
+                                file_name="reshaped_data_package.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="batch_download_zip"
+                            )
+                        
+                        with col2:
+                            st.download_button(
+                                label="📜 Download Stata Code",
+                                data=stata_syntax,
+                                file_name="batch_reshape.do",
+                                mime="text/plain",
+                                use_container_width=True,
+                                key="batch_download_stata"
+                            )
+                        
+                        # Display Stata Code for copy-paste
+                        with st.expander("👁️ View Generated Stata Code", expanded=False):
+                            st.code(stata_syntax, language='stata')
+                    else:
+                        st.warning("No repeated patterns detected for batch reshaping.")
+                        
+                except Exception as e:
+                    st.error(f"Error during reshape: {str(e)}")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
+    
+    # ------------------------------------------------------------------------ #
+    # STANDARD RESHAPE MODE (Pattern-based)
+    # ------------------------------------------------------------------------ #
+    elif enable_reshape and id_col and reshape_mode == "Standard (Pattern-based)":
         with st.spinner("Detecting repeated patterns..."):
             patterns = detect_wide_patterns(data)
         
