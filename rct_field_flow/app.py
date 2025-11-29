@@ -1206,13 +1206,9 @@ restore
 
 '''
     
-    code += f'''
-di _n "================================================================================"
-di "BALANCE CHECK SUMMARY"
-di "================================================================================" _n
-
-* Check balance on specified covariates
-{f'''foreach var of varlist {' '.join(config.balance_covariates)} {{
+    # Build balance check code OUTSIDE f-string to avoid nested f-string issues with % format codes
+    if config.balance_covariates:
+        balance_check_code = f'''foreach var of varlist {' '.join(config.balance_covariates)} {{
     di _n "Balance check for `var':"
     di "  Null hypothesis: Treatment arms have equal means"
     oneway `var' {config.treatment_column}, tabulate
@@ -1224,7 +1220,17 @@ di "============================================================================
     else {{
         di as text "  ✓ Acceptable balance (p = " %6.4f r(p) ")"
     }}
-}}''' if config.balance_covariates else '* No balance covariates specified'}
+}}'''
+    else:
+        balance_check_code = '* No balance covariates specified'
+    
+    code += f'''
+di _n "================================================================================"
+di "BALANCE CHECK SUMMARY"
+di "================================================================================" _n
+
+* Check balance on specified covariates
+{balance_check_code}
 
 di _n "================================================================================"
 di "SAVING RESULTS"
