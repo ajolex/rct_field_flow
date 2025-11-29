@@ -303,6 +303,24 @@ CLUSTER RANDOMIZATION DETAILS:
 - Number of clusters randomized: depends on unique clusters in your data
 '''
     
+    # Build strata distribution code OUTSIDE f-string to avoid nested f-string issues
+    if config.strata:
+        strata_distribution_code = f'''strata_vars = {config.strata}
+if strata_vars:
+    print("-" * 80)
+    print("TREATMENT DISTRIBUTION BY STRATA")
+    print("-" * 80)
+    crosstab = pd.crosstab(
+        [result.assignments[col] for col in strata_vars],
+        result.assignments["{config.treatment_column}"],
+        margins=True
+    )
+    print(crosstab)
+    print()
+'''
+    else:
+        strata_distribution_code = ''
+    
     code = f'''"""
 ================================================================================
 RANDOMIZATION CODE - RCT Field Flow
@@ -408,19 +426,7 @@ print(f"{'Total':20s}: {{len(result.assignments):6d}} observations")
 print()
 
 # Distribution by strata (if applicable)
-{f'''strata_vars = {config.strata}
-if strata_vars:
-    print("-" * 80)
-    print("TREATMENT DISTRIBUTION BY STRATA")
-    print("-" * 80)
-    crosstab = pd.crosstab(
-        [result.assignments[col] for col in strata_vars],
-        result.assignments["{config.treatment_column}"],
-        margins=True
-    )
-    print(crosstab)
-    print()
-''' if config.strata else ''}
+{strata_distribution_code}
 
 # Balance table (if covariates specified)
 if not result.balance_table.empty:
