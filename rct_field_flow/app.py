@@ -5405,9 +5405,24 @@ def automated_reshape_grouped(df: pd.DataFrame, id_col: str) -> Dict[str, pd.Dat
         ).reset_index()
         
         # E. Optimization: Drop Empty Rows
-        # Drop rows where all variable columns are NaN
+        # Identify data columns (exclude id and level_* columns)
         data_cols = [c for c in wide_df.columns if c not in pivot_index]
+        
         if data_cols:
+            # First, replace string "nan", "NaN", "NAN", empty strings, and whitespace-only with actual NaN
+            for col in data_cols:
+                if wide_df[col].dtype == 'object':
+                    # Replace various "nan" string representations and empty strings with actual NaN
+                    wide_df[col] = wide_df[col].replace(
+                        ['nan', 'NaN', 'NAN', 'None', 'none', 'NONE', '', ' ', 'null', 'NULL', 'NA', 'N/A', 'n/a'],
+                        pd.NA
+                    )
+                    # Also handle strings that are just whitespace
+                    wide_df[col] = wide_df[col].apply(
+                        lambda x: pd.NA if isinstance(x, str) and x.strip() == '' else x
+                    )
+            
+            # Now drop rows where ALL data columns are NA/NaN
             wide_df_clean = wide_df.dropna(subset=data_cols, how='all')
         else:
             wide_df_clean = wide_df
@@ -5981,7 +5996,7 @@ def render_data_visualization() -> None:
                         
                         with col1:
                             # Combine CSVs and Stata code into one ZIP
-                            zip_buffer = BytesIO()
+                            zip_buffer = io.BytesIO()
                             with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                                 # Add CSVs
                                 for name, df_data in reshaped_files.items():
