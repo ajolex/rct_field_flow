@@ -192,6 +192,46 @@ def yaml_load(text: str) -> Dict:
     return yaml.safe_load(text) if text.strip() else {}
 
 
+def format_number_smart(value: float, max_decimals: int = 2) -> str:
+    """
+    Format a number intelligently:
+    - If it's effectively an integer (e.g., 100.00), display as integer (100)
+    - Otherwise, display with up to max_decimals, trimming trailing zeros
+    """
+    if value == int(value):
+        return f"{int(value):,}"
+    else:
+        # Format with max_decimals, then strip trailing zeros
+        formatted = f"{value:,.{max_decimals}f}".rstrip('0').rstrip('.')
+        return formatted
+
+
+def load_uploaded_file(uploaded_file) -> pd.DataFrame:
+    """
+    Load a data file from Streamlit uploader. Supports CSV, Excel, and Stata .dta files.
+    
+    Args:
+        uploaded_file: Streamlit UploadedFile object
+        
+    Returns:
+        pd.DataFrame with the loaded data
+    """
+    if uploaded_file is None:
+        return None
+    
+    filename = uploaded_file.name.lower()
+    
+    if filename.endswith('.dta'):
+        # Stata format
+        return pd.read_stata(uploaded_file)
+    elif filename.endswith('.xlsx') or filename.endswith('.xls'):
+        # Excel format
+        return pd.read_excel(uploaded_file)
+    else:
+        # Default to CSV
+        return pd.read_csv(uploaded_file, low_memory=False)
+
+
 def load_rct_design_module(module_name: str, relative_path: str) -> ModuleType:
     """Load a module from the embedded rct-design app without polluting sys.path."""
     module_path = RCT_DESIGN_APP_DIR / relative_path
@@ -2149,9 +2189,9 @@ def render_randomization() -> None:
     default_config = load_default_config().get("randomization", {})
     df = st.session_state.baseline_data
 
-    upload = st.file_uploader("Upload randomization data (CSV)", type="csv", key="randomization_upload")
+    upload = st.file_uploader("Upload randomization data", type=["csv", "xlsx", "dta"], key="randomization_upload")
     if upload:
-        df = pd.read_csv(upload)
+        df = load_uploaded_file(upload)
         st.session_state.baseline_data = df
         st.success(f"Loaded {len(df):,} observations • {len(df.columns)} columns.")
 
@@ -2750,7 +2790,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 st.metric("MDE (Percentage Points)", f"{mde*100:.1f}pp")
                 st.caption(f"Change from {baseline_mean*100:.1f}% to {(baseline_mean+mde)*100:.1f}%")
             else:
-                st.metric("Minimum Detectable Effect", f"{mde:.3f}")
+                st.metric("Minimum Detectable Effect", format_number_smart(mde))
                 st.caption(f"{(mde / baseline_mean * 100):.2f}% of baseline mean")
 
         with col2:
@@ -2776,8 +2816,9 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                     st.metric("MDE (Percentage Points)", f"{mde_with_attrition*100:.1f}pp", 
                              delta=f"{(mde_with_attrition - mde)*100:.1f}pp", delta_color="inverse")
                 else:
-                    st.metric("Minimum Detectable Effect", f"{mde_with_attrition:.3f}",
-                             delta=f"{mde_with_attrition - mde:.3f}", delta_color="inverse")
+                    delta_val = mde_with_attrition - mde
+                    st.metric("Minimum Detectable Effect", format_number_smart(mde_with_attrition),
+                             delta=format_number_smart(delta_val), delta_color="inverse")
                 st.caption(f"{(mde_with_attrition / baseline_mean * 100):.2f}% of baseline mean")
 
             with col2:
@@ -2799,14 +2840,14 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             if attrition_rate > 0:
                 st.success(
                     f"✅ **Without attrition**: With **{int(sample_size):,} individuals** ({sample_text}), "
-                    f"you can detect an effect of **{mde:.3f}** with **{power*100:.0f}% power**.\n\n"
+                    f"you can detect an effect of **{format_number_smart(mde)}** with **{power*100:.0f}% power**.\n\n"
                     f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(sample_with_attrition):,} individuals** "
-                    f"to maintain power and detect **{mde_with_attrition:.3f}** effect."
+                    f"to maintain power and detect **{format_number_smart(mde_with_attrition)}** effect."
                 )
             else:
                 st.info(
                     f"With **{int(sample_size):,} individuals** ({sample_text}), "
-                    f"you can detect an effect of **{mde:.3f}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
+                    f"you can detect an effect of **{format_number_smart(mde)}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
                     f"with **{power*100:.0f}% power** at **α = {alpha}**."
                 )
     elif calculation_mode == "sample_size" and sample_result:
@@ -2819,7 +2860,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             with col1:
                 st.metric("Required Sample Size", f"{int(required_n):,}")
             with col2:
-                st.metric("Target MDE", f"{target_mde:.3f}")
+                st.metric("Target MDE", format_number_smart(target_mde))
                 st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
             with col3:
                 st.metric("Power", f"{power*100:.0f}%")
@@ -2834,7 +2875,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                     st.metric("Required Sample Size", f"{int(n_with_attrition):,}",
                              delta=f"+{int(n_with_attrition - required_n):,}")
                 with col2:
-                    st.metric("Target MDE", f"{target_mde:.3f}")
+                    st.metric("Target MDE", format_number_smart(target_mde))
                     st.caption("(maintained with larger N)")
                 with col3:
                     st.metric("Power", f"{power*100:.0f}%")
@@ -2846,12 +2887,12 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                     st.success(
                         f"✅ **Without attrition**: **{int(required_n):,} individuals** needed.\n\n"
                         f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(n_with_attrition):,} individuals** "
-                        f"to maintain **{power*100:.0f}% power** for detecting **{target_mde:.3f}** effect."
+                        f"to maintain **{power*100:.0f}% power** for detecting **{format_number_smart(target_mde)}** effect."
                     )
                 else:
                     st.info(
                         f"You need **{int(required_n):,} individuals** to detect an effect of "
-                        f"**{target_mde:.3f}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
+                        f"**{format_number_smart(target_mde)}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
                         f"with **{power*100:.0f}% power** at **α = {alpha}**."
                     )
         else:
@@ -2862,7 +2903,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 st.metric("Required Clusters", f"{required_clusters:,}")
                 st.caption(f"Total N = {total_n:,}")
             with col2:
-                st.metric("Target MDE", f"{target_mde:.3f}")
+                st.metric("Target MDE", format_number_smart(target_mde))
                 st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
             with col3:
                 if cluster_size:
@@ -2899,7 +2940,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 else:
                     st.info(
                         f"You need **{required_clusters:,} clusters** ({total_n:,} individuals) "
-                        f"to detect an effect of **{target_mde:.3f}** "
+                        f"to detect an effect of **{format_number_smart(target_mde)}** "
                         f"({(target_mde / baseline_mean * 100):.2f}% of baseline) "
                         f"with **{power*100:.0f}% power** at **α = {alpha}**."
                     )
@@ -3002,7 +3043,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 st.info("📊 **MDE Table**: Values shown are for the specified sample sizes (no attrition)")
             
             st.dataframe(
-                mde_table.style.format("{:.3f}").background_gradient(cmap='RdYlGn_r', axis=None),
+                mde_table.style.format("{:.2f}").background_gradient(cmap='RdYlGn_r', axis=None),
                 use_container_width=True
             )
             st.caption(
@@ -3788,9 +3829,9 @@ def render_case_assignment() -> None:
 
     # Data source selection
     df = st.session_state.case_data
-    upload = st.file_uploader("Upload randomized data (CSV)", type="csv", key="case_upload")
+    upload = st.file_uploader("Upload randomized data", type=["csv", "xlsx", "dta"], key="case_upload")
     if upload:
-        df = pd.read_csv(upload)
+        df = load_uploaded_file(upload)
         st.session_state.case_data = df
         st.success(f"Loaded {len(df):,} rows for case assignment.")
 
@@ -6532,9 +6573,9 @@ def render_quality_checks() -> None:
             st.error(f"Couldn't load submissions using project config: {exc}")
             return
     elif source == "Upload CSV":
-        upload = st.file_uploader("Upload submissions CSV", type="csv", key="quality_csv_upload")
+        upload = st.file_uploader("Upload submissions data", type=["csv", "xlsx", "dta"], key="quality_csv_upload")
         if upload:
-            data = pd.read_csv(upload)
+            data = load_uploaded_file(upload)
             st.session_state.quality_data = data
         else:
             data = st.session_state.get("quality_data")
@@ -6601,6 +6642,75 @@ def render_quality_checks() -> None:
                 st.write(", ".join(all_cols[:10]))
                 if len(all_cols) > 10:
                     st.write(f"... and {len(all_cols) - 10} more")
+
+    # Data Reshaping Section (for repeat group data)
+    with st.expander("🔄 Data Reshaping (for repeat groups)", expanded=False):
+        st.markdown("""
+        If your data contains **repeat groups** (e.g., household members, visits, items), 
+        you can reshape it into separate relational datasets before running quality checks.
+        """)
+        
+        reshape_cols = df.columns.tolist()
+        id_col_reshape = st.selectbox(
+            "Select ID column",
+            options=reshape_cols,
+            index=reshape_cols.index("KEY") if "KEY" in reshape_cols else 0,
+            key="quality_reshape_id",
+            help="The unique identifier for each observation (e.g., KEY, hhid)"
+        )
+        
+        if st.button("🚀 Auto-Detect & Reshape", type="secondary", key="quality_batch_reshape"):
+            with st.spinner("Analyzing structure and reshaping..."):
+                try:
+                    reshaped_files = automated_reshape_grouped(df, id_col_reshape)
+                    stata_syntax = generate_stata_batch_code(df, id_col_reshape)
+                    
+                    if reshaped_files:
+                        st.success(f"✅ Successfully reshaped into {len(reshaped_files)} relational datasets!")
+                        
+                        # Store in session state
+                        st.session_state.quality_reshaped = reshaped_files
+                        st.session_state.quality_stata_code = stata_syntax
+                        
+                        # Show previews
+                        tabs = st.tabs(list(reshaped_files.keys()))
+                        for name, tab in zip(reshaped_files.keys(), tabs):
+                            with tab:
+                                st.dataframe(reshaped_files[name].head(15), use_container_width=True)
+                                st.caption(f"Shape: {reshaped_files[name].shape[0]:,} rows × {reshaped_files[name].shape[1]} columns")
+                        
+                        # Download
+                        st.markdown("##### 📥 Download Reshaped Data")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            zip_buffer = io.BytesIO()
+                            with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                for name, df_data in reshaped_files.items():
+                                    csv_data = df_data.to_csv(index=False).encode('utf-8')
+                                    zf.writestr(name, csv_data)
+                                zf.writestr("reshape_script.do", stata_syntax)
+                            st.download_button(
+                                label="📦 Download All (ZIP)",
+                                data=zip_buffer.getvalue(),
+                                file_name="quality_reshaped_data.zip",
+                                mime="application/zip",
+                                key="quality_download_zip"
+                            )
+                        with col2:
+                            st.download_button(
+                                label="📜 Download Stata Code",
+                                data=stata_syntax,
+                                file_name="quality_reshape.do",
+                                mime="text/plain",
+                                key="quality_download_stata"
+                            )
+                    else:
+                        st.warning("No repeat group patterns detected in this dataset.")
+                except Exception as e:
+                    st.error(f"Error during reshape: {str(e)}")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
 
     # Configuration mode selector
     config_mode = st.radio(
@@ -7977,13 +8087,13 @@ def render_analysis() -> None:
         with col1:
             st.markdown("#### Baseline Data")
             baseline_upload = st.file_uploader(
-                "Upload baseline data (CSV)",
-                type="csv",
+                "Upload baseline data",
+                type=["csv", "xlsx", "dta"],
                 key="attrition_baseline",
                 help="Data with randomized participants"
             )
             if baseline_upload:
-                baseline = pd.read_csv(baseline_upload)
+                baseline = load_uploaded_file(baseline_upload)
                 st.session_state.baseline_for_attrition = baseline
                 st.success(f"✅ Loaded {len(baseline):,} baseline observations")
         
@@ -8229,26 +8339,26 @@ def render_backcheck() -> None:
     with col1:
         st.markdown("#### Submissions Data")
         submissions_upload = st.file_uploader(
-            "Upload submissions (CSV)",
-            type="csv",
+            "Upload submissions data",
+            type=["csv", "xlsx", "dta"],
             key="backcheck_submissions_file",
             help="Survey submissions for backcheck selection"
         )
         if submissions_upload:
-            df = pd.read_csv(submissions_upload)
+            df = load_uploaded_file(submissions_upload)
             st.session_state.backcheck_data = df
             st.success(f"✅ Loaded {len(df):,} submissions")
     
     with col2:
         st.markdown("#### Quality Flags (Optional)")
         flags_upload = st.file_uploader(
-            "Upload quality flags (CSV)",
-            type="csv",
+            "Upload quality flags",
+            type=["csv", "xlsx", "dta"],
             key="backcheck_flags_file",
             help="Output from Quality Checks module (optional but recommended)"
         )
         if flags_upload:
-            flags = pd.read_csv(flags_upload)
+            flags = load_uploaded_file(flags_upload)
             st.session_state.backcheck_flags = flags
             st.success(f"✅ Loaded flags for {len(flags):,} submissions")
         else:
@@ -8482,14 +8592,14 @@ def render_reports() -> None:
     with col1:
         st.markdown("#### Submissions Data")
         submissions_upload = st.file_uploader(
-            "Upload submissions (CSV)",
-            type="csv",
+            "Upload submissions data",
+            type=["csv", "xlsx", "dta"],
             key="report_submissions",
             help="Survey submissions for the reporting period"
         )
         
         if submissions_upload:
-            submissions_df = pd.read_csv(submissions_upload)
+            submissions_df = load_uploaded_file(submissions_upload)
             st.success(f"✅ Loaded {len(submissions_df):,} submissions")
         else:
             submissions_df = None
@@ -8498,14 +8608,14 @@ def render_reports() -> None:
     with col2:
         st.markdown("#### Quality Flags")
         flags_upload = st.file_uploader(
-            "Upload quality flags (CSV)",
-            type="csv",
+            "Upload quality flags",
+            type=["csv", "xlsx", "dta"],
             key="report_flags",
             help="Quality check results"
         )
         
         if flags_upload:
-            flags_df = pd.read_csv(flags_upload)
+            flags_df = load_uploaded_file(flags_upload)
             st.success(f"✅ Loaded {len(flags_df):,} flag records")
         else:
             flags_df = None
@@ -8748,9 +8858,9 @@ def render_monitoring() -> None:
             st.error(f"Couldn't load monitoring components using project config: {exc}")
             return
     elif source == "Upload CSV":
-        upload = st.file_uploader("Upload submissions CSV", type="csv", key="monitor_csv_upload")
+        upload = st.file_uploader("Upload submissions data", type=["csv", "xlsx", "dta"], key="monitor_csv_upload")
         if upload:
-            data = pd.read_csv(upload, sep=None, engine="python")
+            data = load_uploaded_file(upload)
             st.session_state.monitor_data = data
             st.success(f"✅ Loaded {len(data):,} submissions")
         else:
