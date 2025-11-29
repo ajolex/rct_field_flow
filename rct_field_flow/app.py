@@ -566,7 +566,7 @@ else:
 
 
 def generate_stata_validation_code(config: RandomizationConfig, n_simulations: int) -> str:
-    """Generate a pure Stata do-file that validates randomization fairness."""
+    """Generate Stata code to validate randomization by running it N times."""
     
     # Generate treatment arm info
     arms_names = [arm.name for arm in config.arms]
@@ -636,6 +636,46 @@ sort cluster_rand
     # Base seed
     base_seed = config.seed if config.seed else 12345
     
+    # BUILD VALIDATION CODE OUTSIDE F-STRING TO AVOID PARSING ISSUES WITH % FORMAT CODES
+    # This part contains Stata format codes like %6.4f that would break inside f-strings
+    summary_stats_code = ""
+    extreme_check_code = ""
+    
+    for name, prop in zip(arms_names, arms_props):
+        name_clean = name.replace(" ", "_")
+        prop_pct = f"{prop*100:.1f}"
+        prop_fmt = f"{prop:.4f}"
+        
+        # Summary statistics for each arm (uses Stata %6.4f format codes)
+        summary_stats_code += f'di "Treatment Arm: {name} (Expected: {prop_pct}%)"\n'
+        summary_stats_code += f'quietly summarize prob_{name}, detail\n'
+        summary_stats_code += f'di "  Mean probability:  " %6.4f r(mean) " (expected: {prop_fmt})"\n'
+        summary_stats_code += f'di "  Std deviation:     " %6.4f r(sd)\n'
+        summary_stats_code += f'di "  Min probability:   " %6.4f r(min)\n'
+        summary_stats_code += f'di "  Max probability:   " %6.4f r(max)\n'
+        summary_stats_code += f'local mean_{name_clean} = r(mean)\n'
+        summary_stats_code += f'local expected_{name_clean} = {prop}\n'
+        summary_stats_code += f'if abs(`mean_{name_clean}\' - `expected_{name_clean}\') > 0.05 {{\n'
+        summary_stats_code += f'    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%!"\n'
+        summary_stats_code += f'}}\n'
+        summary_stats_code += f'di ""\n'
+        
+        # Check for extreme probabilities
+        prop_low = f"{prop - 0.30:.4f}"
+        prop_high = f"{prop + 0.30:.4f}"
+        extreme_check_code += f'quietly count if prob_{name} < {prop_low} | prob_{name} > {prop_high}\n'
+        extreme_check_code += f'if r(N) > 0 {{\n'
+        extreme_check_code += f'    di as error "⚠ WARNING: " r(N) " observations have extreme probabilities for \'{name}\'"\n'
+        extreme_check_code += f'    di as error "  (>30% deviation from expected {prop_pct}%)"\n'
+        extreme_check_code += f'    local warning_count = `warning_count\' + 1\n'
+        extreme_check_code += f'}}\n'
+    
+    # Treatment arms list (for display in f-string later)
+    arms_display = ', '.join([f'{name} ({prop*100:.1f}%)' for name, prop in zip(arms_names, arms_props)])
+    prob_vars = ' '.join([f'prob_{name}' for name in arms_names])
+    prob_sum = ' + '.join([f'prob_{name}' for name in arms_names])
+    prob_count = len(arms_names)
+    
     code = f'''********************************************************************************
 * RANDOMIZATION VALIDATION DO-FILE - RCT Field Flow (Pure Stata)
 ********************************************************************************
@@ -676,7 +716,7 @@ di _n(2) "======================================================================
 di "RANDOMIZATION VALIDATION - RCT Field Flow"
 di "================================================================================"
 di "Method: {config.method}"
-di "Treatment arms: {', '.join([f'{name} ({prop*100:.1f}%)' for name, prop in zip(arms_names, arms_props)])}"
+di "Treatment arms: {arms_display}"
 di "ID column: {config.id_column}"
 di "Simulations: {int(n_simulations):,}"
 di "================================================================================" _n
@@ -737,36 +777,18 @@ di _n "Converting counts to probabilities..."
 {' '.join([f'replace prob_{name} = prob_{name} / {int(n_simulations)}' for name in arms_names])}
 
 * Calculate average probability (for histogram)
-gen double avg_prob = ({' + '.join([f'prob_{name}' for name in arms_names])}) / {len(arms_names)}
+gen double avg_prob = ({prob_sum}) / {prob_count}
 
 di _n "================================================================================"
 di "VALIDATION RESULTS"
 di "================================================================================" _n
 
 * Summary statistics for each arm
-{chr(10).join([f'''
-di "Treatment Arm: {name} (Expected: {prop*100:.1f}%%)"
-quietly summarize prob_{name}, detail
-di "  Mean probability:  " %%6.4f r(mean) " (expected: {prop:.4f})"
-di "  Std deviation:     " %%6.4f r(sd)
-di "  Min probability:   " %%6.4f r(min)
-di "  Max probability:   " %%6.4f r(max)
-local mean_{name.replace(" ", "_")} = r(mean)
-local expected_{name.replace(" ", "_")} = {prop}
-if abs(`mean_{name.replace(" ", "_")}' - `expected_{name.replace(" ", "_")}') > 0.05 {{
-    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%%!"
-}}
-di ""''' for name, prop in zip(arms_names, arms_props)])}
+{summary_stats_code}
 
 * Check for extreme probabilities
 local warning_count = 0
-{chr(10).join([f'''
-quietly count if prob_{name} < {prop} - 0.30 | prob_{name} > {prop} + 0.30
-if r(N) > 0 {{
-    di as error "⚠ WARNING: " r(N) " observations have extreme probabilities for '{name}'"
-    di as error "  (>30%% deviation from expected {prop*100:.1f}%%)"
-    local warning_count = `warning_count' + 1
-}}''' for name, prop in zip(arms_names, arms_props)])}
+{extreme_check_code}
 
 di _n "================================================================================"
 if `warning_count' == 0 {{
@@ -780,7 +802,7 @@ di "============================================================================
 
 * Export results
 preserve
-keep {config.id_column} obs_id prob_* avg_prob
+keep {config.id_column} obs_id {prob_vars} avg_prob
 export delimited using "validation_results.csv", replace
 di "Saved detailed results to: validation_results.csv"
 restore
@@ -813,6 +835,7 @@ di "5. If validation fails, there may be systematic bias in randomization code"
 di "================================================================================" _n
 '''
     return code
+
 
 
 def generate_stata_randomization_code(config: RandomizationConfig, display_method: str) -> str:
