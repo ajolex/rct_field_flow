@@ -6643,26 +6643,59 @@ def render_quality_checks() -> None:
                 if len(all_cols) > 10:
                     st.write(f"... and {len(all_cols) - 10} more")
 
-    # Data Reshaping Section (for repeat group data)
-    with st.expander("🔄 Data Reshaping (for repeat groups)", expanded=False):
-        st.markdown("""
-        If your data contains **repeat groups** (e.g., household members, visits, items), 
-        you can reshape it into separate relational datasets before running quality checks.
+    # ------------------------------------------------------------------------ #
+    # Wide-to-Long Reshaping (Same as Data Visualization)
+    # ------------------------------------------------------------------------ #
+    
+    st.markdown("---")
+    st.markdown("### 🔄 Data Reshaping (Wide to Long)")
+    
+    st.markdown("""
+    Automatically detect and reshape repeated patterns in your data:
+    - `var_1`, `var_2`, ... → Long format with `var` and `repeat` columns
+    - `var1`, `var2`, ... → Same transformation
+    - `var_1_1`, `var_1_2`, ... → Long with `var`, `repeat_1`, `repeat_2`
+    """)
+    
+    # ID column selection for reshape
+    reshape_cols = df.columns.tolist()
+    id_col_reshape = st.selectbox(
+        "Select ID column for reshaping",
+        options=reshape_cols,
+        index=reshape_cols.index("KEY") if "KEY" in reshape_cols else 0,
+        key="quality_reshape_id",
+        help="The unique identifier for each observation (e.g., KEY, hhid)"
+    )
+    
+    # Reshape mode selection
+    reshape_mode = st.radio(
+        "Reshape Mode",
+        ["Standard (Pattern-based)", "Batch (Level-based)"],
+        horizontal=True,
+        key="quality_reshape_mode",
+        help="Standard: Groups patterns by name. Batch: Groups by nesting depth (faster for complex data)"
+    )
+    
+    enable_reshape = st.checkbox("Enable automatic reshaping", value=False, key="quality_enable_reshape")
+    
+    # ------------------------------------------------------------------------ #
+    # BATCH RESHAPE MODE (Melt & Split Strategy)
+    # ------------------------------------------------------------------------ #
+    if enable_reshape and id_col_reshape and reshape_mode == "Batch (Level-based)":
+        st.markdown("---")
+        st.markdown("#### ⚡ Batch Reshape (Melt & Split Strategy)")
+        st.info("""
+        **Batch Mode** groups variables by nesting depth (Level 1, 2, 3...) and processes them together.
+        This is much faster for datasets with many repeated patterns and prevents the "hundreds of files" problem.
         """)
         
-        reshape_cols = df.columns.tolist()
-        id_col_reshape = st.selectbox(
-            "Select ID column",
-            options=reshape_cols,
-            index=reshape_cols.index("KEY") if "KEY" in reshape_cols else 0,
-            key="quality_reshape_id",
-            help="The unique identifier for each observation (e.g., KEY, hhid)"
-        )
-        
-        if st.button("🚀 Auto-Detect & Reshape", type="secondary", key="quality_batch_reshape"):
+        if st.button("🚀 Auto-Detect & Reshape", type="primary", key="quality_batch_reshape_btn"):
             with st.spinner("Analyzing structure and reshaping..."):
                 try:
+                    # Run Python Reshape
                     reshaped_files = automated_reshape_grouped(df, id_col_reshape)
+                    
+                    # Run Stata Code Gen
                     stata_syntax = generate_stata_batch_code(df, id_col_reshape)
                     
                     if reshaped_files:
@@ -6672,45 +6705,101 @@ def render_quality_checks() -> None:
                         st.session_state.quality_reshaped = reshaped_files
                         st.session_state.quality_stata_code = stata_syntax
                         
-                        # Show previews
+                        # Tabs for Preview
                         tabs = st.tabs(list(reshaped_files.keys()))
                         for name, tab in zip(reshaped_files.keys(), tabs):
                             with tab:
-                                st.dataframe(reshaped_files[name].head(15), use_container_width=True)
+                                st.dataframe(reshaped_files[name].head(20), use_container_width=True)
                                 st.caption(f"Shape: {reshaped_files[name].shape[0]:,} rows × {reshaped_files[name].shape[1]} columns")
+
+                        # Download Everything (ZIP)
+                        st.markdown("---")
+                        st.markdown("#### 📥 Download Reshaped Data")
                         
-                        # Download
-                        st.markdown("##### 📥 Download Reshaped Data")
                         col1, col2 = st.columns(2)
+                        
                         with col1:
+                            # Combine CSVs and Stata code into one ZIP
                             zip_buffer = io.BytesIO()
                             with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                # Add CSVs
                                 for name, df_data in reshaped_files.items():
                                     csv_data = df_data.to_csv(index=False).encode('utf-8')
                                     zf.writestr(name, csv_data)
+                                
+                                # Add Stata Do-file
                                 zf.writestr("reshape_script.do", stata_syntax)
+                            
                             st.download_button(
                                 label="📦 Download All (ZIP)",
                                 data=zip_buffer.getvalue(),
                                 file_name="quality_reshaped_data.zip",
                                 mime="application/zip",
-                                key="quality_download_zip"
+                                use_container_width=True,
+                                key="quality_batch_download_zip"
                             )
+                        
                         with col2:
                             st.download_button(
                                 label="📜 Download Stata Code",
                                 data=stata_syntax,
-                                file_name="quality_reshape.do",
+                                file_name="quality_batch_reshape.do",
                                 mime="text/plain",
-                                key="quality_download_stata"
+                                use_container_width=True,
+                                key="quality_batch_download_stata"
                             )
+                        
+                        # Display Stata Code for copy-paste
+                        with st.expander("👁️ View Generated Stata Code", expanded=False):
+                            st.code(stata_syntax, language='stata')
                     else:
-                        st.warning("No repeat group patterns detected in this dataset.")
+                        st.warning("No repeated patterns detected for batch reshaping.")
+                        
                 except Exception as e:
                     st.error(f"Error during reshape: {str(e)}")
                     import traceback
                     with st.expander("Error Details"):
                         st.code(traceback.format_exc())
+    
+    # ------------------------------------------------------------------------ #
+    # STANDARD RESHAPE MODE (Pattern-based)
+    # ------------------------------------------------------------------------ #
+    elif enable_reshape and id_col_reshape and reshape_mode == "Standard (Pattern-based)":
+        with st.spinner("Detecting repeated patterns..."):
+            patterns = detect_wide_patterns(df)
+        
+        if patterns:
+            st.success(f"✓ Detected {len(patterns)} repeated pattern(s)")
+            
+            with st.expander("View detected patterns", expanded=True):
+                for pattern_name, cols in patterns.items():
+                    st.markdown(f"**{pattern_name}**: {len(cols)} columns")
+                    st.caption(", ".join(cols[:5]) + ("..." if len(cols) > 5 else ""))
+            
+            if st.button("🔄 Reshape Selected Patterns", type="primary", key="quality_reshape_patterns"):
+                with st.spinner("Reshaping data..."):
+                    try:
+                        reshaped = reshape_wide_to_long(df, id_col_reshape, patterns)
+                        
+                        if isinstance(reshaped, dict):
+                            st.session_state.quality_reshaped = reshaped
+                            st.success(f"✅ Reshaped into {len(reshaped)} dataset(s)")
+                            
+                            tabs = st.tabs(list(reshaped.keys()))
+                            for name, tab in zip(reshaped.keys(), tabs):
+                                with tab:
+                                    st.dataframe(reshaped[name].head(20), use_container_width=True)
+                                    st.caption(f"Shape: {reshaped[name].shape}")
+                        else:
+                            st.session_state.quality_reshaped = {"reshaped_data.csv": reshaped}
+                            st.success("✅ Data reshaped successfully")
+                            st.dataframe(reshaped.head(20), use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Reshape failed: {e}")
+        else:
+            st.info("No repeated patterns detected. Your data may already be in long format.")
+
+    st.markdown("---")
 
     # Configuration mode selector
     config_mode = st.radio(
