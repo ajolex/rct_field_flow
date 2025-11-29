@@ -1245,9 +1245,10 @@ restore
     else:
         balance_check_code = '* No balance covariates specified'
     
-    # Build strata/cluster notes outside f-string
+    # Build strata/cluster notes outside f-string - avoid nested f-strings entirely
     if config.strata:
-        strata_note_final = f'di "  4. All {" x ".join([f"N({var})" for var in config.strata])} strata combinations have observations"'
+        strata_counts = " x ".join(["N(" + var + ")" for var in config.strata])
+        strata_note_final = 'di "  4. All ' + strata_counts + ' strata combinations have observations"'
     else:
         strata_note_final = ''
     
