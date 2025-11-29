@@ -677,10 +677,26 @@ sort cluster_rand
         extreme_check_code += f'}}\n'
     
     # Treatment arms list (for display in f-string later)
-    arms_display = ', '.join([f'{name} ({prop*100:.1f}%)' for name, prop in zip(arms_names, arms_props)])
-    prob_vars = ' '.join([f'prob_{name}' for name in arms_names])
-    prob_sum = ' + '.join([f'prob_{name}' for name in arms_names])
+    arms_display = ', '.join([name + ' (' + str(round(prop*100, 1)) + '%)' for name, prop in zip(arms_names, arms_props)])
+    prob_vars = ' '.join(['prob_' + name for name in arms_names])
+    prob_sum = ' + '.join(['prob_' + name for name in arms_names])
     prob_count = len(arms_names)
+    
+    # Pre-build nested list comprehension strings OUTSIDE f-strings
+    init_prob_vars = ' '.join(['gen double prob_' + name + ' = 0' for name in arms_names])
+    
+    # Build count/replace code for each arm
+    count_replace_lines = []
+    for name in arms_names:
+        count_replace_lines.append('        count if ' + config.treatment_column + '_sim == "' + name + '"')
+        count_replace_lines.append('        replace prob_' + name + ' = prob_' + name + ' + 1 if ' + config.treatment_column + '_sim == "' + name + '"')
+    count_replace_code = '\n'.join(count_replace_lines)
+    
+    # Build probability conversion code
+    prob_convert_code = ' '.join(['replace prob_' + name + ' = prob_' + name + ' / ' + str(int(n_simulations)) for name in arms_names])
+    
+    # Build cluster drop code
+    cluster_drop_code = 'drop cluster_rand cluster_id' if config.cluster and config.method == "cluster" else ''
     
     code = f'''********************************************************************************
 * RANDOMIZATION VALIDATION DO-FILE - RCT Field Flow (Pure Stata)
@@ -743,7 +759,7 @@ if r(unique_value) != r(N) {{
 
 * Initialize probability tracking variables
 gen long obs_id = _n
-{' '.join([f'gen double prob_{name} = 0' for name in arms_names])}
+{init_prob_vars}
 
 di "Running {int(n_simulations):,} simulations..."
 
@@ -761,14 +777,11 @@ forvalues sim = 1/{int(n_simulations)} {{
         {treatment_assign}
         
         * Count assignments for each arm
-        {' '.join([f'''
-        count if {config.treatment_column}_sim == "{name}"
-        replace prob_{name} = prob_{name} + 1 if {config.treatment_column}_sim == "{name}"''' 
-        for name in arms_names])}
+{count_replace_code}
         
         * Clean up simulation variables
         drop rand_draw {config.treatment_column}_sim
-        {f'drop cluster_rand cluster_id' if config.cluster and config.method == "cluster" else ""}
+        {cluster_drop_code}
     }}
     
     * Progress indicator
@@ -780,7 +793,7 @@ forvalues sim = 1/{int(n_simulations)} {{
 di _n "Converting counts to probabilities..."
 
 * Convert counts to probabilities
-{' '.join([f'replace prob_{name} = prob_{name} / {int(n_simulations)}' for name in arms_names])}
+{prob_convert_code}
 
 * Calculate average probability (for histogram)
 gen double avg_prob = ({prob_sum}) / {prob_count}
@@ -1091,6 +1104,12 @@ di "============================================================================
                 treatment_lines.append(f'    replace {config.treatment_column}_temp = "{arm.name}" if {config.treatment_column}_temp == ""')
         treatment_assign_code = chr(10).join(treatment_lines)
         
+        # Build test command for balance check (avoids nested f-strings)
+        test_indices = ' '.join([str(idx) + '.' + config.treatment_column + '_temp' for idx in range(1, len(config.arms))])
+        
+        # Build treatment label definition (avoids nested f-strings)
+        label_pairs = ' '.join([str(idx) + ' "' + arm.name + '"' for idx, arm in enumerate(config.arms)])
+        
         code += f'''
 * RERANDOMIZATION WITH BALANCE OPTIMIZATION
 * Initialize tracking variables
@@ -1126,7 +1145,7 @@ forvalues i = 1/{config.iterations} {{
     * Check balance across all specified covariates
     foreach var of varlist {balance_vars} {{
         qui reg `var' i.{config.treatment_column}_temp, robust
-        qui test {' '.join([f'{idx}.{config.treatment_column}_temp' for idx in range(1, len(config.arms))])}
+        qui test {test_indices}
         local pvalue = r(p)
         
         * Track the minimum p-value across all covariates in this iteration
@@ -1160,7 +1179,7 @@ gen {config.treatment_column} = mostbalanced_{config.treatment_column}
 drop mostbalanced_{config.treatment_column}
 
 * Label treatment arms
-label define {config.treatment_column}_lbl {' '.join([f'{idx} "{arm.name}"' for idx, arm in enumerate(config.arms)])}
+label define {config.treatment_column}_lbl {label_pairs}
 label values {config.treatment_column} {config.treatment_column}_lbl
 '''
     else:
@@ -1183,7 +1202,9 @@ table {" ".join(config.strata)} {config.treatment_column}
     
     code += balance_code
     
-    # Add summary statistics
+    # Add summary statistics - build arm list outside f-string
+    arm_names_list = ' '.join(['"' + arm.name + '"' for arm in config.arms])
+    
     code += f'''
 di _n "================================================================================"
 di "TREATMENT DISTRIBUTION SUMMARY"
@@ -1194,7 +1215,7 @@ tab {config.treatment_column}, missing
 
 * Calculate and display proportions
 di _n "Treatment proportions:"
-foreach arm in {' '.join([f'"{arm.name}"' for arm in config.arms])} {{
+foreach arm in {arm_names_list} {{
     count if {config.treatment_column} == `arm'
     local n_`arm' = r(N)
     local pct_`arm' = (r(N) / _N) * 100
