@@ -48,6 +48,9 @@ rct_field_flow/persistent_data/
 # Streamlit secrets (contains database credentials)
 .streamlit/secrets.toml
 
+# Examples folder (may contain sensitive data)
+examples/
+
 # Test files
 test_*.py
 

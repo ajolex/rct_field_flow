@@ -47,19 +47,16 @@ try:
         render_dashboard as mon_render_dashboard,
     )
     from .analyze import (
-        AnalysisConfig, 
-        estimate_ate, 
-        heterogeneity_analysis, 
-        attrition_table,
-        load_data,
-        run_data_diagnostics,
-        diagnose_outliers,
-        winsorize_variable,
-        trim_variable,
-        create_missing_indicators,
-        check_balance,
-        generate_python_analysis_code,
-        generate_stata_analysis_code,
+        AnalysisConfig, attrition_table,
+        generate_balance_table, estimate_itt, estimate_tot, estimate_late,
+        estimate_heterogeneity, estimate_binary_outcome, estimate_panel_fe,
+        format_regression_table, load_data, run_data_diagnostics,
+        winsorize_variable, check_balance, generate_python_analysis_code,
+        generate_stata_analysis_code
+    )
+    from .visualize import (
+        plot_coefficients, plot_distributions, plot_heterogeneity,
+        plot_balance, plot_kde_comparison
     )
     from .backcheck import BackcheckConfig, sample_backchecks
     from .report import generate_weekly_report
@@ -114,11 +111,16 @@ except ImportError:  # pragma: no cover
         heterogeneity_analysis,
         attrition_table,
         load_data,
+        generate_balance_table,
+        estimate_itt,
+        estimate_tot,
+        estimate_late,
+        estimate_heterogeneity,
+        estimate_binary_outcome,
+        estimate_panel_fe,
+        format_regression_table,
         run_data_diagnostics,
-        diagnose_outliers,
         winsorize_variable,
-        trim_variable,
-        create_missing_indicators,
         check_balance,
         generate_python_analysis_code,
         generate_stata_analysis_code,
@@ -126,6 +128,13 @@ except ImportError:  # pragma: no cover
     from rct_field_flow.backcheck import BackcheckConfig, sample_backchecks  # type: ignore
     from rct_field_flow.report import generate_weekly_report  # type: ignore
     from rct_field_flow.surveycto import SurveyCTO  # type: ignore
+    from rct_field_flow.visualize import (  # type: ignore
+        plot_coefficients,
+        plot_distributions,
+        plot_heterogeneity,
+        plot_balance,
+        plot_kde_comparison,
+    )
     # Persistence (fallback import path)
     from rct_field_flow.persistence import (  # type: ignore
         init_db,
@@ -3315,7 +3324,7 @@ def render_power_calculations() -> None:
                     value=1000,
                     step=100,
                     help="Monte Carlo iterations. More iterations = more accurate but slower (1000 recommended)"
-                )
+            )
             
             with col2:
                 sim_seed = st.number_input(
@@ -6669,22 +6678,30 @@ def render_analysis() -> None:
         with col1:
             data_source = st.radio(
                 "Data source",
-                ["Upload CSV", "SurveyCTO API"],
+                ["Upload File", "SurveyCTO API"],
                 key="analysis_data_source",
                 horizontal=True
             )
         
-        if data_source == "Upload CSV":
+        if data_source == "Upload File":
             upload = st.file_uploader(
-                "Upload endline data (CSV)",
-                type="csv",
+                "Upload endline data (CSV or Stata .dta)",
+                type=["csv", "dta"],
                 key="analysis_upload",
-                help="Upload your follow-up/endline survey data"
+                help="Upload your follow-up/endline survey data in CSV or Stata format"
             )
             if upload:
-                df = pd.read_csv(upload)
-                st.session_state.analysis_data = df
-                st.success(f"✅ Loaded {len(df):,} observations with {len(df.columns)} variables.")
+                try:
+                    if upload.name.endswith('.dta'):
+                        df = load_data(upload)
+                        st.session_state.analysis_data = df
+                        st.success(f"✅ Loaded Stata file: {len(df):,} observations with {len(df.columns)} variables.")
+                    else:
+                        df = pd.read_csv(upload)
+                        st.session_state.analysis_data = df
+                        st.success(f"✅ Loaded CSV file: {len(df):,} observations with {len(df.columns)} variables.")
+                except Exception as e:
+                    st.error(f"Error loading file: {e}")
         else:
             # SurveyCTO API
             col1, col2 = st.columns(2)
@@ -6710,6 +6727,325 @@ def render_analysis() -> None:
         df = st.session_state.analysis_data
         
         if df is not None and not df.empty:
+            st.markdown("---")
+            
+            # Data Cleaning Section
+            st.markdown("#### 🧹 Data Cleaning (Optional)")
+            
+            with st.expander("📖 Data Cleaning Guide - Click to configure", expanded=False):
+                st.markdown("""
+                **Outlier Treatment**: Reduces impact of extreme values that may distort analysis.
+                - **Winsorization**: Caps extremes (values < p1 → set to p1, values > p99 → set to p99)
+                - **Trimming**: Removes extreme observations entirely
+                - **Size-adjusted**: Regresses on strata dummies, then caps residuals (accounts for group differences)
+                
+                **Missing Value Treatment**: Strategies for handling incomplete data.
+                - **Listwise deletion**: Remove any observation with missing values (reduces N)
+                - **Indicator method**: Create missing dummy + impute (preserves N, controls for missingness)
+                - **Imputation**: Fill missing values with mean, median, or zero
+                
+                **Pattern Detection**: Identify suspicious data patterns.
+                - **All-zero patterns**: Flag observations where multiple variables are all zero (potential non-response)
+                - **Impossible values**: Detect implausible values (e.g., negative counts, extreme ages)
+                """)
+                
+                st.markdown("---")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**🎯 Outlier Treatment**")
+                    
+                    outlier_method = st.radio(
+                        "Method",
+                        ["None", "Winsorization", "Trimming", "Size-adjusted Winsorization"],
+                        index=0,
+                        key="outlier_method",
+                        help="Choose how to handle extreme values"
+                    )
+                    
+                    if outlier_method != "None":
+                        winsor_level = st.number_input(
+                            "Percentile cutoff (each tail)",
+                            min_value=0.1,
+                            max_value=10.0,
+                            value=1.0,
+                            step=0.1,
+                            key="winsor_level",
+                            help="E.g., 1.0 = affect 1st & 99th percentiles (2% of data total)"
+                        )
+                        
+                        if outlier_method == "Size-adjusted Winsorization":
+                            strata_var = st.selectbox(
+                                "Stratification variable",
+                                ["None"] + [col for col in df.columns if df[col].dtype in ['object', 'category'] or df[col].nunique() < 20],
+                                key="strata_var_winsor",
+                                help="Regress outcomes on this variable before capping residuals"
+                            )
+                            strata_var = None if strata_var == "None" else strata_var
+                        else:
+                            strata_var = None
+                
+                with col2:
+                    st.markdown("**🔢 Missing Value Treatment**")
+                    
+                    missing_method = st.radio(
+                        "Method",
+                        ["None", "Listwise deletion", "Indicator + Imputation", "Mean/Median imputation"],
+                        index=0,
+                        key="missing_method",
+                        help="Choose how to handle missing data"
+                    )
+                    
+                    if missing_method in ["Indicator + Imputation", "Mean/Median imputation"]:
+                        imputation_value = st.radio(
+                            "Imputation strategy",
+                            ["Zero", "Mean", "Median"],
+                            index=1,
+                            key="imputation_value",
+                            help="Value to use when filling missing data"
+                        )
+                    else:
+                        imputation_value = None
+                
+                st.markdown("---")
+                st.markdown("**🚩 Pattern-Based Detection (Optional)**")
+                
+                col3, col4 = st.columns(2)
+                
+                with col3:
+                    detect_all_zero = st.checkbox(
+                        "Flag all-zero patterns",
+                        value=False,
+                        key="detect_all_zero",
+                        help="Identify observations where selected variables are ALL zero"
+                    )
+                    
+                    if detect_all_zero:
+                        zero_check_cols = st.multiselect(
+                            "Variables to check",
+                            df.columns.tolist(),
+                            key="zero_check_cols",
+                            help="Flag if ALL selected variables = 0 (potential data quality issue)"
+                        )
+                    else:
+                        zero_check_cols = []
+                
+                with col4:
+                    detect_impossible = st.checkbox(
+                        "Flag impossible values",
+                        value=False,
+                        key="detect_impossible",
+                        help="Detect values outside plausible ranges"
+                    )
+                    
+                    if detect_impossible:
+                        impossible_rules = st.text_area(
+                            "Rules (one per line)",
+                            value="age < 0\nage > 120\nincome < 0",
+                            height=100,
+                            key="impossible_rules",
+                            help="Format: variable_name < value or variable_name > value"
+                        )
+                    else:
+                        impossible_rules = ""
+                
+                if st.button("🔧 Apply Data Cleaning", key="apply_cleaning", type="primary"):
+                    # Save original data before cleaning
+                    if 'original_analysis_data' not in st.session_state:
+                        st.session_state.original_analysis_data = df.copy()
+                    
+                    cleaned_df = df.copy()
+                    cleaning_log = []
+                    
+                    # Apply outlier treatment
+                    if outlier_method != "None":
+                        numeric_cols = cleaned_df.select_dtypes(include=[np.number]).columns.tolist()
+                        
+                        for col in numeric_cols:
+                            if cleaned_df[col].notna().sum() > 10:  # Need sufficient data
+                                original_col = f"{col}_original"
+                                cleaned_df[original_col] = cleaned_df[col]
+                                
+                                if outlier_method == "Size-adjusted Winsorization" and strata_var and strata_var in cleaned_df.columns:
+                                    # Size-adjusted winsorization
+                                    from sklearn.linear_model import LinearRegression
+                                    
+                                    strata_dummies = pd.get_dummies(cleaned_df[strata_var], prefix='strata', drop_first=False)
+                                    valid_mask = cleaned_df[col].notna() & cleaned_df[strata_var].notna()
+                                    
+                                    if valid_mask.sum() > strata_dummies.shape[1] + 5:
+                                        X = strata_dummies[valid_mask]
+                                        y = cleaned_df.loc[valid_mask, col]
+                                        
+                                        model = LinearRegression()
+                                        model.fit(X, y)
+                                        residuals = y - model.predict(X)
+                                        
+                                        lower_pct = np.percentile(residuals, winsor_level)
+                                        upper_pct = np.percentile(residuals, 100 - winsor_level)
+                                        
+                                        fitted = model.predict(X)
+                                        capped_residuals = np.clip(residuals, lower_pct, upper_pct)
+                                        cleaned_df.loc[valid_mask, col] = fitted + capped_residuals
+                                        
+                                        n_affected = ((residuals < lower_pct) | (residuals > upper_pct)).sum()
+                                        cleaning_log.append(f"✓ Size-adjusted winsorized `{col}`: {n_affected} values capped")
+                                    else:
+                                        # Fall back to simple
+                                        lower_val = cleaned_df[col].quantile(winsor_level / 100)
+                                        upper_val = cleaned_df[col].quantile(1 - winsor_level / 100)
+                                        cleaned_df[col] = cleaned_df[col].clip(lower=lower_val, upper=upper_val)
+                                        n_affected = ((cleaned_df[original_col] < lower_val) | (cleaned_df[original_col] > upper_val)).sum()
+                                        cleaning_log.append(f"✓ Winsorized `{col}`: {n_affected} values capped at {winsor_level}% tails")
+                                
+                                elif outlier_method == "Winsorization":
+                                    # Simple winsorization
+                                    lower_val = cleaned_df[col].quantile(winsor_level / 100)
+                                    upper_val = cleaned_df[col].quantile(1 - winsor_level / 100)
+                                    cleaned_df[col] = cleaned_df[col].clip(lower=lower_val, upper=upper_val)
+                                    n_affected = ((cleaned_df[original_col] < lower_val) | (cleaned_df[original_col] > upper_val)).sum()
+                                    cleaning_log.append(f"✓ Winsorized `{col}`: {n_affected} values capped at {winsor_level}% tails")
+                                
+                                elif outlier_method == "Trimming":
+                                    # Remove extreme values
+                                    lower_val = cleaned_df[col].quantile(winsor_level / 100)
+                                    upper_val = cleaned_df[col].quantile(1 - winsor_level / 100)
+                                    n_before = len(cleaned_df)
+                                    cleaned_df = cleaned_df[(cleaned_df[col] >= lower_val) & (cleaned_df[col] <= upper_val)]
+                                    n_removed = n_before - len(cleaned_df)
+                                    if n_removed > 0:
+                                        cleaning_log.append(f"✓ Trimmed `{col}`: {n_removed} observations removed")
+                    
+                    # Handle missing values
+                    if missing_method == "Listwise deletion":
+                        n_before = len(cleaned_df)
+                        cleaned_df = cleaned_df.dropna()
+                        n_removed = n_before - len(cleaned_df)
+                        cleaning_log.append(f"✓ Listwise deletion: {n_removed} observations with missing values removed")
+                    
+                    elif missing_method == "Indicator + Imputation":
+                        numeric_cols = cleaned_df.select_dtypes(include=[np.number]).columns.tolist()
+                        
+                        for col in numeric_cols:
+                            if cleaned_df[col].isna().sum() > 0:
+                                indicator_col = f"{col}_missing"
+                                cleaned_df[indicator_col] = cleaned_df[col].isna().astype(int)
+                                
+                                if imputation_value == "Zero":
+                                    cleaned_df[col] = cleaned_df[col].fillna(0)
+                                elif imputation_value == "Mean":
+                                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].mean())
+                                elif imputation_value == "Median":
+                                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].median())
+                                
+                                n_missing = cleaned_df[indicator_col].sum()
+                                cleaning_log.append(f"✓ `{col}`: Created indicator + imputed {n_missing} values with {imputation_value.lower()}")
+                    
+                    elif missing_method == "Mean/Median imputation":
+                        numeric_cols = cleaned_df.select_dtypes(include=[np.number]).columns.tolist()
+                        
+                        for col in numeric_cols:
+                            n_missing = cleaned_df[col].isna().sum()
+                            if n_missing > 0:
+                                if imputation_value == "Zero":
+                                    cleaned_df[col] = cleaned_df[col].fillna(0)
+                                elif imputation_value == "Mean":
+                                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].mean())
+                                elif imputation_value == "Median":
+                                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].median())
+                                
+                                cleaning_log.append(f"✓ `{col}`: Imputed {n_missing} values with {imputation_value.lower()}")
+                    
+                    # Pattern detection: All-zero
+                    if detect_all_zero and zero_check_cols and len(zero_check_cols) >= 2:
+                        zero_mask = (cleaned_df[zero_check_cols] == 0).all(axis=1)
+                        n_flagged = zero_mask.sum()
+                        
+                        if n_flagged > 0:
+                            for col in zero_check_cols:
+                                cleaned_df.loc[zero_mask, col] = np.nan
+                            cleaning_log.append(f"⚠️ Flagged {n_flagged} observations with all-zero pattern across {len(zero_check_cols)} variables")
+                            cleaning_log.append("   Variables set to missing (potential data quality issue)")
+                    
+                    # Pattern detection: Impossible values
+                    if detect_impossible and impossible_rules:
+                        for rule in impossible_rules.strip().split('\n'):
+                            rule = rule.strip()
+                            if not rule:
+                                continue
+                            
+                            try:
+                                if '<' in rule and 'or' not in rule.lower():
+                                    var, threshold = rule.split('<')
+                                    var, threshold = var.strip(), float(threshold.strip())
+                                    if var in cleaned_df.columns:
+                                        n_flagged = (cleaned_df[var] < threshold).sum()
+                                        cleaned_df.loc[cleaned_df[var] < threshold, var] = np.nan
+                                        if n_flagged > 0:
+                                            cleaning_log.append(f"⚠️ Flagged {n_flagged} values in `{var}` < {threshold} as missing")
+                                
+                                elif '>' in rule:
+                                    var, threshold = rule.split('>')
+                                    var, threshold = var.strip(), float(threshold.strip())
+                                    if var in cleaned_df.columns:
+                                        n_flagged = (cleaned_df[var] > threshold).sum()
+                                        cleaned_df.loc[cleaned_df[var] > threshold, var] = np.nan
+                                        if n_flagged > 0:
+                                            cleaning_log.append(f"⚠️ Flagged {n_flagged} values in `{var}` > {threshold} as missing")
+                            except Exception as e:
+                                st.warning(f"Could not parse rule: {rule}")
+                    
+                    # Store cleaned data (this replaces the raw data for analysis)
+                    st.session_state.analysis_data = cleaned_df
+                    st.session_state.cleaning_applied = True
+                    st.session_state.cleaning_log = cleaning_log
+                    
+                    st.success(f"✅ Data cleaning complete! {len(cleaning_log)} operations applied. Cleaned data will be used for analysis.")
+                    
+                    st.rerun()
+            
+            # Show if cleaning was applied
+            if st.session_state.get('cleaning_applied', False):
+                st.success("✅ **Data cleaning active** - Using cleaned data for all analysis below")
+                
+                # Show cleaning log
+                if st.session_state.get('cleaning_log'):
+                    with st.expander("📋 View Cleaning Log", expanded=False):
+                        for log_entry in st.session_state.cleaning_log:
+                            st.markdown(log_entry)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Download cleaned data
+                    cleaned_csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download Cleaned Data (CSV)",
+                        data=cleaned_csv,
+                        file_name="cleaned_data.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        help="Download the cleaned dataset for external use"
+                    )
+                
+                with col2:
+                    # Reset to original data
+                    if st.button("↩️ Reset to Original Data", key="reset_cleaning", use_container_width=True):
+                        if 'original_analysis_data' in st.session_state:
+                            st.session_state.analysis_data = st.session_state.original_analysis_data
+                            del st.session_state.original_analysis_data
+                        st.session_state.cleaning_applied = False
+                        if 'cleaning_log' in st.session_state:
+                            del st.session_state.cleaning_log
+                        st.rerun()
+            
+            else:
+                # Show that raw data is being used
+                if 'original_analysis_data' not in st.session_state:
+                    st.info("ℹ️ Using raw data. Apply cleaning above if needed before analysis.")
+            
+            st.markdown("---")
             st.markdown("#### 📊 Data Preview")
             st.dataframe(df.head(10), use_container_width=True)
             st.caption(f"Showing 10 of {len(df):,} rows • {len(df.columns)} columns")
@@ -6769,23 +7105,116 @@ def render_analysis() -> None:
                     help="Variables to include as controls in the regression"
                 )
                 
-                st.markdown("#### Analysis Options")
+                st.markdown("#### 🔬 Estimation Method")
+                
+                # Show all method descriptions upfront
+                with st.expander("📖 Method Descriptions - Click to expand", expanded=False):
+                    st.markdown("""
+                    **ATE/ITT (Average Treatment Effect / Intent-to-Treat)**: Compares all assigned to treatment vs all assigned to control, regardless of actual take-up. Gold standard for causal inference in RCTs. Estimates the average treatment effect of assignment (not receipt).
+                    
+                    **TOT (Treatment-on-Treated)**: Uses IV/2SLS to estimate the effect on those who actually received treatment. Accounts for imperfect compliance. Reports first-stage F-statistic to assess instrument strength (F>10 is strong).
+                    
+                    **LATE (Local Average Treatment Effect)**: Estimates the effect specifically for compliers—those who take up treatment when assigned but wouldn't otherwise. Uses Wald estimator (ITT / compliance rate). Useful for understanding treatment effects on the moveable population.
+                    
+                    **Binary Outcome (Logit/Probit)**: For binary (0/1) outcomes like enrollment, adoption, or participation. Uses maximum likelihood estimation instead of OLS. Reports marginal effects (average partial effects) in probability units—easier to interpret than log-odds.
+                    
+                    **Panel Fixed Effects**: For panel/longitudinal data with multiple observations per unit over time. Controls for all time-invariant unobservables (e.g., ability, location quality) via entity fixed effects. Identifies treatment effects from within-unit variation over time.
+                    
+                    **Heterogeneity Analysis**: Tests whether treatment effects differ across subgroups (e.g., by gender, age, baseline income). Uses interaction terms (Treatment × Subgroup) and reports an F-test for joint significance. Helps identify who benefits most from the intervention.
+                    """)
+                
+                analysis_method = st.radio(
+                    "Select estimation approach",
+                    ["ATE/ITT (Average Treatment Effect)", "TOT (Treatment-on-Treated)", "LATE (Local Average Treatment Effect)", 
+                     "Binary Outcome (Logit/Probit)", "Panel Fixed Effects", "Heterogeneity Analysis"],
+                    key="analysis_method"
+                )
+                
+                # Method-specific inputs
+                baseline_outcome = None
+                strata_cols_list = []
+                takeup_var = None
+                instrument_var = None
+                panel_id = None
+                time_var = None
+                model_type = 'logit'
+                moderator = None
+                
+                if analysis_method == "ATE/ITT (Average Treatment Effect)":
+                    baseline_outcome = st.selectbox(
+                        "Baseline outcome (optional, for ANCOVA)",
+                        ["None"] + [col for col in numeric_cols if col not in outcomes],
+                        key="baseline_outcome_itt"
+                    )
+                    baseline_outcome = None if baseline_outcome == "None" else baseline_outcome
+                    
+                    strata_input = st.text_input(
+                        "Stratification variables (comma-separated, optional)",
+                        key="strata_itt",
+                        help="e.g., block, sector, size_category"
+                    )
+                    if strata_input:
+                        strata_cols_list = [s.strip() for s in strata_input.split(',')]
+                
+                elif analysis_method == "TOT (Treatment-on-Treated)":
+                    takeup_var = st.selectbox(
+                        "Take-up variable (actual treatment received)",
+                        potential_controls,
+                        key="takeup_var_tot"
+                    )
+                    instrument_var = st.selectbox(
+                        "Instrument (random assignment)",
+                        [treatment_col] + [col for col in potential_controls if col != takeup_var],
+                        key="instrument_var_tot"
+                    )
+                
+                elif analysis_method == "LATE (Local Average Treatment Effect)":
+                    takeup_var = st.selectbox(
+                        "Take-up variable",
+                        potential_controls,
+                        key="takeup_var_late"
+                    )
+                    instrument_var = st.selectbox(
+                        "Instrument (random assignment)",
+                        [treatment_col] + [col for col in potential_controls if col != takeup_var],
+                        key="instrument_var_late"
+                    )
+                
+                elif analysis_method == "Binary Outcome (Logit/Probit)":
+                    model_type = st.radio(
+                        "Model type",
+                        ["logit", "probit"],
+                        key="binary_model_type",
+                        horizontal=True
+                    )
+                
+                elif analysis_method == "Panel Fixed Effects":
+                    panel_id = st.selectbox(
+                        "Panel identifier (individual/household/firm ID)",
+                        available_cols,
+                        key="panel_id"
+                    )
+                    time_var = st.selectbox(
+                        "Time variable",
+                        available_cols,
+                        key="time_var"
+                    )
+                
+                elif analysis_method == "Heterogeneity Analysis":
+                    moderator = st.selectbox(
+                        "Subgroup variable (moderator)",
+                        potential_controls,
+                        key="moderator_het"
+                    )
+                
+                st.markdown("#### Additional Options")
                 col1, col2 = st.columns(2)
                 with col1:
-                    run_ate = st.checkbox("Average Treatment Effects (ATE)", value=True, key="run_ate")
-                    run_balance = st.checkbox("Balance Table", value=True, key="run_balance")
+                    run_balance = st.checkbox("Run Balance Check", value=True, key="run_balance")
+                    show_visualizations = st.checkbox("Show Visualizations", value=True, key="show_viz")
                 
                 with col2:
-                    run_heterogeneity = st.checkbox("Heterogeneity Analysis", value=False, key="run_het")
-                    if run_heterogeneity:
-                        moderator = st.selectbox(
-                            "Moderator variable",
-                            potential_controls,
-                            key="analysis_moderator",
-                            help="Variable to interact with treatment"
-                        )
-                    else:
-                        moderator = None
+                    export_table = st.checkbox("Export Results Table", value=False, key="export_table")
                 
                 submit = st.form_submit_button("🔬 Run Analysis", type="primary", use_container_width=True)
             
@@ -6803,180 +7232,211 @@ def render_analysis() -> None:
                     st.markdown("---")
                     st.markdown("## 📈 Results")
                     
-                    # Balance table
+                    # Balance table using enhanced generate_balance_table
                     if run_balance and covariates:
                         st.markdown("### ⚖️ Balance Table")
                         st.markdown("Check if covariates are balanced across treatment arms.")
                         
-                        balance_results = []
-                        for cov in covariates:
-                            if cov in numeric_cols:
-                                try:
-                                    # Run regression of covariate on treatment
-                                    result = estimate_ate(df, cov, config=config)
-                                    
-                                    # Extract treatment arms and p-values
-                                    for param in result.params.index:
-                                        if param.startswith(f"C({treatment_col})"):
-                                            p_value = result.pvalues[param]
-                                            balance_results.append({
-                                                "Covariate": cov,
-                                                "Parameter": param,
-                                                "Coefficient": result.params[param],
-                                                "P-value": p_value,
-                                                "Balanced": "✓" if p_value > 0.05 else "✗"
-                                            })
-                                except Exception as e:
-                                    st.warning(f"Could not test balance for {cov}: {e}")
-                        
-                        if balance_results:
-                            balance_df = pd.DataFrame(balance_results)
-                            st.dataframe(balance_df, use_container_width=True)
+                        try:
+                            balance_table = generate_balance_table(
+                                df=df,
+                                treatment_col=treatment_col,
+                                covariate_cols=covariates,
+                                cluster_col=cluster_col
+                            )
                             
-                            imbalanced = balance_df[balance_df["Balanced"] == "✗"]
-                            if len(imbalanced) > 0:
-                                st.warning(f"⚠️ {len(imbalanced)} covariate(s) show significant imbalance (p < 0.05)")
+                            # Display formatted balance table
+                            st.dataframe(balance_table, use_container_width=True)
+                            st.caption("Significance: *** p<0.01, ** p<0.05, * p<0.10 | Joint F-test shown in last row")
+                            
+                            # Check for imbalances
+                            sig_imbalances = balance_table[balance_table['stars'].str.contains(r'\*', na=False)]
+                            if len(sig_imbalances) > 0:
+                                st.warning(f"⚠️ {len(sig_imbalances)} covariate(s) show significant imbalance")
                             else:
                                 st.success("✅ All covariates are balanced across treatment arms")
+                            
+                            # Visualization
+                            if show_visualizations:
+                                fig = plot_balance(balance_table)
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                        except Exception as e:
+                            st.error(f"Error generating balance table: {e}")
                     
-                    # Average Treatment Effects
-                    if run_ate:
-                        st.markdown("### 📊 Average Treatment Effects (ATE)")
-                        
-                        all_results = []
-                        
-                        for outcome in outcomes:
-                            st.markdown(f"#### {outcome}")
-                            
-                            try:
-                                result = estimate_ate(df, outcome, covariates=covariates, config=config)
-                                
-                                # Extract results
-                                st.markdown("**Regression Output:**")
-                                
-                                # Create results table
-                                results_data = []
-                                for param in result.params.index:
-                                    results_data.append({
-                                        "Parameter": param,
-                                        "Coefficient": f"{result.params[param]:.4f}",
-                                        "Std Error": f"{result.bse[param]:.4f}",
-                                        "t-statistic": f"{result.tvalues[param]:.3f}",
-                                        "P-value": f"{result.pvalues[param]:.4f}",
-                                        "Significance": "***" if result.pvalues[param] < 0.01 else 
-                                                       "**" if result.pvalues[param] < 0.05 else 
-                                                       "*" if result.pvalues[param] < 0.10 else ""
-                                    })
-                                
-                                results_df = pd.DataFrame(results_data)
-                                st.dataframe(results_df, use_container_width=True)
-                                st.caption("Significance: *** p<0.01, ** p<0.05, * p<0.10")
-                                
-                                # Model statistics
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("R-squared", f"{result.rsquared:.4f}")
-                                with col2:
-                                    st.metric("Observations", f"{int(result.nobs):,}")
-                                with col3:
-                                    st.metric("F-statistic", f"{result.fvalue:.2f}")
-                                
-                                # Store for export
-                                for param in result.params.index:
-                                    if param.startswith(f"C({treatment_col})"):
-                                        all_results.append({
-                                            "Outcome": outcome,
-                                            "Treatment": param,
-                                            "Coefficient": result.params[param],
-                                            "Std_Error": result.bse[param],
-                                            "P_value": result.pvalues[param],
-                                            "CI_Lower": result.conf_int().loc[param, 0],
-                                            "CI_Upper": result.conf_int().loc[param, 1],
-                                            "R_squared": result.rsquared,
-                                            "N_obs": int(result.nobs)
-                                        })
-                                
-                            except Exception as e:
-                                st.error(f"Error analyzing {outcome}: {e}")
-                        
-                        # Export all results
-                        if all_results:
-                            st.markdown("---")
-                            st.markdown("### 📥 Download Results")
-                            
-                            results_export = pd.DataFrame(all_results)
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                csv = results_export.to_csv(index=False)
-                                st.download_button(
-                                    "📥 Download as CSV",
-                                    csv,
-                                    "ate_results.csv",
-                                    "text/csv",
-                                    use_container_width=True
-                                )
-                            
-                            with col2:
-                                # Excel export
-                                buffer = io.BytesIO()
-                                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                                    results_export.to_excel(writer, index=False, sheet_name='ATE Results')
-                                st.download_button(
-                                    "📥 Download as Excel",
-                                    buffer.getvalue(),
-                                    "ate_results.xlsx",
-                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
+                    # Method-specific analysis
+                    st.markdown("### 📊 Treatment Effect Estimates")
                     
-                    # Heterogeneity Analysis
-                    if run_heterogeneity and moderator:
-                        st.markdown("### 🔍 Heterogeneity Analysis")
-                        st.markdown(f"Treatment effects by **{moderator}**")
+                    all_results = []
+                    
+                    for outcome in outcomes:
+                        st.markdown(f"#### {outcome}")
                         
-                        for outcome in outcomes:
-                            st.markdown(f"#### {outcome}")
-                            
-                            try:
-                                result = heterogeneity_analysis(
-                                    df, outcome, moderator, covariates=covariates, config=config
+                        try:
+                            # Run analysis based on selected method
+                            if analysis_method == "ATE/ITT (Average Treatment Effect)":
+                                results = estimate_itt(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=treatment_col,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col,
+                                    baseline_outcome_col=baseline_outcome,
+                                    strata_cols=strata_cols_list
                                 )
                                 
-                                # Show interaction effects
-                                interaction_params = [p for p in result.params.index 
-                                                     if f"C({treatment_col})" in p and f"C({moderator})" in p]
+                                # Display formatted table
+                                formatted_table = format_regression_table(results)
+                                st.markdown("**ITT Estimates (3 Specifications):**")
+                                st.dataframe(formatted_table, use_container_width=True)
+                                st.caption("Spec 1: No controls | Spec 2: With controls | Spec 3: ANCOVA (with baseline)")
                                 
-                                if interaction_params:
-                                    st.markdown("**Interaction Effects:**")
+                                # Visualizations
+                                if show_visualizations:
+                                    fig = plot_coefficients(results, title=f"ITT Effects on {outcome}")
+                                    st.plotly_chart(fig, use_container_width=True)
                                     
-                                    interaction_data = []
-                                    for param in interaction_params:
-                                        interaction_data.append({
-                                            "Interaction": param,
-                                            "Coefficient": f"{result.params[param]:.4f}",
-                                            "Std Error": f"{result.bse[param]:.4f}",
-                                            "P-value": f"{result.pvalues[param]:.4f}",
-                                            "Significance": "***" if result.pvalues[param] < 0.01 else 
-                                                           "**" if result.pvalues[param] < 0.05 else 
-                                                           "*" if result.pvalues[param] < 0.10 else ""
-                                        })
-                                    
-                                    interaction_df = pd.DataFrame(interaction_data)
-                                    st.dataframe(interaction_df, use_container_width=True)
-                                    
-                                    # Interpretation
-                                    sig_interactions = [d for d in interaction_data if d["Significance"]]
-                                    if sig_interactions:
-                                        st.info(f"💡 Found {len(sig_interactions)} significant interaction effect(s). "
-                                               f"Treatment effects differ by {moderator}.")
-                                    else:
-                                        st.info(f"No significant heterogeneity found by {moderator}.")
-                                else:
-                                    st.warning("No interaction terms found in the model.")
+                                    fig_dist = plot_distributions(df, outcome, treatment_col)
+                                    st.plotly_chart(fig_dist, use_container_width=True)
+                            
+                            elif analysis_method == "TOT (Treatment-on-Treated)":
+                                results = estimate_tot(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=takeup_var,
+                                    instrument_col=instrument_var,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col
+                                )
                                 
-                            except Exception as e:
-                                st.error(f"Error in heterogeneity analysis for {outcome}: {e}")
+                                # Display results
+                                st.markdown("**First Stage:**")
+                                st.write(f"F-statistic: {results['first_stage_fstat']:.2f}")
+                                st.write(f"Instrument strength: {'Strong' if results['first_stage_fstat'] > 10 else 'Weak'}")
+                                
+                                st.markdown("**Second Stage (TOT Estimate):**")
+                                formatted_table = format_regression_table({'spec1': results['second_stage']})
+                                st.dataframe(formatted_table, use_container_width=True)
+                                
+                                if show_visualizations:
+                                    fig = plot_coefficients({'TOT': results['second_stage']}, 
+                                                          title=f"TOT Effect on {outcome}")
+                                    st.plotly_chart(fig, use_container_width=True)
+                            
+                            elif analysis_method == "LATE (Local Average Treatment Effect)":
+                                results = estimate_late(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=takeup_var,
+                                    instrument_col=instrument_var,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col
+                                )
+                                
+                                # Display LATE interpretation
+                                st.markdown("**LATE (Complier Average Causal Effect):**")
+                                st.metric("Compliance Rate", f"{results['compliance_rate']:.1%}")
+                                st.metric("LATE Estimate", f"{results['late_estimate']:.4f}")
+                                st.metric("Std Error", f"{results['late_se']:.4f}")
+                                st.write(results['interpretation'])
+                                
+                                formatted_table = format_regression_table({'LATE': results['second_stage']})
+                                st.dataframe(formatted_table, use_container_width=True)
+                            
+                            elif analysis_method == "Binary Outcome (Logit/Probit)":
+                                results = estimate_binary_outcome(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=treatment_col,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col,
+                                    model_type=model_type
+                                )
+                                
+                                st.markdown(f"**{model_type.title()} Model Results:**")
+                                st.write(f"Marginal Effect: {results['marginal_effect']:.4f} ({results['marginal_effect_se']:.4f})")
+                                st.write(f"Percentage points: {results['marginal_effect']*100:.2f}pp")
+                                
+                                formatted_table = format_regression_table({model_type: results['model']})
+                                st.dataframe(formatted_table, use_container_width=True)
+                            
+                            elif analysis_method == "Panel Fixed Effects":
+                                results = estimate_panel_fe(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=treatment_col,
+                                    panel_id_col=panel_id,
+                                    time_col=time_var,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col
+                                )
+                                
+                                st.markdown("**Panel Fixed Effects Results:**")
+                                formatted_table = format_regression_table({'Panel FE': results})
+                                st.dataframe(formatted_table, use_container_width=True)
+                                st.caption("Controls for time-invariant unobservables via entity FE")
+                            
+                            elif analysis_method == "Heterogeneity Analysis":
+                                results = estimate_heterogeneity(
+                                    df=df,
+                                    outcome_col=outcome,
+                                    treatment_col=treatment_col,
+                                    subgroup_col=moderator,
+                                    covariate_cols=covariates,
+                                    cluster_col=cluster_col
+                                )
+                                
+                                st.markdown("**Heterogeneous Treatment Effects:**")
+                                st.write(f"Interaction F-statistic: {results['interaction_fstat']:.2f}")
+                                st.write(f"P-value: {results['interaction_pvalue']:.4f}")
+                                
+                                # Show subgroup effects
+                                st.markdown("**Effects by Subgroup:**")
+                                for subgroup, effect in results['subgroup_effects'].items():
+                                    st.write(f"{subgroup}: {effect['coef']:.4f} (SE: {effect['se']:.4f})")
+                                
+                                if show_visualizations:
+                                    fig = plot_heterogeneity(results, moderator)
+                                    st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Store results for export
+                            all_results.append({
+                                'outcome': outcome,
+                                'method': analysis_method,
+                                'results': results
+                            })
+                            
+                        except Exception as e:
+                            st.error(f"Error analyzing {outcome}: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
+                    
+                    # Export results
+                    if all_results and export_table:
+                        st.markdown("---")
+                        st.markdown("### 📥 Download Results")
+                        
+                        # Create export dataframe (simplified)
+                        export_data = []
+                        for res in all_results:
+                            export_data.append({
+                                'Outcome': res['outcome'],
+                                'Method': res['method'],
+                                'Results': str(res['results'])
+                            })
+                        
+                        results_export = pd.DataFrame(export_data)
+                        
+                        csv = results_export.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download as CSV",
+                            csv,
+                            f"{analysis_method.lower().replace(' ', '_')}_results.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
+                    
+
         
         else:
             st.info("👆 Upload endline data or fetch from SurveyCTO to begin analysis.")
@@ -7139,285 +7599,84 @@ def render_analysis() -> None:
         - Report both unadjusted and adjusted estimates
         - Account for multiple testing if analyzing many outcomes
         """)
-
-
-# ----------------------------------------------------------------------------- #
-# ADVANCED ANALYSIS (Academic-Grade)                                           #
-# ----------------------------------------------------------------------------- #
-
-
-def render_advanced_analysis() -> None:
-    """Render the Advanced Analysis page with academic-grade features"""
-    st.title("🎓 Advanced Analysis & Results")
-    st.markdown("Academic-grade RCT analysis with diagnostics, reproducible code generation, and publication-ready outputs")
     
-    # ========================================
-    # DATA UPLOAD
-    # ========================================
-    st.markdown("## 1. Load Data")
-    
-    uploaded_file = st.file_uploader(
-        "Upload your analysis data",
-        type=['csv', 'dta'],
-        help="Supports CSV and Stata .dta files"
-    )
-    
-    if not uploaded_file:
-        st.info("👆 Upload your data file to begin analysis")
+    with tab3:
+        st.markdown("### ℹ️ Help & Documentation")
         st.markdown("""
-        **Supported formats:**
-        - CSV (.csv)
-        - Stata (.dta)
+        ### 🚀 Quick Start
         
-        **Features:**
-        - Data diagnostics (outliers, skewness, kurtosis)
-        - Optional winsorization/trimming
-        - Balance tests
-        - Python & Stata code generation
+        1. **Upload Data**: Load your endline/follow-up survey data (CSV or Stata .dta)
+        2. **Optional Cleaning**: Apply winsorization, handle missing values, flag data quality issues
+        3. **Configure Analysis**: Select treatment variable, outcomes, and estimation method
+        4. **Run Analysis**: Execute and review results with visualizations
+        
+        ### 🧹 Data Cleaning Options
+        
+        **Winsorization**: Reduces the impact of extreme outliers by capping values at specified percentiles.
+        - **Simple winsorization**: Caps at 1st and 99th percentiles
+        - **Size-adjusted winsorization** (Bruhn-Karlan method): Regresses outcome on strata dummies, caps residuals, then reconstructs values
+        - Useful for: sales, profits, employment, assets
+        
+        **Missing Value Handling**: Creates indicator variables for missing data and imputes with zero.
+        - Pattern: Variable `x` → creates `x_d` (1 if missing, 0 otherwise) + fills `x` with 0
+        - Allows inclusion of observations with missing covariates
+        - Follows published RCT methodology (Bruhn & Karlan 2018)
+        
+        **Zero Sales Artifacts**: Detects firms reporting zero sales across multiple months.
+        - If all monthly sales = 0 but firm has employees/assets, likely data quality issue
+        - Sets sales to missing for these cases (following published replication code)
+        - Prevents bias from data entry errors or non-response
+        
+        ### 📊 Estimation Methods
+        
+        **ATE/ITT (Average Treatment Effect)**: Gold standard for RCTs
+        - Compares all assigned to treatment vs all assigned to control
+        - Estimates effect of assignment (not receipt)
+        - Three specifications: No controls, With covariates, ANCOVA with baseline
+        
+        **TOT (Treatment-on-Treated)**: Effect on actual recipients
+        - Uses instrumental variables (IV/2SLS) to account for imperfect compliance
+        - Reports first-stage F-statistic (>10 indicates strong instrument)
+        - Larger than ITT if compliance < 100%
+        
+        **LATE (Local Average Treatment Effect)**: Effect on compliers
+        - Estimates impact specifically for those induced to take treatment by assignment
+        - Uses Wald estimator: ITT / compliance rate
+        - Interpretation: Effect on the "moveable" population
+        
+        **Binary Outcome Models**: For 0/1 outcomes
+        - Logit or Probit maximum likelihood estimation
+        - Reports marginal effects (probability units)
+        - Use for: adoption, enrollment, participation
+        
+        **Panel Fixed Effects**: For longitudinal data
+        - Controls for all time-invariant unobservables via entity fixed effects
+        - Requires multiple observations per unit over time
+        - Identifies treatment effects from within-unit variation
+        
+        **Heterogeneity Analysis**: Subgroup effects
+        - Tests if treatment effects differ by characteristics (gender, age, baseline income)
+        - Uses interaction terms: Treatment × Subgroup
+        - Reports F-test for joint significance
+        
+        ### 📈 Best Practices
+        
+        - **Always check balance** before estimating treatment effects
+        - **Include pre-specified covariates** to increase precision and reduce SEs
+        - **Use cluster-robust SEs** if randomization was at cluster level (villages, schools)
+        - **Report multiple specifications**: Unadjusted, with controls, ANCOVA
+        - **Account for multiple testing** when analyzing many outcomes (Bonferroni correction)
+        - **Check attrition**: High or differential attrition (>20%) may threaten validity
+        
+        ### 📚 References
+        
+        This tool implements methods from published RCT studies:
+        - Bruhn, Karlan & Schoar (2018): "The Impact of Consulting Services on Small and Medium Enterprises"
+        - Attanasio et al (2011): "Risk pooling, risk preferences, and social networks"
+        - Emerick et al (2016): "Technological Innovations, Downside Risk, and the Modernization of Agriculture"
+        
+        For technical details, see the [RANDOMIZATION.md](docs/RANDOMIZATION.md) documentation.
         """)
-        return
-    
-    # Load data
-    try:
-        if uploaded_file.name.endswith('.dta'):
-            data = pd.read_stata(uploaded_file, convert_categoricals=False)
-            st.success(f"✅ Loaded Stata file: {len(data):,} observations, {len(data.columns)} variables")
-        else:
-            data = pd.read_csv(uploaded_file)
-            st.success(f"✅ Loaded CSV file: {len(data):,} observations, {len(data.columns)} variables")
-    except Exception as e:
-        st.error(f"Error loading file: {e}")
-        return
-    
-    # ========================================
-    # VARIABLE SELECTION
-    # ========================================
-    st.markdown("## 2. Select Variables")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        treatment_col = st.selectbox(
-            "Treatment variable",
-            options=data.columns.tolist(),
-            help="Binary treatment indicator (0=control, 1=treatment)"
-        )
-    
-    with col2:
-        outcome_vars = st.multiselect(
-            "Outcome variables",
-            options=data.columns.tolist(),
-            help="Select one or more outcome variables to analyze"
-        )
-    
-    baseline_outcome = st.selectbox(
-        "Baseline outcome (optional)",
-        options=['None'] + data.columns.tolist(),
-        help="Baseline value of outcome for ANCOVA specification"
-    )
-    
-    covariates = st.multiselect(
-        "Covariates for balance tests (optional)",
-        options=data.columns.tolist(),
-        help="Select baseline characteristics to test for balance"
-    )
-    
-    if not outcome_vars:
-        st.warning("Please select at least one outcome variable")
-        return
-    
-    # ========================================
-    # DATA DIAGNOSTICS
-    # ========================================
-    st.markdown("## 3. Data Diagnostics")
-    st.info("🔍 Check if your data needs cleaning before analysis")
-    
-    if st.button("Run Diagnostics", type="primary"):
-        with st.spinner("Running diagnostics..."):
-            diagnostics = run_data_diagnostics(data, outcome_vars)
-        
-        for var, diag in diagnostics.items():
-            if 'error' in diag:
-                st.error(f"{var}: {diag['error']}")
-                continue
-            
-            with st.expander(f"📊 {var}", expanded=True):
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.markdown("**Statistics**")
-                    stats_df = pd.DataFrame([diag['statistics']]).T
-                    stats_df.columns = ['Value']
-                    st.dataframe(stats_df, use_container_width=True)
-                
-                with col2:
-                    st.markdown("**Outlier Analysis**")
-                    for level, info in diag['outliers'].items():
-                        st.metric(
-                            f"Outliers at {level}",
-                            f"{info['n_outliers']} ({info['pct_outliers']:.1f}%)"
-                        )
-                
-                with col3:
-                    st.markdown("**Recommendation**")
-                    if diag['severity'] == 'high':
-                        st.error(diag['recommendation'])
-                    elif diag['severity'] == 'medium':
-                        st.warning(diag['recommendation'])
-                    else:
-                        st.success(diag['recommendation'])
-        
-        # Store diagnostics in session state
-        st.session_state['diagnostics'] = diagnostics
-    
-    # ========================================
-    # DATA CLEANING (Optional)
-    # ========================================
-    if 'diagnostics' in st.session_state:
-        st.markdown("## 4. Data Cleaning (Optional)")
-        
-        apply_winsorization = st.checkbox(
-            "Apply winsorization",
-            help="Replace extreme values with percentile bounds"
-        )
-        
-        if apply_winsorization:
-            winsor_level = st.slider(
-                "Winsorization level (%)",
-                min_value=1,
-                max_value=10,
-                value=1,
-                help="Trim/cap values at this percentile (e.g., 1% = 99th percentile)"
-            )
-            
-            if st.button("Apply Winsorization"):
-                for var in outcome_vars:
-                    data[f'{var}_w'] = winsorize_variable(
-                        data[var], 
-                        lower=winsor_level,
-                        upper=100-winsor_level
-                    )
-                st.success(f"✅ Created winsorized versions: {', '.join([f'{v}_w' for v in outcome_vars])}")
-    else:
-        apply_winsorization = False
-    
-    # ========================================
-    # BALANCE TESTS
-    # ========================================
-    if covariates:
-        st.markdown("## 5. Balance Tests")
-        
-        if st.button("Check Balance"):
-            with st.spinner("Running balance tests..."):
-                balance_results = check_balance(data, treatment_col, covariates)
-            
-            st.markdown("### Treatment vs Control Balance")
-            st.dataframe(
-                balance_results.style.format({
-                    'treatment_mean': '{:.3f}',
-                    'control_mean': '{:.3f}',
-                    'difference': '{:.3f}',
-                    'p_value': '{:.3f}'
-                }).background_gradient(subset=['p_value'], cmap='RdYlGn_r', vmin=0, vmax=0.1),
-                use_container_width=True
-            )
-            
-            # Highlight imbalanced variables
-            imbalanced = balance_results[balance_results['p_value'] < 0.05]
-            if len(imbalanced) > 0:
-                st.warning(f"⚠️ {len(imbalanced)} variable(s) show significant imbalance (p < 0.05):")
-                st.dataframe(imbalanced[['variable', 'p_value']], use_container_width=True)
-            else:
-                st.success("✅ All variables are balanced (p ≥ 0.05)")
-    
-    # ========================================
-    # CODE GENERATION & DOWNLOAD
-    # ========================================
-    st.markdown("## 6. Download Analysis Code")
-    st.info("📥 Generate reproducible Python and Stata scripts for your analysis")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    baseline_val = None if baseline_outcome == 'None' else baseline_outcome
-    
-    with col1:
-        python_code = generate_python_analysis_code(
-            treatment_col=treatment_col,
-            outcome_vars=outcome_vars,
-            baseline_outcome=baseline_val,
-            covariates=covariates,
-            apply_winsorization=apply_winsorization
-        )
-        
-        st.download_button(
-            label="🐍 Python Script",
-            data=python_code,
-            file_name="rct_analysis.py",
-            mime="text/x-python",
-            help="Download complete Python analysis script",
-            use_container_width=True
-        )
-    
-    with col2:
-        stata_code = generate_stata_analysis_code(
-            treatment_col=treatment_col,
-            outcome_vars=outcome_vars,
-            baseline_outcome=baseline_val,
-            covariates=covariates,
-            apply_winsorization=apply_winsorization
-        )
-        
-        st.download_button(
-            label="📈 Stata Do-File",
-            data=stata_code,
-            file_name="rct_analysis.do",
-            mime="text/plain",
-            help="Download complete Stata analysis script",
-            use_container_width=True
-        )
-    
-    with col3:
-        # Data download
-        csv_data = data.to_csv(index=False)
-        st.download_button(
-            label="📊 Cleaned Data (CSV)",
-            data=csv_data,
-            file_name="cleaned_data.csv",
-            mime="text/csv",
-            help="Download cleaned dataset",
-            use_container_width=True
-        )
-    
-    with col4:
-        # Configuration JSON
-        config = {
-            'treatment_col': treatment_col,
-            'outcome_vars': outcome_vars,
-            'baseline_outcome': baseline_val,
-            'covariates': covariates
-        }
-        config_json = json.dumps(config, indent=2)
-        st.download_button(
-            label="⚙️ Configuration",
-            data=config_json,
-            file_name="analysis_config.json",
-            mime="application/json",
-            help="Download analysis configuration",
-            use_container_width=True
-        )
-    
-    # ========================================
-    # FOOTER
-    # ========================================
-    st.markdown("---")
-    st.markdown("""
-    **📚 Analysis Standards:**
-    - Robust standard errors (HC1)
-    - Balance tests with t-statistics
-    - Optional winsorization for outliers
-    - Reproducible code with fixed seed (123456)
-    - Baseline control specifications (ANCOVA)
-    """)
 
 
 # ----------------------------------------------------------------------------- #
@@ -8867,323 +9126,6 @@ def render_user_information():
     st.caption("🔒 Administrator Access Only | Password: admin2025")
 
 
-def render_analytics_dashboard():
-    """Render the Analytics Dashboard page - admin only."""
-    
-    st.title("📊 Analytics Dashboard")
-    st.markdown("---")
-    
-    # Check if current user is admin
-    is_admin = st.session_state.get("username") == "aj-admin"
-    
-    # Password protection
-    if 'analytics_authenticated' not in st.session_state:
-        st.session_state.analytics_authenticated = False
-    
-    if not is_admin and not st.session_state.analytics_authenticated:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        with st.form("analytics_password_form"):
-            st.markdown("### Enter Admin Password")
-            password = st.text_input("Password", type="password", key="analytics_pwd", label_visibility="collapsed", placeholder="Enter admin password")
-            submit = st.form_submit_button("Unlock", use_container_width=True, type="primary")
-            
-            if submit:
-                if password == "admin2025":  # Admin password
-                    st.session_state.analytics_authenticated = True
-                    st.success("✅ Access granted!")
-                    st.rerun()
-                else:
-                    st.error("❌ Incorrect password")
-        return
-    
-    # Logout button for admin
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        if st.button("🔓 Lock Page", use_container_width=True):
-            st.session_state.analytics_authenticated = False
-            st.rerun()
-    
-    st.markdown("---")
-    
-    # Import analytics functions
-    try:
-        from .persistence import (
-            fetch_all_users,
-            fetch_user_activity,
-        )
-        
-        # Create database connection helper
-        import sqlite3
-        from pathlib import Path
-        
-        DB_PATH = Path(__file__).parent / "persistent_data" / "rct_field_flow.db"
-        
-        def get_analytics_data(query):
-            """Helper to execute analytics queries"""
-            if not DB_PATH.exists():
-                return pd.DataFrame()
-            conn = sqlite3.connect(DB_PATH)
-            try:
-                df = pd.read_sql_query(query, conn)
-                return df
-            except Exception as e:
-                st.error(f"Query error: {e}")
-                return pd.DataFrame()
-            finally:
-                conn.close()
-        
-        # User Overview Section
-        st.markdown("### 📊 User Overview")
-        
-        user_summary_query = """
-        SELECT 
-            COUNT(*) as total_users,
-            COUNT(CASE WHEN password_hash IS NOT NULL THEN 1 END) as registered_users,
-            COUNT(CASE WHEN consent_given = 1 THEN 1 END) as users_with_consent,
-            MIN(first_access) as first_user_date,
-            MAX(last_access) as last_activity_date
-        FROM users
-        """
-        
-        user_summary = get_analytics_data(user_summary_query)
-        
-        if not user_summary.empty:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Users", int(user_summary['total_users'].values[0]))
-            with col2:
-                st.metric("Registered", int(user_summary['registered_users'].values[0]))
-            with col3:
-                st.metric("With Consent", int(user_summary['users_with_consent'].values[0]))
-            with col4:
-                if user_summary['first_user_date'].values[0]:
-                    first_date = pd.to_datetime(user_summary['first_user_date'].values[0]).strftime("%Y-%m-%d")
-                    st.metric("First User", first_date)
-        
-        st.markdown("---")
-        
-        # Activity Overview
-        st.markdown("### ⚡ Activity Overview")
-        
-        activity_summary_query = """
-        SELECT 
-            COUNT(*) as total_activities,
-            COUNT(DISTINCT username) as active_users,
-            COUNT(DISTINCT page) as pages_accessed,
-            COUNT(DISTINCT DATE(timestamp)) as active_days
-        FROM activities
-        """
-        
-        activity_summary = get_analytics_data(activity_summary_query)
-        
-        if not activity_summary.empty and activity_summary['total_activities'].values[0] > 0:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Activities", int(activity_summary['total_activities'].values[0]))
-            with col2:
-                st.metric("Active Users", int(activity_summary['active_users'].values[0]))
-            with col3:
-                st.metric("Pages Accessed", int(activity_summary['pages_accessed'].values[0]))
-            with col4:
-                st.metric("Active Days", int(activity_summary['active_days'].values[0]))
-        else:
-            st.info("No activity data recorded yet")
-        
-        st.markdown("---")
-        
-        # Tab navigation for detailed analytics
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["👥 Users", "📈 Activity", "📄 Pages", "🎲 Randomization", "📊 Export"])
-        
-        with tab1:
-            st.markdown("#### All Users")
-            users_query = """
-            SELECT 
-                username,
-                name,
-                organization,
-                first_access,
-                last_access,
-                consent_given,
-                CASE WHEN password_hash IS NOT NULL THEN 'Yes' ELSE 'No' END as has_password
-            FROM users
-            ORDER BY last_access DESC
-            """
-            users_df = get_analytics_data(users_query)
-            
-            if not users_df.empty:
-                # Format timestamps
-                users_df['first_access'] = pd.to_datetime(users_df['first_access']).dt.strftime('%Y-%m-%d %H:%M')
-                users_df['last_access'] = pd.to_datetime(users_df['last_access']).dt.strftime('%Y-%m-%d %H:%M')
-                users_df['consent_given'] = users_df['consent_given'].apply(lambda x: '✅' if x == 1 else '❌')
-                
-                st.dataframe(users_df, use_container_width=True, hide_index=True)
-                
-                # User detail selector
-                st.markdown("#### User Details")
-                selected_user = st.selectbox("Select user to view activity:", users_df['username'].tolist())
-                
-                if selected_user:
-                    activity_query = f"""
-                    SELECT 
-                        timestamp,
-                        page,
-                        action,
-                        details
-                    FROM activities
-                    WHERE username = '{selected_user}'
-                    ORDER BY timestamp DESC
-                    LIMIT 100
-                    """
-                    user_activity = get_analytics_data(activity_query)
-                    
-                    if not user_activity.empty:
-                        user_activity['timestamp'] = pd.to_datetime(user_activity['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(user_activity, use_container_width=True, hide_index=True)
-                    else:
-                        st.info(f"No activity recorded for {selected_user}")
-            else:
-                st.info("No users found")
-        
-        with tab2:
-            st.markdown("#### Activity by User")
-            activity_by_user_query = """
-            SELECT 
-                u.username,
-                u.name,
-                COUNT(a.id) as total_activities,
-                COUNT(DISTINCT a.page) as unique_pages,
-                MIN(a.timestamp) as first_activity,
-                MAX(a.timestamp) as last_activity
-            FROM users u
-            LEFT JOIN activities a ON u.username = a.username
-            GROUP BY u.username, u.name
-            HAVING total_activities > 0
-            ORDER BY total_activities DESC
-            """
-            activity_user_df = get_analytics_data(activity_by_user_query)
-            
-            if not activity_user_df.empty:
-                activity_user_df['first_activity'] = pd.to_datetime(activity_user_df['first_activity']).dt.strftime('%Y-%m-%d %H:%M')
-                activity_user_df['last_activity'] = pd.to_datetime(activity_user_df['last_activity']).dt.strftime('%Y-%m-%d %H:%M')
-                st.dataframe(activity_user_df, use_container_width=True, hide_index=True)
-                
-                # Activity chart
-                if len(activity_user_df) > 0:
-                    st.bar_chart(activity_user_df.set_index('username')['total_activities'])
-            else:
-                st.info("No activity data available")
-            
-            st.markdown("#### Activity by Action")
-            action_query = """
-            SELECT 
-                action,
-                COUNT(*) as count,
-                COUNT(DISTINCT username) as unique_users
-            FROM activities
-            GROUP BY action
-            ORDER BY count DESC
-            """
-            action_df = get_analytics_data(action_query)
-            
-            if not action_df.empty:
-                st.dataframe(action_df, use_container_width=True, hide_index=True)
-        
-        with tab3:
-            st.markdown("#### Page Visits")
-            page_query = """
-            SELECT 
-                page,
-                COUNT(*) as visits,
-                COUNT(DISTINCT username) as unique_users
-            FROM activities
-            GROUP BY page
-            ORDER BY visits DESC
-            """
-            page_df = get_analytics_data(page_query)
-            
-            if not page_df.empty:
-                st.dataframe(page_df, use_container_width=True, hide_index=True)
-                
-                # Page visit chart
-                st.bar_chart(page_df.set_index('page')['visits'])
-            else:
-                st.info("No page visit data available")
-        
-        with tab4:
-            st.markdown("#### Randomization Usage")
-            random_query = """
-            SELECT 
-                u.username,
-                u.organization,
-                r.total_units,
-                r.timestamp as randomization_date
-            FROM randomization r
-            JOIN users u ON r.username = u.username
-            ORDER BY r.timestamp DESC
-            """
-            random_df = get_analytics_data(random_query)
-            
-            if not random_df.empty:
-                random_df['randomization_date'] = pd.to_datetime(random_df['randomization_date']).dt.strftime('%Y-%m-%d %H:%M')
-                st.dataframe(random_df, use_container_width=True, hide_index=True)
-                
-                # Stats
-                st.markdown("#### Statistics")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Randomizations", len(random_df))
-                with col2:
-                    st.metric("Total Units", int(random_df['total_units'].sum()))
-                with col3:
-                    st.metric("Avg Units/Randomization", int(random_df['total_units'].mean()))
-            else:
-                st.info("No randomization data available")
-        
-        with tab5:
-            st.markdown("#### Export Analytics Data")
-            st.info("Export comprehensive analytics reports to CSV files")
-            
-            if st.button("📁 Generate & Export All Reports", type="primary"):
-                from datetime import datetime
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                export_dir = Path(__file__).parent.parent / "analytics_reports"
-                export_dir.mkdir(exist_ok=True)
-                
-                # Export all tables
-                tables = {
-                    f"user_summary_{timestamp}.csv": user_summary,
-                    f"all_users_{timestamp}.csv": users_df,
-                    f"activity_by_user_{timestamp}.csv": activity_user_df,
-                    f"activity_by_action_{timestamp}.csv": action_df,
-                    f"page_visits_{timestamp}.csv": page_df,
-                    f"randomization_{timestamp}.csv": random_df,
-                }
-                
-                files_created = []
-                for filename, df in tables.items():
-                    if df is not None and not df.empty:
-                        filepath = export_dir / filename
-                        df.to_csv(filepath, index=False)
-                        files_created.append(filename)
-                
-                if files_created:
-                    st.success(f"✅ Exported {len(files_created)} reports to `analytics_reports/`")
-                    for filename in files_created:
-                        st.text(f"  • {filename}")
-                else:
-                    st.warning("No data available to export")
-    
-    except ImportError as e:
-        st.error(f"Analytics module not available: {e}")
-    except Exception as e:
-        st.error(f"Error loading analytics: {e}")
-        import traceback
-        with st.expander("Error details"):
-            st.code(traceback.format_exc())
-
-
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 # AUTHENTICATION & ACTIVITY LOGGING                                             #
@@ -9198,7 +9140,7 @@ PROTECTED_PAGES = ["design", "power", "random", "cases", "visualize", "quality",
                    "backcheck", "reports", "monitor", "home"]
 
 # Admin pages
-ADMIN_PAGES = ["facilitator", "userinfo", "analytics"]
+ADMIN_PAGES = ["facilitator", "userinfo"]
 
 
 def init_auth():
@@ -9239,16 +9181,6 @@ def render_login_page(authenticator):
         border-radius: 10px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         background-color: #ffffff;
-    }
-    /* Green toggle bar styling */
-    div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: none !important;
-    }
-    div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
-        background-color: #218838 !important;
-        color: white !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -9295,11 +9227,8 @@ def render_login_page(authenticator):
                         st.error("Username already exists or error creating account.")
         
         # Toggle to login
-        st.markdown("""
-        <div style='background-color: #28a745; padding: 10px; border-radius: 5px; text-align: center; margin-top: 20px;'>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Already registered? Log in", use_container_width=True, type="secondary"):
+        st.markdown("---")
+        if st.button("Already registered? Log in", use_container_width=True):
             st.session_state.auth_mode = 'login'
             st.rerun()
     
@@ -9319,11 +9248,8 @@ def render_login_page(authenticator):
             pass  # Don't show warning, let the form speak for itself
         
         # Toggle to register
-        st.markdown("""
-        <div style='background-color: #28a745; padding: 10px; border-radius: 5px; text-align: center; margin-top: 20px;'>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Need an account? Register", use_container_width=True, type="secondary"):
+        st.markdown("---")
+        if st.button("Need an account? Register", use_container_width=True):
             st.session_state.auth_mode = 'register'
             st.rerun()
 
@@ -9678,8 +9604,6 @@ def main() -> None:
         render_quality_checks()
     elif page == "analysis":
         render_analysis()
-    elif page == "advanced_analysis":
-        render_advanced_analysis()
     elif page == "backcheck":
         render_backcheck()
     elif page == "reports":
@@ -9690,8 +9614,6 @@ def main() -> None:
         render_user_information()
     elif page == "facilitator":
         render_facilitator_dashboard()
-    elif page == "analytics":
-        render_analytics_dashboard()
     
     # Clear the programmatic navigation flag after rendering
     if 'current_page' in st.session_state and st.session_state.current_page:

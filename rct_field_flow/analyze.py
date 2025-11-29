@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import Dict, Iterable, List, Optional
 
+import numpy as np
 import pandas as pd
+from scipy import stats as scipy_stats
 import statsmodels.formula.api as smf
 
 
@@ -116,23 +118,36 @@ def one_click_analysis(
 # DATA LOADING UTILITIES
 # ========================================
 
-def load_data(file_path: str) -> pd.DataFrame:
+def load_data(file_path) -> pd.DataFrame:
     """
     Load data from CSV or Stata .dta files
     
     Args:
-        file_path: Path to data file (.csv or .dta)
+        file_path: Path to data file (.csv or .dta) or UploadedFile object
     
     Returns:
         DataFrame with loaded data
     """
-    if file_path.endswith('.dta'):
-        # Disable convert_categoricals to avoid issues with duplicate category labels
-        return pd.read_stata(file_path, convert_categoricals=False)
-    elif file_path.endswith('.csv'):
-        return pd.read_csv(file_path)
+    # Handle UploadedFile objects from Streamlit
+    if hasattr(file_path, 'name'):
+        # It's an UploadedFile object
+        filename = file_path.name
+        if filename.endswith('.dta'):
+            # Disable convert_categoricals to avoid issues with duplicate category labels
+            return pd.read_stata(file_path, convert_categoricals=False)
+        elif filename.endswith('.csv'):
+            return pd.read_csv(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {filename}. Use .csv or .dta files.")
     else:
-        raise ValueError(f"Unsupported file format: {file_path}. Use .csv or .dta files.")
+        # It's a string file path
+        if file_path.endswith('.dta'):
+            # Disable convert_categoricals to avoid issues with duplicate category labels
+            return pd.read_stata(file_path, convert_categoricals=False)
+        elif file_path.endswith('.csv'):
+            return pd.read_csv(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {file_path}. Use .csv or .dta files.")
 
 
 # ========================================
@@ -286,7 +301,7 @@ def check_balance(
     covariates: List[str]
 ) -> pd.DataFrame:
     """
-    Check balance of covariates across treatment arms
+    Check balance of covariates across treatment arms (legacy function - use generate_balance_table for enhanced version)
     
     Args:
         data: DataFrame containing the data
@@ -324,6 +339,1186 @@ def check_balance(
         })
     
     return pd.DataFrame(results)
+
+
+def generate_balance_table(
+    data: pd.DataFrame,
+    treatment_col: str,
+    covariates: List[str],
+    cluster_col: Optional[str] = None,
+    format_style: str = 'dataframe'
+) -> pd.DataFrame:
+    """
+    Generate comprehensive balance table (Table 1) with joint orthogonality test
+    
+    Implements methodology from Bruhn, Karlan & Schoar (2018):
+    - Individual t-tests for each covariate
+    - Joint F-test for orthogonality
+    - Significance stars: *p<0.1, **p<0.05, ***p<0.01
+    - Cluster-robust standard errors if cluster_col provided
+    
+    Args:
+        data: DataFrame containing the data
+        treatment_col: Name of treatment column (should be 0/1)
+        covariates: List of covariate names to test
+        cluster_col: Optional cluster variable for robust SEs
+        format_style: 'dataframe' or 'latex' or 'html'
+    
+    Returns:
+        DataFrame with columns [Variable, Treatment_Mean, Treatment_SD, Control_Mean, Control_SD, Difference, SE, P_Value, Stars, N_Treatment, N_Control]
+    """
+    from scipy import stats as scipy_stats
+    import numpy as np
+    import statsmodels.api as sm
+    
+    # Filter valid covariates
+    valid_covs = [v for v in covariates if v in data.columns]
+    
+    results = []
+    for var in valid_covs:
+        # Remove missing values
+        subset = data[[var, treatment_col]].dropna()
+        
+        # Calculate means by treatment arm
+        treat_vals = subset[subset[treatment_col] == 1][var]
+        control_vals = subset[subset[treatment_col] == 0][var]
+        
+        if len(treat_vals) == 0 or len(control_vals) == 0:
+            continue
+        
+        # Run regression: var ~ treatment (for robust SE option)
+        X = sm.add_constant(subset[treatment_col])
+        y = subset[var]
+        
+        if cluster_col and cluster_col in data.columns:
+            # Cluster-robust standard errors
+            clusters = subset[cluster_col] if cluster_col in subset.columns else data.loc[subset.index, cluster_col]
+            try:
+                model = sm.OLS(y, X).fit(cov_type='cluster', cov_kwds={'groups': clusters})
+                coef = model.params[treatment_col]
+                se = model.bse[treatment_col]
+                p_val = model.pvalues[treatment_col]
+            except:
+                # Fallback to regular t-test
+                t_stat, p_val = scipy_stats.ttest_ind(treat_vals, control_vals)
+                coef = treat_vals.mean() - control_vals.mean()
+                se = np.sqrt(treat_vals.var()/len(treat_vals) + control_vals.var()/len(control_vals))
+        else:
+            # Standard t-test
+            model = sm.OLS(y, X).fit(cov_type='HC1')  # Heteroskedasticity-robust
+            coef = model.params[treatment_col]
+            se = model.bse[treatment_col]
+            p_val = model.pvalues[treatment_col]
+        
+        # Significance stars
+        if p_val < 0.01:
+            stars = '***'
+        elif p_val < 0.05:
+            stars = '**'
+        elif p_val < 0.1:
+            stars = '*'
+        else:
+            stars = ''
+        
+        results.append({
+            'Variable': var,
+            'Treatment_Mean': treat_vals.mean(),
+            'Treatment_SD': treat_vals.std(),
+            'Control_Mean': control_vals.mean(),
+            'Control_SD': control_vals.std(),
+            'Difference': coef,
+            'SE': se,
+            'P_Value': p_val,
+            'Stars': stars,
+            'N_Treatment': len(treat_vals),
+            'N_Control': len(control_vals)
+        })
+    
+    balance_df = pd.DataFrame(results)
+    
+    # Add joint orthogonality test (F-test)
+    # Regress treatment on all covariates: treatment ~ cov1 + cov2 + ...
+    if len(valid_covs) > 0:
+        subset_all = data[[treatment_col] + valid_covs].dropna()
+        if len(subset_all) > 0:
+            X = sm.add_constant(subset_all[valid_covs])
+            y = subset_all[treatment_col]
+            
+            if cluster_col and cluster_col in data.columns:
+                clusters = data.loc[subset_all.index, cluster_col]
+                try:
+                    model_joint = sm.OLS(y, X).fit(cov_type='cluster', cov_kwds={'groups': clusters})
+                except:
+                    model_joint = sm.OLS(y, X).fit(cov_type='HC1')
+            else:
+                model_joint = sm.OLS(y, X).fit(cov_type='HC1')
+            
+            # F-test: all covariate coefficients jointly zero
+            try:
+                # Test all variables except constant
+                hypotheses = [f'{cov} = 0' for cov in valid_covs]
+                f_test = model_joint.f_test(hypotheses)
+                f_stat = f_test.fvalue[0][0]
+                f_pval = f_test.pvalue
+                
+                # Add joint test row
+                joint_row = {
+                    'Variable': 'Joint F-test',
+                    'Treatment_Mean': np.nan,
+                    'Treatment_SD': np.nan,
+                    'Control_Mean': np.nan,
+                    'Control_SD': np.nan,
+                    'Difference': f_stat,
+                    'SE': np.nan,
+                    'P_Value': f_pval,
+                    'Stars': '***' if f_pval < 0.01 else '**' if f_pval < 0.05 else '*' if f_pval < 0.1 else '',
+                    'N_Treatment': np.nan,
+                    'N_Control': np.nan
+                }
+                balance_df = pd.concat([balance_df, pd.DataFrame([joint_row])], ignore_index=True)
+            except:
+                pass  # Skip joint test if it fails
+    
+    return balance_df
+
+
+def estimate_itt(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    covariates: Optional[List[str]] = None,
+    baseline_outcome: Optional[str] = None,
+    cluster_col: Optional[str] = None,
+    strata_cols: Optional[List[str]] = None,
+    weight_col: Optional[str] = None
+) -> Dict:
+    """
+    Estimate Intent-to-Treat (ITT) effect using multiple specifications
+    
+    Implements methodology from Bruhn, Karlan & Schoar (2018):
+    - Specification 1: Y ~ T (no controls)
+    - Specification 2: Y ~ T + X (with covariates and strata)
+    - Specification 3: Y ~ T + X + Y_baseline (ANCOVA for precision)
+    
+    All specifications use heteroskedasticity-robust standard errors (HC1).
+    If cluster_col provided, uses cluster-robust standard errors.
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of outcome variable
+        treatment_col: Name of treatment column (should be 0/1)
+        covariates: Optional list of control variables
+        baseline_outcome: Optional baseline value of outcome (for ANCOVA)
+        cluster_col: Optional cluster variable for robust SEs
+        strata_cols: Optional stratification variables (e.g., i.ran_size_sector)
+        weight_col: Optional weight variable
+    
+    Returns:
+        Dictionary with results for each specification:
+        {
+            'spec1': {'coef': ..., 'se': ..., 'pvalue': ..., 'ci_lower': ..., 'ci_upper': ..., 'n': ..., 'r2': ...},
+            'spec2': {...},
+            'spec3': {...},
+            'outcome_var': str,
+            'treatment_col': str,
+            'control_mean': float,
+            'control_sd': float
+        }
+    """
+    import numpy as np
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols, wls
+    
+    # Prepare data: remove missing values for outcome and treatment
+    subset = data[[outcome_var, treatment_col]].dropna()
+    valid_indices = subset.index
+    
+    # Calculate control group statistics
+    control_data = data[data[treatment_col] == 0][outcome_var].dropna()
+    control_mean = control_data.mean()
+    control_sd = control_data.std()
+    
+    results = {
+        'outcome_var': outcome_var,
+        'treatment_col': treatment_col,
+        'control_mean': control_mean,
+        'control_sd': control_sd
+    }
+    
+    covariates = covariates or []
+    strata_cols = strata_cols or []
+    
+    # Determine covariance type
+    cov_type = 'HC1'  # Heteroskedasticity-robust
+    cov_kwds = {}
+    if cluster_col and cluster_col in data.columns:
+        cov_type = 'cluster'
+        cov_kwds = {'groups': data.loc[valid_indices, cluster_col]}
+    
+    # ============================================
+    # Specification 1: Y ~ T (no controls)
+    # ============================================
+    formula1 = f'{outcome_var} ~ {treatment_col}'
+    
+    try:
+        if weight_col and weight_col in data.columns:
+            model1 = wls(formula1, data=data.loc[valid_indices], weights=data.loc[valid_indices, weight_col])
+        else:
+            model1 = ols(formula1, data=data.loc[valid_indices])
+        
+        fit1 = model1.fit(cov_type=cov_type, cov_kwds=cov_kwds) if cov_kwds else model1.fit(cov_type=cov_type)
+        
+        results['spec1'] = {
+            'coef': fit1.params[treatment_col],
+            'se': fit1.bse[treatment_col],
+            'pvalue': fit1.pvalues[treatment_col],
+            'ci_lower': fit1.conf_int().loc[treatment_col, 0],
+            'ci_upper': fit1.conf_int().loc[treatment_col, 1],
+            't_stat': fit1.tvalues[treatment_col],
+            'n': int(fit1.nobs),
+            'r2': fit1.rsquared,
+            'stars': '***' if fit1.pvalues[treatment_col] < 0.01 else '**' if fit1.pvalues[treatment_col] < 0.05 else '*' if fit1.pvalues[treatment_col] < 0.1 else ''
+        }
+    except Exception as e:
+        results['spec1'] = {'error': str(e)}
+    
+    # ============================================
+    # Specification 2: Y ~ T + X + Strata (with controls)
+    # ============================================
+    if len(covariates) > 0 or len(strata_cols) > 0:
+        # Filter valid covariates and strata
+        all_controls = covariates + strata_cols
+        valid_controls = [c for c in all_controls if c in data.columns]
+        
+        # Build formula with categorical strata
+        formula2_parts = [outcome_var, '~', treatment_col]
+        for cov in covariates:
+            if cov in data.columns:
+                formula2_parts.append(f'+ {cov}')
+        for strata in strata_cols:
+            if strata in data.columns:
+                formula2_parts.append(f'+ C({strata})')  # Categorical
+        
+        formula2 = ' '.join(formula2_parts)
+        
+        # Remove rows with missing controls
+        subset2_cols = [outcome_var, treatment_col] + valid_controls
+        subset2 = data[subset2_cols].dropna()
+        valid_indices2 = subset2.index
+        
+        try:
+            if weight_col and weight_col in data.columns:
+                model2 = wls(formula2, data=data.loc[valid_indices2], weights=data.loc[valid_indices2, weight_col])
+            else:
+                model2 = ols(formula2, data=data.loc[valid_indices2])
+            
+            cov_kwds2 = {'groups': data.loc[valid_indices2, cluster_col]} if cluster_col and cluster_col in data.columns else {}
+            fit2 = model2.fit(cov_type=cov_type, cov_kwds=cov_kwds2) if cov_kwds2 else model2.fit(cov_type=cov_type)
+            
+            results['spec2'] = {
+                'coef': fit2.params[treatment_col],
+                'se': fit2.bse[treatment_col],
+                'pvalue': fit2.pvalues[treatment_col],
+                'ci_lower': fit2.conf_int().loc[treatment_col, 0],
+                'ci_upper': fit2.conf_int().loc[treatment_col, 1],
+                't_stat': fit2.tvalues[treatment_col],
+                'n': int(fit2.nobs),
+                'r2': fit2.rsquared,
+                'stars': '***' if fit2.pvalues[treatment_col] < 0.01 else '**' if fit2.pvalues[treatment_col] < 0.05 else '*' if fit2.pvalues[treatment_col] < 0.1 else ''
+            }
+        except Exception as e:
+            results['spec2'] = {'error': str(e)}
+    
+    # ============================================
+    # Specification 3: Y ~ T + X + Y_baseline (ANCOVA)
+    # ============================================
+    if baseline_outcome and baseline_outcome in data.columns:
+        # Create missing indicator for baseline
+        baseline_missing_col = f'{baseline_outcome}_d'
+        data_copy = data.copy()
+        data_copy[baseline_missing_col] = data_copy[baseline_outcome].isna().astype(int)
+        data_copy[baseline_outcome] = data_copy[baseline_outcome].fillna(0)
+        
+        # Build formula
+        formula3_parts = [outcome_var, '~', treatment_col, f'+ {baseline_outcome}', f'+ {baseline_missing_col}']
+        for cov in covariates:
+            if cov in data.columns:
+                formula3_parts.append(f'+ {cov}')
+        for strata in strata_cols:
+            if strata in data.columns:
+                formula3_parts.append(f'+ C({strata})')
+        
+        formula3 = ' '.join(formula3_parts)
+        
+        # Remove rows with missing outcome or treatment
+        subset3_cols = [outcome_var, treatment_col, baseline_outcome, baseline_missing_col] + [c for c in covariates + strata_cols if c in data.columns]
+        subset3 = data_copy[subset3_cols].dropna(subset=[outcome_var, treatment_col])
+        valid_indices3 = subset3.index
+        
+        try:
+            if weight_col and weight_col in data.columns:
+                model3 = wls(formula3, data=data_copy.loc[valid_indices3], weights=data_copy.loc[valid_indices3, weight_col])
+            else:
+                model3 = ols(formula3, data=data_copy.loc[valid_indices3])
+            
+            cov_kwds3 = {'groups': data_copy.loc[valid_indices3, cluster_col]} if cluster_col and cluster_col in data.columns else {}
+            fit3 = model3.fit(cov_type=cov_type, cov_kwds=cov_kwds3) if cov_kwds3 else model3.fit(cov_type=cov_type)
+            
+            results['spec3'] = {
+                'coef': fit3.params[treatment_col],
+                'se': fit3.bse[treatment_col],
+                'pvalue': fit3.pvalues[treatment_col],
+                'ci_lower': fit3.conf_int().loc[treatment_col, 0],
+                'ci_upper': fit3.conf_int().loc[treatment_col, 1],
+                't_stat': fit3.tvalues[treatment_col],
+                'n': int(fit3.nobs),
+                'r2': fit3.rsquared,
+                'baseline_coef': fit3.params[baseline_outcome],
+                'stars': '***' if fit3.pvalues[treatment_col] < 0.01 else '**' if fit3.pvalues[treatment_col] < 0.05 else '*' if fit3.pvalues[treatment_col] < 0.1 else ''
+            }
+        except Exception as e:
+            results['spec3'] = {'error': str(e)}
+    
+    return results
+
+
+def estimate_tot(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    instrument_col: str,
+    covariates: Optional[List[str]] = None,
+    cluster_col: Optional[str] = None,
+    strata_cols: Optional[List[str]] = None
+) -> Dict:
+    """
+    Estimate Treatment-on-Treated (TOT) effect using Two-Stage Least Squares (2SLS/IV)
+    
+    TOT estimates the effect of actually receiving treatment (for those who took it up),
+    using random assignment as an instrument for take-up.
+    
+    First stage: D = π₀ + π₁Z + γX + u  (take-up on assignment + controls)
+    Second stage: Y = β₀ + τD_hat + δX + ε  (outcome on predicted take-up + controls)
+    
+    Where:
+    - D = actual treatment take-up (treatment_col)
+    - Z = random assignment (instrument_col)
+    - Y = outcome
+    - X = covariates
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of outcome variable
+        treatment_col: Name of actual treatment/take-up variable (endogenous)
+        instrument_col: Name of instrument (random assignment)
+        covariates: Optional list of control variables
+        cluster_col: Optional cluster variable for robust SEs
+        strata_cols: Optional stratification variables
+    
+    Returns:
+        Dictionary with:
+        {
+            'first_stage': {'coef': ..., 'se': ..., 'pvalue': ..., 'f_stat': ..., 'n': ...},
+            'second_stage': {'coef': ..., 'se': ..., 'pvalue': ..., 'ci_lower': ..., 'ci_upper': ..., 'n': ..., 'r2': ...},
+            'outcome_var': str,
+            'treatment_col': str,
+            'instrument_col': str,
+            'compliance_rate': float,
+            'weak_instrument': bool (True if F-stat < 10)
+        }
+    """
+    try:
+        from linearmodels.iv import IV2SLS
+    except ImportError:
+        return {'error': 'linearmodels package not installed. Run: pip install linearmodels'}
+    
+    import numpy as np
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols
+    
+    covariates = covariates or []
+    strata_cols = strata_cols or []
+    
+    # Prepare data
+    required_cols = [outcome_var, treatment_col, instrument_col]
+    all_controls = covariates + strata_cols
+    valid_controls = [c for c in all_controls if c in data.columns]
+    subset_cols = required_cols + valid_controls
+    
+    subset = data[subset_cols].dropna()
+    
+    if len(subset) == 0:
+        return {'error': 'No valid observations after removing missing values'}
+    
+    # Calculate compliance rate (% assigned who took up)
+    assigned = subset[subset[instrument_col] == 1]
+    if len(assigned) > 0:
+        compliance_rate = assigned[treatment_col].mean()
+    else:
+        compliance_rate = np.nan
+    
+    # ============================================
+    # First Stage: D ~ Z + X
+    # ============================================
+    formula_fs_parts = [treatment_col, '~', instrument_col]
+    for cov in covariates:
+        if cov in subset.columns:
+            formula_fs_parts.append(f'+ {cov}')
+    for strata in strata_cols:
+        if strata in subset.columns:
+            formula_fs_parts.append(f'+ C({strata})')
+    
+    formula_fs = ' '.join(formula_fs_parts)
+    
+    try:
+        model_fs = ols(formula_fs, data=subset)
+        
+        # Cluster-robust SE if specified
+        if cluster_col and cluster_col in data.columns:
+            fit_fs = model_fs.fit(cov_type='cluster', cov_kwds={'groups': subset[cluster_col]})
+        else:
+            fit_fs = model_fs.fit(cov_type='HC1')
+        
+        # F-statistic for instrument strength (should be > 10)
+        f_stat = fit_fs.fvalue
+        
+        first_stage = {
+            'coef': fit_fs.params[instrument_col],
+            'se': fit_fs.bse[instrument_col],
+            'pvalue': fit_fs.pvalues[instrument_col],
+            't_stat': fit_fs.tvalues[instrument_col],
+            'f_stat': f_stat,
+            'n': int(fit_fs.nobs),
+            'r2': fit_fs.rsquared,
+            'stars': '***' if fit_fs.pvalues[instrument_col] < 0.01 else '**' if fit_fs.pvalues[instrument_col] < 0.05 else '*' if fit_fs.pvalues[instrument_col] < 0.1 else ''
+        }
+    except Exception as e:
+        return {'error': f'First stage failed: {str(e)}'}
+    
+    # ============================================
+    # Second Stage: Y ~ D_hat + X (via 2SLS)
+    # ============================================
+    try:
+        # Build formula for IV2SLS
+        # Dependent variable
+        y = subset[outcome_var]
+        
+        # Exogenous variables (controls + constant)
+        exog_list = ['1']  # Constant
+        for cov in covariates:
+            if cov in subset.columns:
+                exog_list.append(cov)
+        
+        # Handle categorical strata
+        if len(strata_cols) > 0:
+            strata_dummies = []
+            for strata in strata_cols:
+                if strata in subset.columns:
+                    dummies = pd.get_dummies(subset[strata], prefix=strata, drop_first=True)
+                    strata_dummies.append(dummies)
+            if strata_dummies:
+                exog_df = pd.concat([subset[exog_list[1:]]] + strata_dummies, axis=1) if len(exog_list) > 1 else pd.concat(strata_dummies, axis=1)
+                exog = sm.add_constant(exog_df)
+            else:
+                exog = sm.add_constant(subset[exog_list[1:]]) if len(exog_list) > 1 else pd.DataFrame({'const': 1}, index=subset.index)
+        else:
+            if len(exog_list) > 1:
+                exog = sm.add_constant(subset[exog_list[1:]])
+            else:
+                exog = pd.DataFrame({'const': 1}, index=subset.index)
+        
+        # Endogenous variable (actual treatment)
+        endog = subset[[treatment_col]]
+        
+        # Instrument
+        instruments = subset[[instrument_col]]
+        
+        # Fit IV2SLS
+        model_iv = IV2SLS(dependent=y, exog=exog, endog=endog, instruments=instruments)
+        
+        if cluster_col and cluster_col in subset.columns:
+            fit_iv = model_iv.fit(cov_type='clustered', clusters=subset[cluster_col])
+        else:
+            fit_iv = model_iv.fit(cov_type='robust')
+        
+        second_stage = {
+            'coef': fit_iv.params[treatment_col],
+            'se': fit_iv.std_errors[treatment_col],
+            'pvalue': fit_iv.pvalues[treatment_col],
+            't_stat': fit_iv.tstats[treatment_col],
+            'ci_lower': fit_iv.conf_int().loc[treatment_col, 'lower'],
+            'ci_upper': fit_iv.conf_int().loc[treatment_col, 'upper'],
+            'n': int(fit_iv.nobs),
+            'r2': fit_iv.rsquared,
+            'stars': '***' if fit_iv.pvalues[treatment_col] < 0.01 else '**' if fit_iv.pvalues[treatment_col] < 0.05 else '*' if fit_iv.pvalues[treatment_col] < 0.1 else ''
+        }
+    except Exception as e:
+        return {'error': f'Second stage failed: {str(e)}', 'first_stage': first_stage}
+    
+    results = {
+        'outcome_var': outcome_var,
+        'treatment_col': treatment_col,
+        'instrument_col': instrument_col,
+        'first_stage': first_stage,
+        'second_stage': second_stage,
+        'compliance_rate': compliance_rate,
+        'weak_instrument': f_stat < 10 if f_stat else True
+    }
+    
+    return results
+
+
+def estimate_late(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    instrument_col: str,
+    covariates: Optional[List[str]] = None,
+    cluster_col: Optional[str] = None,
+    strata_cols: Optional[List[str]] = None
+) -> Dict:
+    """
+    Estimate Local Average Treatment Effect (LATE) for compliers
+    
+    LATE is the effect for "compliers" - those who take up treatment when assigned
+    but would not take it up if not assigned. This is identical to TOT but emphasizes
+    the complier interpretation.
+    
+    LATE = ITT / Compliance Rate (Wald estimator)
+    
+    Also estimated via 2SLS using random assignment as instrument for take-up.
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of outcome variable
+        treatment_col: Name of actual treatment/take-up variable
+        instrument_col: Name of instrument (random assignment)
+        covariates: Optional list of control variables
+        cluster_col: Optional cluster variable for robust SEs
+        strata_cols: Optional stratification variables
+    
+    Returns:
+        Dictionary with:
+        {
+            'late': float (LATE estimate from 2SLS),
+            'late_se': float,
+            'late_pvalue': float,
+            'compliance_rate': float,
+            'wald_estimate': float (ITT / compliance),
+            'itt_effect': float,
+            'first_stage': {...},
+            'second_stage': {...},
+            'interpretation': str
+        }
+    """
+    # Run TOT estimation (which is 2SLS)
+    tot_results = estimate_tot(
+        data=data,
+        outcome_var=outcome_var,
+        treatment_col=treatment_col,
+        instrument_col=instrument_col,
+        covariates=covariates,
+        cluster_col=cluster_col,
+        strata_cols=strata_cols
+    )
+    
+    if 'error' in tot_results:
+        return tot_results
+    
+    # Calculate ITT (reduced form: Y ~ Z)
+    subset = data[[outcome_var, instrument_col]].dropna()
+    
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols
+    
+    formula_itt = f'{outcome_var} ~ {instrument_col}'
+    model_itt = ols(formula_itt, data=subset)
+    
+    if cluster_col and cluster_col in data.columns:
+        fit_itt = model_itt.fit(cov_type='cluster', cov_kwds={'groups': subset[cluster_col]})
+    else:
+        fit_itt = model_itt.fit(cov_type='HC1')
+    
+    itt_effect = fit_itt.params[instrument_col]
+    
+    # Wald estimator: ITT / First Stage
+    compliance_rate = tot_results['compliance_rate']
+    wald_estimate = itt_effect / compliance_rate if compliance_rate != 0 else np.nan
+    
+    # LATE interpretation
+    interpretation = f"""
+    LATE Interpretation:
+    - The treatment effect is {tot_results['second_stage']['coef']:.3f} for compliers.
+    - Compliers are the {compliance_rate*100:.1f}% who take up treatment when assigned.
+    - This assumes monotonicity (no defiers) and excluder restriction (instrument only affects outcome through treatment).
+    - ITT effect: {itt_effect:.3f} (effect of assignment on outcome)
+    - Compliance rate: {compliance_rate:.3f} (% assigned who took up)
+    - LATE = ITT / Compliance = {wald_estimate:.3f}
+    """
+    
+    results = {
+        'late': tot_results['second_stage']['coef'],
+        'late_se': tot_results['second_stage']['se'],
+        'late_pvalue': tot_results['second_stage']['pvalue'],
+        'late_ci_lower': tot_results['second_stage']['ci_lower'],
+        'late_ci_upper': tot_results['second_stage']['ci_upper'],
+        'stars': tot_results['second_stage']['stars'],
+        'compliance_rate': compliance_rate,
+        'wald_estimate': wald_estimate,
+        'itt_effect': itt_effect,
+        'first_stage': tot_results['first_stage'],
+        'second_stage': tot_results['second_stage'],
+        'weak_instrument': tot_results['weak_instrument'],
+        'interpretation': interpretation,
+        'outcome_var': outcome_var,
+        'treatment_col': treatment_col,
+        'instrument_col': instrument_col
+    }
+    
+    return results
+
+
+def estimate_heterogeneity(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    subgroup_var: str,
+    covariates: Optional[List[str]] = None,
+    cluster_col: Optional[str] = None,
+    strata_cols: Optional[List[str]] = None,
+    continuous_split: str = 'median'
+) -> Dict:
+    """
+    Estimate heterogeneous treatment effects by subgroup
+    
+    Runs regression: Y ~ T + S + T*S + X
+    Where T = treatment, S = subgroup, T*S = interaction
+    
+    For continuous moderators, splits at median (or mean) to create binary subgroups.
+    
+    Tests joint significance of interaction terms.
+    Returns subgroup-specific treatment effects.
+    
+    Pattern from Bruhn, Karlan & Schoar heterogeneity analysis.
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of outcome variable
+        treatment_col: Name of treatment column
+        subgroup_var: Name of subgroup/moderator variable
+        covariates: Optional list of control variables
+        cluster_col: Optional cluster variable for robust SEs
+        strata_cols: Optional stratification variables
+        continuous_split: For continuous variables: 'median' or 'mean'
+    
+    Returns:
+        Dictionary with:
+        {
+            'subgroups': {
+                'subgroup1': {'effect': ..., 'se': ..., 'pvalue': ..., 'n': ...},
+                'subgroup2': {...},
+                ...
+            },
+            'interaction_test': {'f_stat': ..., 'p_value': ..., 'significant': bool},
+            'main_effect': {'coef': ..., 'se': ..., 'pvalue': ...},
+            'subgroup_var': str,
+            'subgroup_type': 'categorical' or 'continuous',
+            'is_heterogeneous': bool
+        }
+    """
+    import numpy as np
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols
+    
+    covariates = covariates or []
+    strata_cols = strata_cols or []
+    
+    # Prepare data
+    required_cols = [outcome_var, treatment_col, subgroup_var]
+    valid_controls = [c for c in covariates + strata_cols if c in data.columns]
+    subset_cols = required_cols + valid_controls
+    subset = data[subset_cols].dropna()
+    
+    if len(subset) == 0:
+        return {'error': 'No valid observations after removing missing values'}
+    
+    # Determine if subgroup variable is continuous or categorical
+    is_continuous = pd.api.types.is_numeric_dtype(subset[subgroup_var]) and subset[subgroup_var].nunique() > 10
+    
+    subgroup_type = 'continuous' if is_continuous else 'categorical'
+    
+    # For continuous variables, create binary split
+    if is_continuous:
+        if continuous_split == 'median':
+            split_value = subset[subgroup_var].median()
+        else:
+            split_value = subset[subgroup_var].mean()
+        
+        subset[f'{subgroup_var}_binary'] = (subset[subgroup_var] >= split_value).astype(int)
+        subgroup_var_formula = f'{subgroup_var}_binary'
+    else:
+        subgroup_var_formula = f'C({subgroup_var})'
+    
+    # Build formula with interaction: Y ~ T + S + T*S + X
+    formula_parts = [outcome_var, '~', treatment_col, '+', subgroup_var_formula, '+', f'{treatment_col}:{subgroup_var_formula}']
+    
+    for cov in covariates:
+        if cov in subset.columns:
+            formula_parts.append(f'+ {cov}')
+    
+    for strata in strata_cols:
+        if strata in subset.columns:
+            formula_parts.append(f'+ C({strata})')
+    
+    formula = ' '.join(formula_parts)
+    
+    # Fit model
+    try:
+        model = ols(formula, data=subset)
+        
+        if cluster_col and cluster_col in data.columns:
+            fit = model.fit(cov_type='cluster', cov_kwds={'groups': subset[cluster_col]})
+        else:
+            fit = model.fit(cov_type='HC1')
+    except Exception as e:
+        return {'error': f'Model fitting failed: {str(e)}'}
+    
+    # Extract main treatment effect
+    main_effect = {
+        'coef': fit.params[treatment_col],
+        'se': fit.bse[treatment_col],
+        'pvalue': fit.pvalues[treatment_col],
+        't_stat': fit.tvalues[treatment_col],
+        'stars': '***' if fit.pvalues[treatment_col] < 0.01 else '**' if fit.pvalues[treatment_col] < 0.05 else '*' if fit.pvalues[treatment_col] < 0.1 else ''
+    }
+    
+    # Test joint significance of interaction terms
+    # Find all interaction parameters
+    interaction_params = [p for p in fit.params.index if ':' in str(p) and treatment_col in str(p)]
+    
+    if len(interaction_params) > 0:
+        try:
+            # F-test for joint significance
+            hypotheses = [f'{param} = 0' for param in interaction_params]
+            f_test = fit.f_test(hypotheses)
+            
+            interaction_test = {
+                'f_stat': f_test.fvalue[0][0],
+                'p_value': f_test.pvalue,
+                'significant': f_test.pvalue < 0.05,
+                'df_num': f_test.df_num,
+                'df_denom': f_test.df_denom
+            }
+        except:
+            interaction_test = {'error': 'Could not compute F-test'}
+    else:
+        interaction_test = {'error': 'No interaction terms found'}
+    
+    # Calculate subgroup-specific effects
+    subgroups = {}
+    
+    if is_continuous:
+        # Binary split: below and above split value
+        for subgroup_val, label in [(0, f'Below {continuous_split}'), (1, f'Above {continuous_split}')]:
+            subgroup_data = subset[subset[f'{subgroup_var}_binary'] == subgroup_val]
+            
+            if len(subgroup_data) > 0:
+                # Treatment effect = main effect + interaction (if subgroup=1)
+                if subgroup_val == 0:
+                    effect = fit.params[treatment_col]
+                    se = fit.bse[treatment_col]
+                else:
+                    # Need to compute combined effect
+                    interaction_param = [p for p in interaction_params if subgroup_var_formula in str(p)]
+                    if interaction_param:
+                        effect = fit.params[treatment_col] + fit.params[interaction_param[0]]
+                        # Delta method for SE of linear combination
+                        cov_matrix = fit.cov_params()
+                        var_effect = cov_matrix.loc[treatment_col, treatment_col] + \
+                                   cov_matrix.loc[interaction_param[0], interaction_param[0]] + \
+                                   2 * cov_matrix.loc[treatment_col, interaction_param[0]]
+                        se = np.sqrt(var_effect)
+                    else:
+                        effect = fit.params[treatment_col]
+                        se = fit.bse[treatment_col]
+                
+                pvalue = 2 * (1 - scipy_stats.t.cdf(abs(effect/se), fit.df_resid))
+                
+                subgroups[label] = {
+                    'effect': effect,
+                    'se': se,
+                    'pvalue': pvalue,
+                    't_stat': effect/se,
+                    'n': len(subgroup_data),
+                    'stars': '***' if pvalue < 0.01 else '**' if pvalue < 0.05 else '*' if pvalue < 0.1 else ''
+                }
+    else:
+        # Categorical subgroups
+        unique_vals = sorted(subset[subgroup_var].unique())
+        
+        for subgroup_val in unique_vals:
+            subgroup_data = subset[subset[subgroup_var] == subgroup_val]
+            
+            if len(subgroup_data) > 0:
+                # Run separate regression for each subgroup
+                formula_subgroup = f'{outcome_var} ~ {treatment_col}'
+                for cov in covariates:
+                    if cov in subgroup_data.columns:
+                        formula_subgroup += f' + {cov}'
+                
+                try:
+                    model_sub = ols(formula_subgroup, data=subgroup_data)
+                    if cluster_col and cluster_col in subgroup_data.columns:
+                        fit_sub = model_sub.fit(cov_type='cluster', cov_kwds={'groups': subgroup_data[cluster_col]})
+                    else:
+                        fit_sub = model_sub.fit(cov_type='HC1')
+                    
+                    subgroups[str(subgroup_val)] = {
+                        'effect': fit_sub.params[treatment_col],
+                        'se': fit_sub.bse[treatment_col],
+                        'pvalue': fit_sub.pvalues[treatment_col],
+                        't_stat': fit_sub.tvalues[treatment_col],
+                        'n': len(subgroup_data),
+                        'stars': '***' if fit_sub.pvalues[treatment_col] < 0.01 else '**' if fit_sub.pvalues[treatment_col] < 0.05 else '*' if fit_sub.pvalues[treatment_col] < 0.1 else ''
+                    }
+                except:
+                    subgroups[str(subgroup_val)] = {'error': 'Estimation failed for this subgroup'}
+    
+    results = {
+        'subgroups': subgroups,
+        'interaction_test': interaction_test,
+        'main_effect': main_effect,
+        'subgroup_var': subgroup_var,
+        'subgroup_type': subgroup_type,
+        'is_heterogeneous': interaction_test.get('significant', False),
+        'n_total': len(subset)
+    }
+    
+    return results
+
+
+def estimate_binary_outcome(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    covariates: Optional[List[str]] = None,
+    cluster_col: Optional[str] = None,
+    strata_cols: Optional[List[str]] = None,
+    model_type: str = 'logit'
+) -> Dict:
+    """
+    Estimate treatment effects for binary outcomes using Logit or Probit
+    
+    For binary outcomes (0/1), linear probability model can give predictions
+    outside [0,1] and heteroskedastic errors. Logit/Probit are preferred.
+    
+    Reports both coefficients and marginal effects (average partial effects).
+    
+    Pattern from Attanasio et al (2011) Risk Pooling study.
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of binary outcome variable (0/1)
+        treatment_col: Name of treatment column
+        covariates: Optional list of control variables
+        cluster_col: Optional cluster variable for robust SEs
+        strata_cols: Optional stratification variables
+        model_type: 'logit' or 'probit'
+    
+    Returns:
+        Dictionary with:
+        {
+            'coef': float (coefficient),
+            'se': float (standard error of coefficient),
+            'pvalue': float,
+            'marginal_effect': float (average partial effect),
+            'mfx_se': float (SE of marginal effect),
+            'mfx_pvalue': float,
+            'pseudo_r2': float,
+            'n': int,
+            'outcome_var': str,
+            'treatment_col': str,
+            'model_type': str
+        }
+    """
+    import numpy as np
+    from statsmodels.discrete.discrete_model import Logit, Probit
+    import statsmodels.api as sm
+    
+    covariates = covariates or []
+    strata_cols = strata_cols or []
+    
+    # Prepare data
+    required_cols = [outcome_var, treatment_col]
+    valid_controls = [c for c in covariates + strata_cols if c in data.columns]
+    subset_cols = required_cols + valid_controls
+    subset = data[subset_cols].dropna()
+    
+    if len(subset) == 0:
+        return {'error': 'No valid observations after removing missing values'}
+    
+    # Check if outcome is binary
+    if not subset[outcome_var].isin([0, 1]).all():
+        return {'error': f'Outcome variable {outcome_var} must be binary (0/1)'}
+    
+    # Build design matrix
+    exog_cols = [treatment_col] + covariates
+    
+    # Handle categorical strata
+    if len(strata_cols) > 0:
+        strata_dummies = []
+        for strata in strata_cols:
+            if strata in subset.columns:
+                dummies = pd.get_dummies(subset[strata], prefix=strata, drop_first=True)
+                strata_dummies.append(dummies)
+        if strata_dummies:
+            exog_df = pd.concat([subset[exog_cols]] + strata_dummies, axis=1)
+            X = sm.add_constant(exog_df)
+        else:
+            X = sm.add_constant(subset[exog_cols])
+    else:
+        X = sm.add_constant(subset[exog_cols])
+    
+    y = subset[outcome_var]
+    
+    # Fit model
+    try:
+        if model_type.lower() == 'probit':
+            model = Probit(y, X)
+        else:
+            model = Logit(y, X)
+        
+        if cluster_col and cluster_col in data.columns:
+            fit = model.fit(cov_type='cluster', cov_kwds={'groups': subset[cluster_col]}, disp=0)
+        else:
+            fit = model.fit(cov_type='HC1', disp=0)
+        
+        # Get marginal effects (average partial effects)
+        mfx = fit.get_margeff(at='overall', method='dydx')
+        
+        results = {
+            'coef': fit.params[treatment_col],
+            'se': fit.bse[treatment_col],
+            'pvalue': fit.pvalues[treatment_col],
+            'ci_lower': fit.conf_int().loc[treatment_col, 0],
+            'ci_upper': fit.conf_int().loc[treatment_col, 1],
+            't_stat': fit.tvalues[treatment_col],
+            'marginal_effect': mfx.margeff[list(X.columns).index(treatment_col) - 1],  # -1 for constant
+            'mfx_se': mfx.margeff_se[list(X.columns).index(treatment_col) - 1],
+            'mfx_pvalue': mfx.pvalues[list(X.columns).index(treatment_col) - 1],
+            'pseudo_r2': fit.prsquared,
+            'n': int(fit.nobs),
+            'stars': '***' if fit.pvalues[treatment_col] < 0.01 else '**' if fit.pvalues[treatment_col] < 0.05 else '*' if fit.pvalues[treatment_col] < 0.1 else '',
+            'outcome_var': outcome_var,
+            'treatment_col': treatment_col,
+            'model_type': model_type
+        }
+        
+        return results
+        
+    except Exception as e:
+        return {'error': f'{model_type.capitalize()} estimation failed: {str(e)}'}
+
+
+def format_regression_table(
+    results_list: List[Dict],
+    decimals: int = 3,
+    include_stars: bool = True,
+    include_ci: bool = False
+) -> pd.DataFrame:
+    """
+    Format regression results into publication-ready table
+    
+    Creates Stata-style table with coefficients, standard errors in parentheses,
+    and significance stars.
+    
+    Args:
+        results_list: List of result dictionaries from estimation functions
+        decimals: Number of decimal places
+        include_stars: Whether to include significance stars
+        include_ci: Whether to include confidence intervals
+    
+    Returns:
+        DataFrame formatted for display/export
+    """
+    import pandas as pd
+    
+    rows = []
+    
+    for i, res in enumerate(results_list, 1):
+        if 'error' in res:
+            rows.append({
+                'Variable': res.get('outcome_var', f'Model {i}'),
+                f'Model {i}': f"Error: {res['error']}"
+            })
+            continue
+        
+        # Coefficient row
+        coef = res.get('coef', res.get('late', res.get('marginal_effect')))
+        stars = res.get('stars', '') if include_stars else ''
+        coef_str = f"{coef:.{decimals}f}{stars}"
+        
+        # SE row (in parentheses)
+        se = res.get('se', res.get('late_se', res.get('mfx_se')))
+        se_str = f"({se:.{decimals}f})"
+        
+        # Create row dict
+        row_coef = {
+            'Variable': res.get('treatment_col', 'Treatment'),
+            f'Model {i}': coef_str
+        }
+        row_se = {
+            'Variable': '',
+            f'Model {i}': se_str
+        }
+        
+        rows.append(row_coef)
+        rows.append(row_se)
+        
+        # Add confidence interval if requested
+        if include_ci and 'ci_lower' in res:
+            ci_str = f"[{res['ci_lower']:.{decimals}f}, {res['ci_upper']:.{decimals}f}]"
+            row_ci = {
+                'Variable': '',
+                f'Model {i}': ci_str
+            }
+            rows.append(row_ci)
+        
+        # Add summary statistics
+        rows.append({
+            'Variable': 'N',
+            f'Model {i}': str(res.get('n', ''))
+        })
+        
+        if 'r2' in res:
+            rows.append({
+                'Variable': 'R²',
+                f'Model {i}': f"{res['r2']:.{decimals}f}"
+            })
+        elif 'pseudo_r2' in res:
+            rows.append({
+                'Variable': 'Pseudo R²',
+                f'Model {i}': f"{res['pseudo_r2']:.{decimals}f}"
+            })
+    
+    df = pd.DataFrame(rows)
+    
+    # Add notes
+    if include_stars:
+        notes = "Notes: Standard errors in parentheses. * p<0.10, ** p<0.05, *** p<0.01"
+        df = pd.concat([df, pd.DataFrame([{'Variable': notes, **{f'Model {i}': '' for i in range(1, len(results_list)+1)}}])], ignore_index=True)
+    
+    return df
+
+
+def estimate_panel_fe(
+    data: pd.DataFrame,
+    outcome_var: str,
+    treatment_col: str,
+    panel_id: str,
+    time_var: str,
+    covariates: Optional[List[str]] = None,
+    cluster_col: Optional[str] = None
+) -> Dict:
+    """
+    Estimate treatment effects with panel fixed effects (within estimator)
+    
+    Useful for panel/longitudinal RCT data where you have multiple observations
+    per unit over time. Fixed effects control for time-invariant unobservables.
+    
+    Model: Y_it = β₀ + τT_it + γX_it + α_i + ε_it
+    Where α_i is the unit fixed effect
+    
+    Pattern from Referrals study: xtreg Y treatment X, fe i(panel_id)
+    
+    Args:
+        data: DataFrame containing the data
+        outcome_var: Name of outcome variable
+        treatment_col: Name of treatment column
+        panel_id: Name of panel identifier (e.g., individual, household, firm ID)
+        time_var: Name of time variable
+        covariates: Optional list of time-varying control variables
+        cluster_col: Optional cluster variable for robust SEs
+    
+    Returns:
+        Dictionary with:
+        {
+            'coef': float,
+            'se': float,
+            'pvalue': float,
+            'ci_lower': float,
+            'ci_upper': float,
+            't_stat': float,
+            'n': int,
+            'n_groups': int,
+            'r2_within': float,
+            'r2_between': float,
+            'r2_overall': float,
+            'outcome_var': str,
+            'treatment_col': str
+        }
+    """
+    try:
+        from linearmodels.panel import PanelOLS
+    except ImportError:
+        return {'error': 'linearmodels package not installed. Run: pip install linearmodels'}
+    
+    import numpy as np
+    
+    covariates = covariates or []
+    
+    # Prepare data
+    required_cols = [outcome_var, treatment_col, panel_id, time_var]
+    valid_controls = [c for c in covariates if c in data.columns]
+    subset_cols = required_cols + valid_controls
+    
+    subset = data[subset_cols].dropna()
+    
+    if len(subset) == 0:
+        return {'error': 'No valid observations after removing missing values'}
+    
+    # Set multi-index for panel data
+    subset = subset.set_index([panel_id, time_var])
+    
+    # Dependent variable
+    y = subset[outcome_var]
+    
+    # Independent variables
+    exog_cols = [treatment_col] + valid_controls
+    X = subset[exog_cols]
+    
+    # Fit panel FE model
+    try:
+        model = PanelOLS(y, X, entity_effects=True)
+        
+        if cluster_col and cluster_col in data.columns:
+            # Cluster at entity level (common for panel data)
+            fit = model.fit(cov_type='clustered', cluster_entity=True)
+        else:
+            fit = model.fit(cov_type='robust')
+        
+        results = {
+            'coef': fit.params[treatment_col],
+            'se': fit.std_errors[treatment_col],
+            'pvalue': fit.pvalues[treatment_col],
+            'ci_lower': fit.conf_int().loc[treatment_col, 'lower'],
+            'ci_upper': fit.conf_int().loc[treatment_col, 'upper'],
+            't_stat': fit.tstats[treatment_col],
+            'n': int(fit.nobs),
+            'n_groups': int(fit.entity_info['total']),
+            'r2_within': fit.rsquared_within,
+            'r2_between': fit.rsquared_between,
+            'r2_overall': fit.rsquared_overall,
+            'stars': '***' if fit.pvalues[treatment_col] < 0.01 else '**' if fit.pvalues[treatment_col] < 0.05 else '*' if fit.pvalues[treatment_col] < 0.1 else '',
+            'outcome_var': outcome_var,
+            'treatment_col': treatment_col,
+            'panel_id': panel_id
+        }
+        
+        return results
+        
+    except Exception as e:
+        return {'error': f'Panel FE estimation failed: {str(e)}'}
 
 
 # ========================================
