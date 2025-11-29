@@ -3,19 +3,29 @@ name: Deploy to Streamlit
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install streamlit
-      - name: Deploy
-        uses: streamlit/streamlit-app-action@v1
-        with:
-          app-path: rct_field_flow/monitor.py
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          streamlit-server-url: https://share.streamlit.io
+          cache: 'pip'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libpango-1.0-0 \
+            libpangoft2-1.0-0 \
+            libgdk-pixbuf2.0-0 \
+            libffi-dev \
+            shared-mime-info
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Test app imports
+        run: python -c "import rct_field_flow.app; print('App imports successful')"
