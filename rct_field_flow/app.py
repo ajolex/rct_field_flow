@@ -9569,86 +9569,225 @@ def init_auth():
 
 def render_login_page(authenticator):
     """Render the login page and registration form."""
+    
+    # Custom CSS for clean, modern login UI
     st.markdown("""
     <style>
+    /* Hide default Streamlit elements for cleaner look */
+    .stApp > header {visibility: hidden;}
+    
+    /* Auth container styling */
     .auth-container {
-        max-width: 500px;
-        margin: 50px auto;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        background-color: #ffffff;
+        max-width: 400px;
+        margin: 40px auto;
+        padding: 40px;
+        border-radius: 12px;
+        background-color: #e8ebe8;
+    }
+    
+    /* Form styling */
+    .stTextInput > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #d0d0d0;
+        padding: 12px;
+        font-size: 16px;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #2e7d32;
+        box-shadow: 0 0 0 1px #2e7d32;
+    }
+    
+    /* Primary button styling */
+    .stButton > button[kind="primary"] {
+        background-color: #2e7d32;
+        color: white;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 500;
+        border: none;
+        width: 100%;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background-color: #1b5e20;
+    }
+    
+    /* Secondary button styling */
+    .stButton > button[kind="secondary"] {
+        background-color: transparent;
+        color: #2e7d32;
+        border: none;
+        font-size: 14px;
+    }
+    
+    /* Link styling */
+    .forgot-password {
+        text-align: right;
+        margin-top: -10px;
+        margin-bottom: 20px;
+    }
+    
+    .forgot-password a {
+        color: #2e7d32;
+        text-decoration: none;
+        font-size: 14px;
+    }
+    
+    .register-link {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 14px;
+        color: #666;
+    }
+    
+    .register-link a {
+        color: #2e7d32;
+        text-decoration: none;
+        font-weight: 500;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    st.title("🔐 RCT Field Flow")
+    # Center the form
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    # Initialize mode in session state
-    if 'auth_mode' not in st.session_state:
-        st.session_state.auth_mode = 'register'  # Start with register mode
-    
-    # Registration Form (shown first)
-    if st.session_state.auth_mode == 'register':
-        st.subheader("Create New Account")
-        with st.form("register_form"):
-            new_username = st.text_input("Username")
-            new_password = st.text_input("Password", type="password")
-            new_password_confirm = st.text_input("Confirm Password", type="password")
-            new_org = st.selectbox("Organization Type", [
-                "University/Academic Institution",
-                "Research Organization",
-                "NGO/Non-Profit",
-                "Government Agency",
-                "Private Company",
-                "Independent Researcher",
-                "Student",
-                "Other"
-            ])
-            submit_reg = st.form_submit_button("Register", use_container_width=True, type="primary")
+    with col2:
+        # Initialize mode in session state - START WITH LOGIN
+        if 'auth_mode' not in st.session_state:
+            st.session_state.auth_mode = 'login'  # Start with login mode
+        
+        # ================================================================
+        # LOGIN FORM (shown first)
+        # ================================================================
+        if st.session_state.auth_mode == 'login':
+            st.markdown("## Log in")
+            st.markdown("")
             
-            if submit_reg:
-                if new_password != new_password_confirm:
-                    st.error("Passwords do not match")
-                elif len(new_password) < 6:
-                    st.error("Password must be at least 6 characters")
-                elif not new_username:
-                    st.error("Username is required")
-                else:
-                    success = create_user(new_username, new_password, new_username, new_org)
-                    if success:
-                        st.success("Registration successful! Please login below.")
-                        st.session_state.auth_mode = 'login'
-                        st.rerun()
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input(
+                    "Username",
+                    placeholder="Enter your username",
+                    key="login_username"
+                )
+                password = st.text_input(
+                    "Password", 
+                    type="password",
+                    placeholder="Enter your password",
+                    key="login_password"
+                )
+                
+                # Forgot password link (placeholder)
+                st.markdown(
+                    '<div class="forgot-password"><a href="#" onclick="return false;">Forgot password?</a></div>',
+                    unsafe_allow_html=True
+                )
+                
+                submit_login = st.form_submit_button("Log in", use_container_width=True, type="primary")
+                
+                if submit_login:
+                    if username and password:
+                        # Load credentials using the existing function
+                        users = fetch_users_for_auth()
+                        if username in users:
+                            stored_hash = users[username].get('password', '')
+                            # Use bcrypt to check password
+                            import bcrypt
+                            try:
+                                if bcrypt.checkpw(password.encode(), stored_hash.encode()):
+                                    # Set authentication status
+                                    st.session_state['authentication_status'] = True
+                                    st.session_state['username'] = username
+                                    st.session_state['name'] = users[username].get('name', username)
+                                    # Record login
+                                    try:
+                                        record_user_login(username)
+                                    except Exception:
+                                        pass
+                                    st.rerun()
+                                else:
+                                    st.error("Username/password is incorrect")
+                            except Exception:
+                                st.error("Username/password is incorrect")
+                        else:
+                            st.error("Username/password is incorrect")
                     else:
-                        st.error("Username already exists or error creating account.")
+                        st.error("Please enter both username and password")
+            
+            # Register link at bottom
+            st.markdown("")
+            st.markdown("---")
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_b:
+                if st.button("Don't have an account? **Register**", use_container_width=True):
+                    st.session_state.auth_mode = 'register'
+                    st.rerun()
         
-        # Toggle to login
-        st.markdown("---")
-        if st.button("Already registered? Log in", use_container_width=True):
-            st.session_state.auth_mode = 'login'
-            st.rerun()
-    
-    # Login Form
-    else:
-        st.subheader("Welcome Back")
-        try:
-            authenticator.login(location='main')
-        except Exception as e:
-            st.error(f"Error initializing login: {e}")
-        
-        if st.session_state.get("authentication_status"):
-            st.rerun()
-        elif st.session_state.get("authentication_status") is False:
-            st.error("Username/password is incorrect")
-        elif st.session_state.get("authentication_status") is None:
-            pass  # Don't show warning, let the form speak for itself
-        
-        # Toggle to register
-        st.markdown("---")
-        if st.button("Need an account? Register", use_container_width=True):
-            st.session_state.auth_mode = 'register'
-            st.rerun()
+        # ================================================================
+        # REGISTRATION FORM
+        # ================================================================
+        else:
+            st.markdown("## Create Account")
+            st.markdown("")
+            
+            with st.form("register_form"):
+                new_username = st.text_input(
+                    "Username",
+                    placeholder="Choose a username",
+                    key="reg_username"
+                )
+                new_password = st.text_input(
+                    "Password", 
+                    type="password",
+                    placeholder="Create a password",
+                    key="reg_password"
+                )
+                new_password_confirm = st.text_input(
+                    "Confirm Password", 
+                    type="password",
+                    placeholder="Confirm your password",
+                    key="reg_password_confirm"
+                )
+                new_org = st.selectbox("Organization Type", [
+                    "University/Academic Institution",
+                    "Research Organization",
+                    "NGO/Non-Profit",
+                    "Government Agency",
+                    "Private Company",
+                    "Independent Researcher",
+                    "Student",
+                    "Other"
+                ])
+                
+                submit_reg = st.form_submit_button("Create Account", use_container_width=True, type="primary")
+                
+                if submit_reg:
+                    if new_password != new_password_confirm:
+                        st.error("Passwords do not match")
+                    elif len(new_password) < 6:
+                        st.error("Password must be at least 6 characters")
+                    elif not new_username:
+                        st.error("Username is required")
+                    elif len(new_username) < 3:
+                        st.error("Username must be at least 3 characters")
+                    else:
+                        success = create_user(new_username, new_password, new_username, new_org)
+                        if success:
+                            st.success("✓ Account created! Please log in.")
+                            st.session_state.auth_mode = 'login'
+                            st.rerun()
+                        else:
+                            st.error("Username already exists. Please choose another.")
+            
+            # Login link at bottom
+            st.markdown("")
+            st.markdown("---")
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_b:
+                if st.button("Already have an account? **Log in**", use_container_width=True):
+                    st.session_state.auth_mode = 'login'
+                    st.rerun()
 
 
 def init_activity_log():
