@@ -745,12 +745,12 @@ di "============================================================================
 
 * Summary statistics for each arm
 {chr(10).join([f'''
-di "Treatment Arm: {name} (Expected: {prop*100:.1f}%)"
+di "Treatment Arm: {name} (Expected: {prop*100:.1f}%%)"
 quietly summarize prob_{name}, detail
-di "  Mean probability:  " %-6.4f r(mean) " (expected: {prop:.4f})"
-di "  Std deviation:     " %-6.4f r(sd)
-di "  Min probability:   " %-6.4f r(min)
-di "  Max probability:   " %-6.4f r(max)
+di "  Mean probability:  " %%6.4f r(mean) " (expected: {prop:.4f})"
+di "  Std deviation:     " %%6.4f r(sd)
+di "  Min probability:   " %%6.4f r(min)
+di "  Max probability:   " %%6.4f r(max)
 local mean_{name.replace(" ", "_")} = r(mean)
 local expected_{name.replace(" ", "_")} = {prop}
 if abs(`mean_{name.replace(" ", "_")}' - `expected_{name.replace(" ", "_")}') > 0.05 {{
