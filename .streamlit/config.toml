@@ -1,8 +1,9 @@
 [client]
 showErrorDetails = false
+toolbarMode = "minimal"
 
 [logger]
-level = "info"
+level = "warning"
 
 [theme]
 base = "light"
@@ -11,7 +12,12 @@ primaryColor = "#1f77b4"
 [server]
 maxUploadSize = 200
 enableXsrfProtection = true
-enableCORS = true
+# Disable CORS to block cross-origin requests from other domains
+enableCORS = false
+# Run headless: don't expose local file paths or open a browser window
+headless = true
+# Disable file watcher in production (avoids leaking source paths)
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false
