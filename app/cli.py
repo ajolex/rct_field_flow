@@ -77,7 +77,7 @@ def build_randomization_config(cfg: dict) -> RandomizationConfig:
 def randomize(
     baseline: Path = typer.Option(..., exists=True, readable=True, help="Baseline dataset (CSV)."),
     output: Path = typer.Option(Path("randomized_cases.csv"), help="Output CSV for assignments."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True, help="Project config."),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True, help="Project config."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress and diagnostics."),
     balance_output: Optional[Path] = typer.Option(None, "--balance-table", help="Save balance table CSV."),
 ) -> None:
@@ -123,7 +123,7 @@ def randomize(
 @app.command("validate-randomization")
 def validate_randomization_cmd(
     baseline: Path = typer.Option(..., exists=True, readable=True, help="Baseline dataset (CSV)."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True, help="Project config."),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True, help="Project config."),
     n_simulations: int = typer.Option(500, help="Number of randomization simulations to run."),
     output: Optional[Path] = typer.Option(None, help="Optional CSV path to save assignment probabilities."),
     plot_output: Optional[Path] = typer.Option(None, help="Optional path to save histogram plot (PNG)."),
@@ -232,7 +232,7 @@ def validate_randomization_cmd(
 def assign_cases_cmd(
     randomized: Path = typer.Option(..., exists=True, readable=True, help="Randomized dataset."),
     output: Path = typer.Option(Path("cases_upload.csv"), help="SurveyCTO case CSV."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
 ) -> None:
     """Build SurveyCTO case roster from randomized data."""
     app_config = load_config(str(config_path))
@@ -247,7 +247,7 @@ def assign_cases_cmd(
 def quality_check_cmd(
     submissions: Path = typer.Option(..., exists=True, readable=True, help="Submission data CSV."),
     flags_output: Optional[Path] = typer.Option(None, help="Optional CSV path for detailed flags."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
 ) -> None:
     """Run field quality checks and print summary."""
     app_config = load_config(str(config_path))
@@ -265,7 +265,7 @@ def quality_check_cmd(
 def backcheck(
     submissions: Path = typer.Option(..., exists=True, readable=True, help="Submission data CSV."),
     output: Path = typer.Option(Path("backcheck_cases.csv"), help="Output CSV for backcheck sample."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
 ) -> None:
     """Select high-risk and random cases for backchecking."""
     app_config = load_config(str(config_path))
@@ -282,7 +282,7 @@ def backcheck(
 def report(
     submissions: Path = typer.Option(..., exists=True, readable=True),
     output_dir: Path = typer.Option(Path("reports"), help="Directory for report outputs."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
 ) -> None:
     """Render the weekly monitoring report."""
     app_config = load_config(str(config_path))
@@ -354,7 +354,7 @@ def report(
 def analyze(
     data: Path = typer.Option(..., exists=True, readable=True),
     outcomes: Optional[List[str]] = typer.Option(None, help="Outcome columns to analyze."),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
 ) -> None:
     """Run one-click ATEs for selected outcomes."""
     app_config = load_config(str(config_path))
@@ -374,7 +374,7 @@ def analyze(
 @app.command("upload-cases")
 def upload_cases_cmd(
     csv: Path = typer.Option(..., exists=True, readable=True),
-    config_path: Path = typer.Option(Path("rct_field_flow/config/default.yaml"), exists=True),
+    config_path: Path = typer.Option(Path("config/default.yaml"), exists=True),
     mode: str = typer.Option(
         "merge",
         help="Upload mode: 'merge' (update + add), 'append' (add only), 'replace' (delete all + upload)"

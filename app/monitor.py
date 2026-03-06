@@ -9,7 +9,10 @@ import plotly.express as px
 import streamlit as st
 import yaml
 
-from .surveycto import SurveyCTO
+try:
+    from .surveycto import SurveyCTO
+except ImportError:
+    from surveycto import SurveyCTO  # type: ignore
 
 try:
     st.set_page_config(page_title="RCT Field Flow", layout="wide")
@@ -20,7 +23,7 @@ except Exception:
 
 @st.cache_data(ttl=1800)
 def load_config() -> dict:
-    with open("rct_field_flow/config/default.yaml", "r", encoding="utf-8") as handle:
+    with open("config/default.yaml", "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 

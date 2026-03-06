@@ -353,7 +353,7 @@ print("RANDOMIZATION COMPLETE")
 print("="*80)
 print(f"Iterations run: {{result.iterations}}")
 print(f"Best min p-value achieved: {{result.best_min_pvalue:.4f}}")
-{'print("  ΓåÆ Interpretation: Higher is better (less evidence of imbalance)")' if config.balance_covariates else ''}
+{'print("  → Interpretation: Higher is better (less evidence of imbalance)")' if config.balance_covariates else ''}
 print(f"Used existing assignment: {{result.used_existing_assignment}}")
 print()
 
@@ -399,12 +399,12 @@ if not result.balance_table.empty:
     # Highlight any concerning imbalances
     min_pval = result.balance_table['p_value'].min()
     if min_pval < 0.05:
-        print("ΓÜá WARNING: Some covariates show significant imbalance (p < 0.05)")
+        print("⚠ WARNING: Some covariates show significant imbalance (p < 0.05)")
         imbalanced = result.balance_table[result.balance_table['p_value'] < 0.05]
         print("Imbalanced covariates:")
         print(imbalanced[['p_value']])
     else:
-        print("Γ£ô All covariates are reasonably balanced (all p-values >= 0.05)")
+        print("✓ All covariates are reasonably balanced (all p-values >= 0.05)")
     print()
 
 # Save assignments
@@ -622,7 +622,7 @@ sort cluster_rand
 *   This follows best practices from RANDOMIZATION.md guide:
 *   "Run your randomization a few hundred times with different seeds and 
 *    compare the outcomes... if some observations are almost always in 
-*    treatment or almost always in control ΓÇô check your randomization code"
+*    treatment or almost always in control – check your randomization code"
 ********************************************************************************
 
 clear all
@@ -717,7 +717,7 @@ di "  Max probability:   " %6.4f r(max)
 local mean_{name.replace(" ", "_")} = r(mean)
 local expected_{name.replace(" ", "_")} = {prop}
 if abs(`mean_{name.replace(" ", "_")}' - `expected_{name.replace(" ", "_")}') > 0.05 {{
-    di as error "  ΓÜá WARNING: Mean deviates from expected by more than 5%!"
+    di as error "  ⚠ WARNING: Mean deviates from expected by more than 5%!"
 }}
 di ""''' for name, prop in zip(arms_names, arms_props)])}
 
@@ -726,17 +726,17 @@ local warning_count = 0
 {chr(10).join([f'''
 quietly count if prob_{name} < {prop} - 0.30 | prob_{name} > {prop} + 0.30
 if r(N) > 0 {{
-    di as error "ΓÜá WARNING: " r(N) " observations have extreme probabilities for '{name}'"
+    di as error "⚠ WARNING: " r(N) " observations have extreme probabilities for '{name}'"
     di as error "  (>30% deviation from expected {prop*100:.1f}%)"
     local warning_count = `warning_count' + 1
 }}''' for name, prop in zip(arms_names, arms_props)])}
 
 di _n "================================================================================"
 if `warning_count' == 0 {{
-    di as text "Γ£ô VALIDATION PASSED - No issues detected"
+    di as text "✓ VALIDATION PASSED - No issues detected"
     di as text "  Randomization appears fair and unbiased"
 }} else {{
-    di as error "Γ£ù VALIDATION FAILED - `warning_count' warning(s) detected"
+    di as error "✗ VALIDATION FAILED - `warning_count' warning(s) detected"
     di as error "  Please review your randomization code"
 }}
 di "================================================================================" _n
@@ -768,9 +768,9 @@ di "Saved histogram to: validation_histogram.png"
 di _n "================================================================================"
 di "INTERPRETATION GUIDE"
 di "================================================================================"
-di "1. Mean probabilities should match expected proportions (┬▒5%)"
+di "1. Mean probabilities should match expected proportions (±5%)"
 di "2. Standard deviation should be reasonable (not too high)"
-di "3. No observations should have extreme probabilities (┬▒30%)"
+di "3. No observations should have extreme probabilities (±30%)"
 di "4. Histogram should look like a binomial distribution"
 di "5. If validation fails, there may be systematic bias in randomization code"
 di "================================================================================" _n
@@ -1066,9 +1066,9 @@ di "RERANDOMIZATION COMPLETE"
 di "================================================================================"
 di "Best iteration: " `best_iter' " out of {config.iterations:,}"
 di "Best min p-value: " %6.4f `bestp'
-di "  ΓåÆ Higher p-values indicate better balance"
-di "  ΓåÆ This is the MINIMUM p-value across all tested covariates"
-di "  ΓåÆ Selected assignment has best overall balance" _n
+di "  → Higher p-values indicate better balance"
+di "  → This is the MINIMUM p-value across all tested covariates"
+di "  → Selected assignment has best overall balance" _n
 
 * Use the best balanced assignment
 gen {config.treatment_column} = mostbalanced_{config.treatment_column}
@@ -1155,10 +1155,10 @@ di "============================================================================
     
     * Highlight imbalance
     if r(p) < 0.05 {{
-        di as error "  ΓÜá WARNING: Significant imbalance detected (p = " %6.4f r(p) ")"
+        di as error "  ⚠ WARNING: Significant imbalance detected (p = " %6.4f r(p) ")"
     }}
     else {{
-        di as text "  Γ£ô Acceptable balance (p = " %6.4f r(p) ")"
+        di as text "  ✓ Acceptable balance (p = " %6.4f r(p) ")"
     }}
 }}''' if config.balance_covariates else '* No balance covariates specified'}
 
@@ -1193,7 +1193,7 @@ di "============================================================================
 
 
 def render_home() -> None:
-    st.title("≡ƒôè RCT Field Flow")
+    st.title("📊 RCT Field Flow")
     st.markdown(
         """
         **Integrated toolkit** for designing RCTs, statistical power analysis, conducting randomization, managing enumerator interview assignments, 
@@ -1202,57 +1202,57 @@ def render_home() -> None:
     )
 
     # New workflow overview with RCT Design Wizard
-    st.markdown("## ≡ƒôï Complete RCT Workflow")
+    st.markdown("## 📋 Complete RCT Workflow")
     
     col1, col2 = st.columns([1.5, 1])
     
     with col1:
         st.markdown("""
         ### Phase 1: Design & Planning
-        1. **≡ƒÄ» RCT Design** ΓÇô Build your concept note with guided prompts and tips
+        1. **🎯 RCT Design** – Build your concept note with guided prompts and tips
            - Create comprehensive designs for education, health, agriculture projects and other sectors
            - View realistic sample concept notes from different sectors
            - Export concept note in multiple formats (Markdown, DOCX, PDF)
         
         ### Phase 2: Technical Setup
-        2. **ΓÜí Power Calculations** ΓÇô Determine sample size and power
+        2. **⚡ Power Calculations** – Determine sample size and power
            - Calculate minimum detectable effects (MDE)
            - Run power simulations with custom assumptions
            - Generate power analysis code (Stata/Python)
         
-        3. **≡ƒÄ▓ Randomization** ΓÇô Configure random assigment arms, strata, rerandomization
+        3. **🎲 Randomization** – Configure random assigment arms, strata, rerandomization
            - Set up treatment arms and stratification variables
            - Support for clustered and cross-clustered designs
            - Real-time covariates balance checking
         
         ### Phase 3: Implementation
-        4. **Γ£à Quality Checks** ΓÇô Apply speed, outlier, duplicate checks
+        4. **✅ Quality Checks** – Apply speed, outlier, duplicate checks
            - Monitor data quality during collection
            - Flag and resolve issues in real-time
            - Generate quality reports
         
         ### Phase 4: Analysis & Reporting
-        5. **≡ƒôè Analysis & Results** ΓÇô Estimate treatment effects
+        5. **📊 Analysis & Results** – Estimate treatment effects
            - Calculate average treatment effects (ATE)
            - Analyze treatment effect heterogeneity
            - Generate publication-ready tables
         
         ### Coming Soon
-        - ≡ƒôè Data Visualization
-        - ≡ƒöì Backcheck Selection
+        - 📊 Data Visualization
+        - 🔍 Backcheck Selection
         """)
     
     with col2:
-        st.markdown("### ≡ƒÜÇ Quick Start")
+        st.markdown("### 🚀 Quick Start")
         st.info("""
         **Getting Started:**
         
-        Start with the **≡ƒÄ» RCT Design** page to:
+        Start with the **🎯 RCT Design** page to:
         - Create your concept note
         - View samples from similar projects
         - Export for stakeholder review
         
-        Then proceed to **ΓÜí Power** for sample size calculations.
+        Then proceed to **⚡ Power** for sample size calculations.
         
         **Tips:**
         - All pages auto-save your work
@@ -1263,29 +1263,29 @@ def render_home() -> None:
         st.markdown("---")
         
         # Quick navigation
-        st.markdown("### ≡ƒôì Quick Navigation")
-        if st.button("ΓåÆ Go to RCT Design", use_container_width=True):
+        st.markdown("### 📍 Quick Navigation")
+        if st.button("→ Go to RCT Design", use_container_width=True):
             st.session_state.current_page = "design"
             st.rerun()
         
-        if st.button("ΓåÆ Go to Power Calculations", use_container_width=True):
+        if st.button("→ Go to Power Calculations", use_container_width=True):
             st.session_state.current_page = "power"
             st.rerun()
         
-        if st.button("ΓåÆ Go to Randomization", use_container_width=True):
+        if st.button("→ Go to Randomization", use_container_width=True):
             st.session_state.current_page = "random"
             st.rerun()
 
     st.markdown("---")
     
     # Features highlight
-    st.markdown("### Γ£¿ Key Features")
+    st.markdown("### ✨ Key Features")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("""
-        **≡ƒôÜ Education Example**
+        **📚 Education Example**
         - Remedial literacy programs
         - Malawi primary schools
         - 3,200 students, 48 teachers
@@ -1295,7 +1295,7 @@ def render_home() -> None:
     
     with col2:
         st.markdown("""
-        **≡ƒÅÑ Health Example**
+        **🏥 Health Example**
         - Maternal health programs
         - Community worker visits
         - 8,000 pregnant women
@@ -1305,7 +1305,7 @@ def render_home() -> None:
     
     with col3:
         st.markdown("""
-        **≡ƒî╛ Agriculture Example**
+        **🌾 Agriculture Example**
         - Climate-smart farming
         - Drip irrigation + SMS
         - 2,500 farmers
@@ -1316,7 +1316,7 @@ def render_home() -> None:
     st.markdown("---")
     
     st.info(
-        "≡ƒÆí **Pro Tip:** If running locally, all features can be driven from the CLI. Run `rct-field-flow --help` "
+        "💡 **Pro Tip:** If running locally, all features can be driven from the CLI. Run `rct-field-flow --help` "
         "to explore commands and options."
     )
 
@@ -1384,7 +1384,7 @@ def render_rct_design() -> None:
         import traceback
         st.error(f"Could not load RCT Design Wizard: {str(e)}")
         st.info("Please ensure the rct-design module is properly installed.")
-        with st.expander("≡ƒôï Debug Info"):
+        with st.expander("📋 Debug Info"):
             import os
             current_dir = Path(__file__).parent
             rct_design_dir = current_dir / "rct-design"
@@ -1408,7 +1408,7 @@ RCT-design contents:
     except Exception as e:
         import traceback
         st.error(f"Error running RCT Design Wizard: {str(e)}")
-        with st.expander("≡ƒôï Technical Details"):
+        with st.expander("📋 Technical Details"):
             st.code(traceback.format_exc(), language="python")
 
 
@@ -1427,7 +1427,7 @@ def render_design_welcome(
     SPRINT_CHECKLIST = sprint_checklist or []
     
     # About This Activity expander
-    with st.expander("≡ƒôû About This Activity", expanded=False):
+    with st.expander("📖 About This Activity", expanded=False):
         st.markdown(APP_DESCRIPTION if APP_DESCRIPTION else "This workshop guides you through designing an RCT.")
         st.markdown("---")
         st.markdown("**How to Use This Workbook:**")
@@ -1442,30 +1442,30 @@ def render_design_welcome(
     
     with col1:
         st.markdown("""
-        ## ≡ƒÜÇ Ready to Design Your RCT?
+        ## 🚀 Ready to Design Your RCT?
         
         This workshop will guide you through key steps to turn your program concept into 
         a rigorous randomized controlled trial (RCT) design. You'll work as a team to:
         
-        1. **Frame the Challenge** ΓÇô Clarify your core problem and success vision
-        2. **Map the Theory of Change** ΓÇô Connect your activities to outcomes 
-        3. **Design Measurement** ΓÇô Choose indicators and instruments
-        4. **Plan Randomization** ΓÇô Select your random assignment approach
-        5. **Safeguard Implementation** ΓÇô Set up monitoring and adaptation mechanisms
-        6. **Decide and Commit** ΓÇô Record your decision trigger and next steps
+        1. **Frame the Challenge** – Clarify your core problem and success vision
+        2. **Map the Theory of Change** – Connect your activities to outcomes 
+        3. **Design Measurement** – Choose indicators and instruments
+        4. **Plan Randomization** – Select your random assignment approach
+        5. **Safeguard Implementation** – Set up monitoring and adaptation mechanisms
+        6. **Decide and Commit** – Record your decision trigger and next steps
         
         **Each section takes 3 minutes.** Work through in order, capture decisions, 
         and mark any items [ ] you'll revisit during the gallery walk.
         """)
         
-        st.markdown("### Γ£à Sprint Checklist")
+        st.markdown("### ✅ Sprint Checklist")
         checklist = SPRINT_CHECKLIST if SPRINT_CHECKLIST else []
         for item in checklist:
             st.markdown(f"- [ ] {item}")
     
     with col2:
         st.info("""
-        ### ≡ƒôì Session Snapshot
+        ### 📍 Session Snapshot
         
         **Duration:** 30 min
         
@@ -1485,7 +1485,7 @@ def render_design_welcome(
     st.markdown("---")
     
     # Context Snapshot section
-    st.subheader("≡ƒôì Context Snapshot")
+    st.subheader("📍 Context Snapshot")
     col1, col2, col3 = st.columns(3)
     
     context_sections = formatted.get('context_sections', [])
@@ -1503,7 +1503,7 @@ def render_design_welcome(
     st.divider()
     
     # Program Concept section
-    st.subheader("≡ƒÄ» Program Concept")
+    st.subheader("🎯 Program Concept")
     col1, col2, col3 = st.columns(3)
     
     concept_sections = formatted.get('concept_sections', [])
@@ -1521,7 +1521,7 @@ def render_design_welcome(
     st.divider()
     
     # Decision Horizon & Metrics section
-    st.subheader("∩┐╜ Decision Horizon & Metrics")
+    st.subheader("� Decision Horizon & Metrics")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1535,13 +1535,13 @@ def render_design_welcome(
     st.divider()
     
     # Design Considerations
-    st.subheader("ΓÜá∩╕Å Design Considerations")
+    st.subheader("⚠️ Design Considerations")
     st.warning(formatted.get('considerations', 'N/A'))
     
     st.divider()
     
     # Baseline Data section
-    st.subheader("≡ƒôè Baseline Data for Randomization")
+    st.subheader("📊 Baseline Data for Randomization")
     
     data_file_map = {
         "education_bridge_to_basics": "data/sample_data/education_bridge_to_basics.csv",
@@ -1571,42 +1571,42 @@ def render_design_welcome(
             with col2:
                 csv_data = df.to_csv(index=False)
                 st.download_button(
-                    label="≡ƒôÑ Download Baseline Data",
+                    label="📥 Download Baseline Data",
                     data=csv_data,
                     file_name=data_path.name,
                     mime="text/csv",
                     use_container_width=True
                 )
             
-            with st.expander("≡ƒæü∩╕Å Preview Data (first 10 rows)"):
+            with st.expander("👁️ Preview Data (first 10 rows)"):
                 st.dataframe(df.head(10), use_container_width=True)
     
     st.divider()
     
     # Call to action
-    st.success("Γ£ô You've reviewed your program card. Ready to start the design sprint?")
+    st.success("✓ You've reviewed your program card. Ready to start the design sprint?")
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("≡ƒôä View Program Card", use_container_width=True):
+        if st.button("📄 View Program Card", use_container_width=True):
             st.session_state.design_current_step = 0
             st.rerun()
     
     with col2:
-        if st.button("Γû╢∩╕Å Begin Design Sprint", type="primary", use_container_width=True):
+        if st.button("▶️ Begin Design Sprint", type="primary", use_container_width=True):
             st.session_state.design_current_step = 2  # Start at first workbook step
             st.rerun()
 
 
 def render_program_card_full(card, formatted, team_name):
     """Render full program card display page."""
-    st.markdown(f"## ≡ƒÄ┤ {formatted.get('title', 'N/A')}")
+    st.markdown(f"## 🎴 {formatted.get('title', 'N/A')}")
     st.markdown(f"**Sector:** {formatted.get('sector', 'N/A')} | **Theme:** {formatted.get('theme', 'N/A')}")
     
     st.divider()
     
     # Context section - render full sections same as welcome page
-    st.subheader("≡ƒôì Context Snapshot")
+    st.subheader("📍 Context Snapshot")
     col1, col2, col3 = st.columns(3)
     
     context_sections = formatted.get('context_sections', [])
@@ -1624,7 +1624,7 @@ def render_program_card_full(card, formatted, team_name):
     st.divider()
     
     # Program concept
-    st.subheader("≡ƒÄ» Program Concept")
+    st.subheader("🎯 Program Concept")
     col1, col2, col3 = st.columns(3)
     
     concept_sections = formatted.get('concept_sections', [])
@@ -1642,7 +1642,7 @@ def render_program_card_full(card, formatted, team_name):
     st.divider()
     
     # Decision horizon and metrics
-    st.subheader("≡ƒôè Decision Horizon & Metrics")
+    st.subheader("📊 Decision Horizon & Metrics")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1656,13 +1656,13 @@ def render_program_card_full(card, formatted, team_name):
     st.divider()
     
     # Considerations
-    st.subheader("ΓÜá∩╕Å Design Considerations")
+    st.subheader("⚠️ Design Considerations")
     st.warning(formatted.get('considerations', 'N/A'))
     
     st.divider()
     
     # Baseline Data section
-    st.subheader("≡ƒôè Baseline Data for Randomization")
+    st.subheader("📊 Baseline Data for Randomization")
     
     data_file_map = {
         "education_bridge_to_basics": "data/sample_data/education_bridge_to_basics.csv",
@@ -1692,29 +1692,29 @@ def render_program_card_full(card, formatted, team_name):
             with col2:
                 csv_data = df.to_csv(index=False)
                 st.download_button(
-                    label="≡ƒôÑ Download Baseline Data",
+                    label="📥 Download Baseline Data",
                     data=csv_data,
                     file_name=data_path.name,
                     mime="text/csv",
                     use_container_width=True
                 )
             
-            with st.expander("≡ƒæü∩╕Å Preview Data (first 10 rows)"):
+            with st.expander("👁️ Preview Data (first 10 rows)"):
                 st.dataframe(df.head(10), use_container_width=True)
     
     st.divider()
     
     # Navigation buttons
-    st.success("Γ£ô You've reviewed your program card. Ready to start the design sprint?")
+    st.success("✓ You've reviewed your program card. Ready to start the design sprint?")
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("Γû╢∩╕Å Begin Design Sprint", type="primary", use_container_width=True):
+        if st.button("▶️ Begin Design Sprint", type="primary", use_container_width=True):
             st.session_state.design_current_step = 2
             st.rerun()
     
     with col2:
-        if st.button("ΓåÉ Back to Welcome", use_container_width=True):
+        if st.button("← Back to Welcome", use_container_width=True):
             st.session_state.design_current_step = 1
             st.rerun()
 
@@ -1763,11 +1763,11 @@ def render_design_workbook(team_name, WORKBOOK_STEPS):
                     st.markdown('<div style="background: rgba(22, 74, 127, 0.06); border-left: 4px solid #2fa6dc; border-radius: 8px; padding: 1.25rem; margin: 1rem 0;">', unsafe_allow_html=True)
                     st.markdown("**Actions:**")
                     for action in step['actions']:
-                        st.markdown(f"ΓÇó {action}")
+                        st.markdown(f"• {action}")
                     st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Tip
-                    st.markdown(f'<div style="background: rgba(47, 166, 220, 0.12); border-left: 4px solid #2fa6dc; border-radius: 8px; padding: 1rem; margin: 1rem 0;"><strong>≡ƒÆí Tip:</strong> {step["tip"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background: rgba(47, 166, 220, 0.12); border-left: 4px solid #2fa6dc; border-radius: 8px; padding: 1rem; margin: 1rem 0;"><strong>💡 Tip:</strong> {step["tip"]}</div>', unsafe_allow_html=True)
                 
                 with col2:
                     # Note fields
@@ -1804,17 +1804,17 @@ def render_design_workbook(team_name, WORKBOOK_STEPS):
                 
                 with col1:
                     if current_step > 0:
-                        if st.button("ΓåÉ Previous Step", use_container_width=True):
+                        if st.button("← Previous Step", use_container_width=True):
                             st.session_state.design_current_step -= 1
                             st.rerun()
                 
                 with col2:
                     if current_step < len(WORKBOOK_STEPS) - 1:
-                        if st.button("Next Step ΓåÆ", type="primary", use_container_width=True):
+                        if st.button("Next Step →", type="primary", use_container_width=True):
                             st.session_state.design_current_step += 1
                             st.rerun()
                     else:
-                        if st.button("Complete & Generate Report ΓåÆ", type="primary", use_container_width=True):
+                        if st.button("Complete & Generate Report →", type="primary", use_container_width=True):
                             # Save design data to session state
                             st.session_state.design_data = {
                                 "team_name": team_name,
@@ -1831,26 +1831,26 @@ def render_design_workbook(team_name, WORKBOOK_STEPS):
                             st.session_state.design_current_step = 8  # Report generation step
                             st.rerun()
     else:
-        st.success("Γ£à All steps completed!")
+        st.success("✅ All steps completed!")
 
 
 def render_design_report_generation(team_name):
     """Render the RCT Design sprint report generation page."""
-    st.title("≡ƒôä Generate Final Report")
+    st.title("📄 Generate Final Report")
     
     # Get design data
     program_card = st.session_state.design_program_card
     workbook_responses = st.session_state.design_workbook_responses
     
     st.markdown(f"""
-    ### ≡ƒÄë {team_name} - Complete Your RCT Design Activity
+    ### 🎉 {team_name} - Complete Your RCT Design Activity
     
     **Program Card:** {program_card}
     
     You've worked through the complete RCT design process:
-    1. Γ£à Selected a program
-    2. Γ£à Designed your RCT (Step 1-6)
-    3. Γ£à Documented your design decisions
+    1. ✅ Selected a program
+    2. ✅ Designed your RCT (Step 1-6)
+    3. ✅ Documented your design decisions
     
     Now let's generate your final design report!
     """)
@@ -1858,7 +1858,7 @@ def render_design_report_generation(team_name):
     st.markdown("---")
     
     # Report summary
-    st.markdown("### ≡ƒôï Report Summary")
+    st.markdown("### 📋 Report Summary")
     
     col1, col2 = st.columns(2)
     
@@ -1875,15 +1875,15 @@ def render_design_report_generation(team_name):
     with col2:
         st.markdown("""
         **Export Options:**
-        - ≡ƒôä HTML (view in browser)
-        - ≡ƒôè Full design workbook
-        - ≡ƒÄ» Ready for randomization
+        - 📄 HTML (view in browser)
+        - 📊 Full design workbook
+        - 🎯 Ready for randomization
         """)
     
     st.markdown("---")
     
     # Preview responses
-    st.markdown("### ≡ƒæü∩╕Å Preview Your Responses")
+    st.markdown("### 👁️ Preview Your Responses")
     
     with st.expander("View All Workbook Responses", expanded=False):
         if workbook_responses:
@@ -1896,9 +1896,9 @@ def render_design_report_generation(team_name):
     st.markdown("---")
     
     # Generate report button
-    st.markdown("### ≡ƒô¥ Generate Your Report")
+    st.markdown("### 📝 Generate Your Report")
     
-    if st.button("≡ƒôä Generate HTML Report", use_container_width=True, type="primary"):
+    if st.button("📄 Generate HTML Report", use_container_width=True, type="primary"):
         # Generate simple HTML report
         timestamp = datetime.now().strftime("%B %d, %Y at %H:%M:%S")
         
@@ -1920,13 +1920,13 @@ def render_design_report_generation(team_name):
         </head>
         <body>
             <div class="header">
-                <h1>≡ƒÄ» RCT Design Activity Report</h1>
+                <h1>🎯 RCT Design Activity Report</h1>
                 <p><strong>Team:</strong> {team_name}</p>
                 <p><strong>Program:</strong> {program_card}</p>
                 <p><strong>Generated:</strong> {timestamp}</p>
             </div>
             
-            <h2>≡ƒôï Design Sprint Responses</h2>
+            <h2>📋 Design Sprint Responses</h2>
         """
         
         # Add responses
@@ -1951,11 +1951,11 @@ def render_design_report_generation(team_name):
         </html>
         """
         
-        st.success("Γ£à Report generated successfully!")
+        st.success("✅ Report generated successfully!")
         
         # Download button
         st.download_button(
-            label="≡ƒôÑ Download HTML Report",
+            label="📥 Download HTML Report",
             data=html_content,
             file_name=f"RCT_Design_Report_{team_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
             mime="text/html",
@@ -1963,29 +1963,29 @@ def render_design_report_generation(team_name):
         )
         
         # Preview
-        with st.expander("≡ƒæü∩╕Å Preview Report", expanded=False):
+        with st.expander("👁️ Preview Report", expanded=False):
             st.components.v1.html(html_content, height=600, scrolling=True)
     
     st.markdown("---")
     
     # Next steps
-    st.markdown("### ≡ƒÄ▓ Next Step: Randomization")
+    st.markdown("### 🎲 Next Step: Randomization")
     st.info("With your design sprint complete and report generated, you're ready to randomize your baseline data.")
     
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
-        if st.button("ΓåÉ Back to Workbook", use_container_width=True):
+        if st.button("← Back to Workbook", use_container_width=True):
             st.session_state.design_current_step = 7  # Last workbook step
             st.rerun()
     
     with col2:
-        if st.button("≡ƒÅá Back to Welcome", use_container_width=True):
+        if st.button("🏠 Back to Welcome", use_container_width=True):
             st.session_state.design_current_step = 1
             st.rerun()
     
     with col3:
-        if st.button("Γû╢∩╕Å Proceed to Randomization", type="primary", use_container_width=True):
+        if st.button("▶️ Proceed to Randomization", type="primary", use_container_width=True):
             st.session_state.current_page = "random"
             st.session_state.selected_page = "random"
             st.rerun()
@@ -1997,14 +1997,14 @@ def render_design_report_generation(team_name):
 
 
 def render_randomization() -> None:
-    st.title("≡ƒÄ▓ Randomization")
+    st.title("🎲 Randomization")
     st.markdown(
         "Upload randomization data, configure treatment arms, and run rerandomization with balance checks."
     )
     
     # Display design data if coming from RCT Design
     if st.session_state.design_data:
-        with st.info(f"≡ƒÄ» **Design loaded:** Team {st.session_state.design_data.get('team_name')}", icon="Γä╣∩╕Å"):
+        with st.info(f"🎯 **Design loaded:** Team {st.session_state.design_data.get('team_name')}", icon="ℹ️"):
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"**Program:** {st.session_state.design_data.get('program_card', 'N/A')}")
@@ -2018,7 +2018,7 @@ def render_randomization() -> None:
     if upload:
         df = pd.read_csv(upload)
         st.session_state.baseline_data = df
-        st.success(f"Loaded {len(df):,} observations ΓÇó {len(df.columns)} columns.")
+        st.success(f"Loaded {len(df):,} observations • {len(df.columns)} columns.")
 
     if df is None:
         st.info("Please upload a randomization data in CSV to configure randomization.")
@@ -2056,7 +2056,7 @@ def render_randomization() -> None:
                 help="Choose randomization method. Stratified+Cluster randomizes clusters within strata."
             )
             
-            with st.expander("Γä╣∩╕Å Method explanations"):
+            with st.expander("ℹ️ Method explanations"):
                 st.markdown("""
                 - **Simple**: Each individual randomly assigned to treatment/control
                 - **Stratified**: Randomize separately within each stratum (e.g., by gender, region)
@@ -2269,14 +2269,14 @@ def render_randomization() -> None:
         'stata_rand_code' in st.session_state):
         
         st.markdown("---")
-        st.markdown("#### ≡ƒôÑ Download Results & Code")
+        st.markdown("#### 📥 Download Results & Code")
         st.markdown("Download assignments, code, or analysis files.")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.download_button(
-                "≡ƒôè Download Assignments CSV",
+                "📊 Download Assignments CSV",
                 data=st.session_state.csv_assignments,
                 file_name="randomized_assignments.csv",
                 mime="text/csv",
@@ -2285,7 +2285,7 @@ def render_randomization() -> None:
         
         with col2:
             st.download_button(
-                "≡ƒÉì Download Python Code",
+                "🐍 Download Python Code",
                 data=st.session_state.python_rand_code,
                 file_name="randomization_code.py",
                 mime="text/x-python",
@@ -2295,7 +2295,7 @@ def render_randomization() -> None:
         
         with col3:
             st.download_button(
-                "≡ƒôê Download Stata Code",
+                "📈 Download Stata Code",
                 data=st.session_state.stata_rand_code,
                 file_name="randomization_code.do",
                 mime="text/x-stata",
@@ -2305,13 +2305,13 @@ def render_randomization() -> None:
     
     # Validation section
     st.markdown("---")
-    st.markdown("#### ≡ƒöì Validate Randomization Fairness")
+    st.markdown("#### 🔍 Validate Randomization Fairness")
     st.markdown("""
     Run your randomization multiple times with different seeds to verify that it's fair. 
     Each observation should have approximately equal probability of being assigned to each treatment arm.
     """)
     
-    with st.expander("Γä╣∩╕Å What is randomization validation?", expanded=False):
+    with st.expander("ℹ️ What is randomization validation?", expanded=False):
         st.markdown("""
         **Randomization validation** helps ensure your randomization code is working correctly by:
         
@@ -2351,7 +2351,7 @@ def render_randomization() -> None:
             help="Display histogram of assignment probabilities"
         )
     
-    if st.button("≡ƒÜÇ Run Validation", key="run_validation_btn", type="primary"):
+    if st.button("🚀 Run Validation", key="run_validation_btn", type="primary"):
         if df is None:
             st.error("No data loaded for validation")
             return
@@ -2463,21 +2463,21 @@ def render_randomization() -> None:
             except Exception as e:
                 st.error(f"Validation failed: {str(e)}")
                 import traceback
-                with st.expander("≡ƒÉ¢ Error details"):
+                with st.expander("🐛 Error details"):
                     st.code(traceback.format_exc())
 
     validation_state = st.session_state.get("validation_state")
     if validation_state:
         st.markdown("---")
-        st.markdown("### ≡ƒôè Validation Results")
+        st.markdown("### 📊 Validation Results")
         st.caption(
-            f"Last run: {validation_state['ran_at']} ΓÇó Simulations: {validation_state['n_simulations']:,}"
+            f"Last run: {validation_state['ran_at']} • Simulations: {validation_state['n_simulations']:,}"
         )
 
         if validation_state.get("is_valid"):
-            st.success("Γ£ô Validation PASSED - Randomization appears fair!")
+            st.success("✓ Validation PASSED - Randomization appears fair!")
         else:
-            st.error("Γ£ù Validation FAILED - Potential issues detected")
+            st.error("✗ Validation FAILED - Potential issues detected")
 
         st.markdown("#### Assignment Probability Summary")
         st.dataframe(
@@ -2490,7 +2490,7 @@ def render_randomization() -> None:
         if warnings_list:
             st.warning("**Warnings:**")
             for warning in warnings_list:
-                st.markdown(f"- ΓÜá∩╕Å {warning}")
+                st.markdown(f"- ⚠️ {warning}")
 
         histogram_bytes = validation_state.get("histogram_bytes")
         histogram_caption = validation_state.get("histogram_caption")
@@ -2512,11 +2512,11 @@ def render_randomization() -> None:
                 )
                 st.info(message)
 
-        st.markdown("#### ≡ƒôÄ Validation Downloads")
+        st.markdown("#### 📎 Validation Downloads")
         dl_col1, dl_col2, dl_col3, dl_col4 = st.columns(4)
         with dl_col1:
             st.download_button(
-                "≡ƒôÑ Detailed Validation Results",
+                "📥 Detailed Validation Results",
                 data=validation_state.get("csv_data", ""),
                 file_name="validation_results.csv",
                 mime="text/csv",
@@ -2524,7 +2524,7 @@ def render_randomization() -> None:
             )
         with dl_col2:
             st.download_button(
-                "≡ƒû╝∩╕Å Download Histogram",
+                "🖼️ Download Histogram",
                 data=histogram_bytes or b"",
                 file_name="validation_histogram.png",
                 mime="image/png",
@@ -2539,7 +2539,7 @@ def render_randomization() -> None:
         with dl_col3:
             code_payload = validation_state.get("python_code") or ""
             st.download_button(
-                "≡ƒÉì Download Validation Code",
+                "🐍 Download Validation Code",
                 data=code_payload,
                 file_name="validation_code.py",
                 mime="text/x-python",
@@ -2550,7 +2550,7 @@ def render_randomization() -> None:
         with dl_col4:
             stata_payload = validation_state.get("stata_code") or ""
             st.download_button(
-                "≡ƒôè Download Stata Validation Do-file",
+                "📊 Download Stata Validation Do-file",
                 data=stata_payload,
                 file_name="validation_code.do",
                 mime="text/x-stata",
@@ -2596,11 +2596,11 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
     curve_assumptions = PowerAssumptions(**curve_params)
 
     st.markdown("---")
-    st.markdown("### ≡ƒôè Results")
+    st.markdown("### 📊 Results")
 
     if outcome_type == "binary":
         st.info(
-            "≡ƒôî **Binary Outcome**: MDE represents change in proportion "
+            "📌 **Binary Outcome**: MDE represents change in proportion "
             "(e.g., from 50% to 55% = MDE of 0.05 or 5 percentage points)"
         )
 
@@ -2622,11 +2622,11 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             if sample_size:
                 st.metric("Sample Size", f"{int(sample_size):,}")
             if design_type == "cluster" and num_clusters and cluster_size:
-                st.caption(f"{int(num_clusters)} clusters ├ù {int(cluster_size)} individuals")
+                st.caption(f"{int(num_clusters)} clusters × {int(cluster_size)} individuals")
 
         with col3:
             st.metric("Power", f"{power*100:.0f}%")
-            st.caption(f"at ╬▒ = {alpha}")
+            st.caption(f"at α = {alpha}")
         
         # Display results with attrition if applicable
         if attrition_rate > 0 and mde_result:
@@ -2651,7 +2651,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                              delta=f"+{int(sample_with_attrition - sample_size):,}")
                 if design_type == "cluster" and mde_result.get("cluster_size_with_attrition") and num_clusters:
                     m_with_attrition = mde_result["cluster_size_with_attrition"]
-                    st.caption(f"{int(num_clusters)} clusters ├ù {int(m_with_attrition)} individuals (after attrition)")
+                    st.caption(f"{int(num_clusters)} clusters × {int(m_with_attrition)} individuals (after attrition)")
 
             with col3:
                 st.metric("Power", f"{power*100:.0f}%")
@@ -2663,16 +2663,16 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             )
             if attrition_rate > 0:
                 st.success(
-                    f"Γ£à **Without attrition**: With **{int(sample_size):,} individuals** ({sample_text}), "
+                    f"✅ **Without attrition**: With **{int(sample_size):,} individuals** ({sample_text}), "
                     f"you can detect an effect of **{mde:.3f}** with **{power*100:.0f}% power**.\n\n"
-                    f"ΓÜá∩╕Å **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(sample_with_attrition):,} individuals** "
+                    f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(sample_with_attrition):,} individuals** "
                     f"to maintain power and detect **{mde_with_attrition:.3f}** effect."
                 )
             else:
                 st.info(
                     f"With **{int(sample_size):,} individuals** ({sample_text}), "
                     f"you can detect an effect of **{mde:.3f}** ({(mde / baseline_mean * 100):.2f}% of baseline) "
-                    f"with **{power*100:.0f}% power** at **╬▒ = {alpha}**."
+                    f"with **{power*100:.0f}% power** at **α = {alpha}**."
                 )
     elif calculation_mode == "sample_size" and sample_result:
         attrition_rate = ctx.get("attrition_rate", 0.0)
@@ -2688,7 +2688,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 st.caption(f"{(target_mde / baseline_mean * 100):.2f}% of baseline mean")
             with col3:
                 st.metric("Power", f"{power*100:.0f}%")
-                st.caption(f"at ╬▒ = {alpha}")
+                st.caption(f"at α = {alpha}")
             
             # Display results with attrition if applicable
             if attrition_rate > 0 and sample_result:
@@ -2709,15 +2709,15 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                 if attrition_rate > 0:
                     n_with_attrition = sample_result.get("sample_size_with_attrition", required_n)
                     st.success(
-                        f"Γ£à **Without attrition**: **{int(required_n):,} individuals** needed.\n\n"
-                        f"ΓÜá∩╕Å **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(n_with_attrition):,} individuals** "
+                        f"✅ **Without attrition**: **{int(required_n):,} individuals** needed.\n\n"
+                        f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{int(n_with_attrition):,} individuals** "
                         f"to maintain **{power*100:.0f}% power** for detecting **{target_mde:.3f}** effect."
                     )
                 else:
                     st.info(
                         f"You need **{int(required_n):,} individuals** to detect an effect of "
                         f"**{target_mde:.3f}** ({(target_mde / baseline_mean * 100):.2f}% of baseline) "
-                        f"with **{power*100:.0f}% power** at **╬▒ = {alpha}**."
+                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
                     )
         else:
             # Cluster design
@@ -2757,8 +2757,8 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                     cluster_size_with_attrition = sample_result.get("cluster_size_with_attrition", cluster_size)
                     total_with_attrition = sample_result.get("total_with_attrition", total_n)
                     st.success(
-                        f"Γ£à **Without attrition**: **{required_clusters:,} clusters** ├ù **{int(cluster_size)} individuals** = {total_n:,} total.\n\n"
-                        f"ΓÜá∩╕Å **With {attrition_rate*100:.0f}% attrition**: Recruit **{required_clusters:,} clusters** ├ù **{int(cluster_size_with_attrition)} individuals** "
+                        f"✅ **Without attrition**: **{required_clusters:,} clusters** × **{int(cluster_size)} individuals** = {total_n:,} total.\n\n"
+                        f"⚠️ **With {attrition_rate*100:.0f}% attrition**: Recruit **{required_clusters:,} clusters** × **{int(cluster_size_with_attrition)} individuals** "
                         f"= {total_with_attrition:,} total to maintain **{power*100:.0f}% power**."
                     )
                 else:
@@ -2766,11 +2766,11 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
                         f"You need **{required_clusters:,} clusters** ({total_n:,} individuals) "
                         f"to detect an effect of **{target_mde:.3f}** "
                         f"({(target_mde / baseline_mean * 100):.2f}% of baseline) "
-                        f"with **{power*100:.0f}% power** at **╬▒ = {alpha}**."
+                        f"with **{power*100:.0f}% power** at **α = {alpha}**."
                     )
 
     st.markdown("---")
-    st.markdown("### ≡ƒôê Power Curves")
+    st.markdown("### 📈 Power Curves")
 
     tab1, tab2 = st.tabs(["Power vs Sample Size", "Cluster Analysis" if design_type == "cluster" else "Power Analysis"])
 
@@ -2815,7 +2815,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             fig.update_layout(
                 title="Statistical Power vs Sample Size",
                 xaxis_title=x_label,
-                yaxis_title="Power (1-╬▓)",
+                yaxis_title="Power (1-β)",
                 yaxis=dict(range=[0, 1]),
                 hovermode='x unified',
                 template='plotly_white'
@@ -2862,9 +2862,9 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             )
 
             if attrition_rate > 0:
-                st.info(f"≡ƒôè **MDE Table**: Values shown are **after {attrition_rate*100:.0f}% attrition adjustment** (final sample sizes)")
+                st.info(f"📊 **MDE Table**: Values shown are **after {attrition_rate*100:.0f}% attrition adjustment** (final sample sizes)")
             else:
-                st.info("≡ƒôè **MDE Table**: Values shown are for the specified sample sizes (no attrition)")
+                st.info("📊 **MDE Table**: Values shown are for the specified sample sizes (no attrition)")
             
             st.dataframe(
                 mde_table.style.format("{:.3f}").background_gradient(cmap='RdYlGn_r', axis=None),
@@ -2882,7 +2882,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             st.info("Cluster size analysis is only available for cluster randomization designs.")
 
     st.markdown("---")
-    st.markdown("### ≡ƒÆ╗ Downloadable Code")
+    st.markdown("### 💻 Downloadable Code")
 
     python_code = generate_python_code(
         curve_assumptions if calculation_mode == "mde" else assumptions_obj,
@@ -2913,11 +2913,11 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
             mime="text/plain"
         )
 
-    st.markdown("#### ≡ƒôÑ Quick Downloads")
+    st.markdown("#### 📥 Quick Downloads")
     col_python, col_stata = st.columns(2)
     with col_python:
         st.download_button(
-            "≡ƒÉì Download Python Code",
+            "🐍 Download Python Code",
             data=python_code,
             file_name="power_calculation.py",
             mime="text/x-python",
@@ -2925,7 +2925,7 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
         )
     with col_stata:
         st.download_button(
-            "≡ƒôê Download Stata Code",
+            "📈 Download Stata Code",
             data=stata_code,
             file_name="power_calculation.do",
             mime="text/plain",
@@ -2939,17 +2939,17 @@ def render_power_analysis_results(ctx: Dict[str, Any]) -> None:
 
 
 def render_power_calculations() -> None:
-    st.title("ΓÜí Power Calculations")
+    st.title("⚡ Power Calculations")
     st.markdown(
         "Calculate statistical power, minimum detectable effects (MDE), and required sample sizes "
         "for your randomized controlled trial."
     )
     
     # Educational content
-    with st.expander("≡ƒôÜ What is Statistical Power?", expanded=False):
+    with st.expander("📚 What is Statistical Power?", expanded=False):
         st.markdown("""
         **Statistical power** is the probability that your study will detect a treatment effect 
-        if there truly is one. It's calculated as 1 - ╬▓, where ╬▓ is the Type II error rate 
+        if there truly is one. It's calculated as 1 - β, where β is the Type II error rate 
         (the probability of failing to detect a real effect).
         
         **Key concepts:**
@@ -2961,27 +2961,27 @@ def render_power_calculations() -> None:
         **Reference:** [J-PAL Power Calculations Guide](https://www.povertyactionlab.org/resource/power-calculations)
         """)
     
-    with st.expander("≡ƒÄ» Key Determinants of Power", expanded=False):
+    with st.expander("🎯 Key Determinants of Power", expanded=False):
         st.markdown("""
         Your study's statistical power depends on several factors:
         
-        1. **Sample Size (N)**: Larger samples ΓåÆ Higher power
-        2. **Effect Size (MDE)**: Larger effects ΓåÆ Easier to detect ΓåÆ Higher power
-        3. **Significance Level (╬▒)**: Lower ╬▒ ΓåÆ Harder to reject null ΓåÆ Lower power
-        4. **Outcome Variance (╧â┬▓)**: Lower variance ΓåÆ Higher power
-        5. **Treatment Share**: Balanced allocation (50/50) ΓåÆ Maximum power
-        6. **Covariates (R┬▓)**: Better prediction ΓåÆ Lower residual variance ΓåÆ Higher power
-        7. **Compliance**: Perfect compliance ΓåÆ Higher power
-        8. **Clustering (ICC)**: Higher ICC ΓåÆ Lower power (requires more clusters/larger samples)
+        1. **Sample Size (N)**: Larger samples → Higher power
+        2. **Effect Size (MDE)**: Larger effects → Easier to detect → Higher power
+        3. **Significance Level (α)**: Lower α → Harder to reject null → Lower power
+        4. **Outcome Variance (σ²)**: Lower variance → Higher power
+        5. **Treatment Share**: Balanced allocation (50/50) → Maximum power
+        6. **Covariates (R²)**: Better prediction → Lower residual variance → Higher power
+        7. **Compliance**: Perfect compliance → Higher power
+        8. **Clustering (ICC)**: Higher ICC → Lower power (requires more clusters/larger samples)
         """)
     
-    with st.expander("≡ƒôï Required Assumptions", expanded=False):
+    with st.expander("📋 Required Assumptions", expanded=False):
         st.markdown("""
         To calculate power or sample size, you need to specify:
         
         **Basic Parameters:**
-        - **Significance level (╬▒)**: Usually 0.05 (5% false positive rate)
-        - **Power (1-╬▓)**: Usually 0.80 (80% chance of detecting real effects)
+        - **Significance level (α)**: Usually 0.05 (5% false positive rate)
+        - **Power (1-β)**: Usually 0.80 (80% chance of detecting real effects)
         - **Baseline outcome mean & SD**: From pilot data or similar studies
         - **Treatment share**: Proportion assigned to treatment (usually 0.5)
         
@@ -2991,7 +2991,7 @@ def render_power_calculations() -> None:
         
         **Design Features (if applicable):**
         - **Cluster randomization**: Number of clusters, cluster size, ICC
-        - **Covariates**: R┬▓ from regressing outcome on baseline covariates
+        - **Covariates**: R² from regressing outcome on baseline covariates
         - **Imperfect compliance**: Expected compliance rate for ITT vs LATE estimates
         """)
     
@@ -3042,7 +3042,7 @@ def render_power_calculations() -> None:
         
         with col1:
             alpha = st.number_input(
-                "Significance Level (╬▒)",
+                "Significance Level (α)",
                 min_value=0.001,
                 max_value=0.2,
                 value=0.05,
@@ -3068,7 +3068,7 @@ def render_power_calculations() -> None:
         
         with col2:
             power = st.number_input(
-                "Statistical Power (1-╬▓)",
+                "Statistical Power (1-β)",
                 min_value=0.5,
                 max_value=0.99,
                 value=0.80,
@@ -3177,16 +3177,16 @@ def render_power_calculations() -> None:
             
             deff_value = 1 + (cluster_size - 1) * icc
             st.info(
-                f"**Design Effect (DEFF):** {deff_value:.3f} ΓÇö "
+                f"**Design Effect (DEFF):** {deff_value:.3f} — "
                 f"This inflates required sample size by {(deff_value - 1) * 100:.1f}%"
             )
         else:
             icc = 0.0
         
         # Advanced options
-        with st.expander("≡ƒöº Advanced Options", expanded=False):
+        with st.expander("🔧 Advanced Options", expanded=False):
             if outcome_type == "binary":
-                st.info("≡ƒôî **Note**: For binary outcomes, covariate adjustment (R┬▓) is not applicable per J-PAL guidelines.")
+                st.info("📌 **Note**: For binary outcomes, covariate adjustment (R²) is not applicable per J-PAL guidelines.")
                 r_squared = 0.0
                 compliance_rate = st.number_input(
                     "Compliance Rate",
@@ -3202,7 +3202,7 @@ def render_power_calculations() -> None:
                 
                 with col1:
                     r_squared = st.number_input(
-                        "R┬▓ from Covariates",
+                        "R² from Covariates",
                         min_value=0.0,
                         max_value=0.99,
                         value=0.0,
@@ -3248,9 +3248,9 @@ def render_power_calculations() -> None:
         
         with col3:
             if attrition_rate > 0:
-                st.info(f"≡ƒÆí With {attrition_rate*100:.0f}% attrition, recruit {attrition_factor:.0%} extra participants to maintain power")
+                st.info(f"💡 With {attrition_rate*100:.0f}% attrition, recruit {attrition_factor:.0%} extra participants to maintain power")
             else:
-                st.info("≡ƒÆí Set attrition > 0 to adjust sample size")
+                st.info("💡 Set attrition > 0 to adjust sample size")
         
         if compliance_rate and compliance_rate < 1.0:
             st.warning(
@@ -3300,7 +3300,7 @@ def render_power_calculations() -> None:
                 sim_seed = 123456
                 within_cluster_var = 1.0
         
-        calculate_button = st.form_submit_button("ΓÜí Calculate", use_container_width=True)
+        calculate_button = st.form_submit_button("⚡ Calculate", use_container_width=True)
 
     current_clusters: int | None = None
 
@@ -3337,12 +3337,12 @@ def render_power_calculations() -> None:
             if calculation_method == "simulation":
                 st.session_state.pop("power_calc_state", None)
                 st.markdown("---")
-                st.markdown("### ≡ƒÄ▓ Simulation Results")
+                st.markdown("### 🎲 Simulation Results")
                 st.info(f"Running {num_simulations:,} Monte Carlo simulations... (Seed: {sim_seed})")
                 
                 # Note: Simulation only supports power estimation (calculation_mode must be "mde")
                 if calculation_mode == "sample_size":
-                    st.error("Γ¥î Simulation method currently only supports MDE calculation (not sample size calculation). Please select 'Minimum Detectable Effect (MDE)' or switch to 'Analytical' method.")
+                    st.error("❌ Simulation method currently only supports MDE calculation (not sample size calculation). Please select 'Minimum Detectable Effect (MDE)' or switch to 'Analytical' method.")
                     return
                 
                 # Determine effect size for simulation
@@ -3402,7 +3402,7 @@ def render_power_calculations() -> None:
                 with col2:
                     st.metric("Sample Size", f"{sim_result.get('sample_size', sim_result.get('total_sample', 0)):,}")
                     if design_type == "cluster":
-                        st.caption(f"{sim_result['num_clusters']} clusters ├ù {sim_result['cluster_size']} individuals")
+                        st.caption(f"{sim_result['num_clusters']} clusters × {sim_result['cluster_size']} individuals")
                 
                 with col3:
                     st.metric("Test Effect Size", f"{test_effect:.3f}")
@@ -3429,14 +3429,14 @@ def render_power_calculations() -> None:
                 
                 # Summary
                 st.success(
-                    f"Γ£à **Simulation Complete**: With the specified design, you have approximately "
+                    f"✅ **Simulation Complete**: With the specified design, you have approximately "
                     f"**{sim_result['power']*100:.1f}% power** to detect an effect of **{test_effect:.3f}** "
-                    f"at ╬▒ = {alpha} (two-sided test)."
+                    f"at α = {alpha} (two-sided test)."
                 )
                 
                 # Power curve via simulation
                 st.markdown("---")
-                st.markdown("### ≡ƒôê Power Curve (Simulation-Based)")
+                st.markdown("### 📈 Power Curve (Simulation-Based)")
                 
                 with st.spinner("Generating power curve via simulation..."):
                     sim_power_df = generate_simulation_power_curve(
@@ -3477,7 +3477,7 @@ def render_power_calculations() -> None:
                 fig.update_layout(
                     title=f"Statistical Power vs Sample Size (Simulation: {num_simulations} iterations each)",
                     xaxis_title=x_label,
-                    yaxis_title="Power (1-╬▓)",
+                    yaxis_title="Power (1-β)",
                     yaxis=dict(range=[0, 1]),
                     hovermode='x unified',
                     template='plotly_white'
@@ -3487,7 +3487,7 @@ def render_power_calculations() -> None:
                 
                 # Code generation for simulation
                 st.markdown("---")
-                st.markdown("### ≡ƒÆ╗ Downloadable Simulation Code")
+                st.markdown("### 💻 Downloadable Simulation Code")
                 
                 code_tab1, code_tab2 = st.tabs(["Python", "Stata"])
                 
@@ -3495,7 +3495,7 @@ def render_power_calculations() -> None:
                     python_sim_code = generate_simulation_python_code(sim_assumptions, sim_result)
                     st.code(python_sim_code, language="python")
                     st.download_button(
-                        "≡ƒôÑ Download Python Code",
+                        "📥 Download Python Code",
                         data=python_sim_code,
                         file_name="power_simulation.py",
                         mime="text/x-python"
@@ -3505,14 +3505,14 @@ def render_power_calculations() -> None:
                     stata_sim_code = generate_simulation_stata_code(sim_assumptions, sim_result)
                     st.code(stata_sim_code, language="stata")
                     st.download_button(
-                        "≡ƒôÑ Download Stata Code",
+                        "📥 Download Stata Code",
                         data=stata_sim_code,
                         file_name="power_simulation.do",
                         mime="text/x-stata"
                     )
                 
                 st.markdown("---")
-                st.info("≡ƒÆí **Note**: Simulation-based power calculations provide empirical validation of analytical formulas and allow for more flexible assumptions about data distributions.")
+                st.info("💡 **Note**: Simulation-based power calculations provide empirical validation of analytical formulas and allow for more flexible assumptions about data distributions.")
                 
                 return  # Exit early for simulation method
             
@@ -3634,9 +3634,9 @@ def render_power_calculations() -> None:
             }
 
         except ValueError as e:
-            st.error(f"Γ¥î Calculation error: {str(e)}")
+            st.error(f"❌ Calculation error: {str(e)}")
         except Exception as e:
-            st.error(f"Γ¥î Unexpected error: {str(e)}")
+            st.error(f"❌ Unexpected error: {str(e)}")
 
     power_state = st.session_state.get("power_calc_state")
     if power_state and power_state.get("calculation_method") == "analytical":
@@ -3648,7 +3648,7 @@ def render_power_calculations() -> None:
 
 
 def render_case_assignment() -> None:
-    st.title("≡ƒôï Case Assignment")
+    st.title("📋 Case Assignment")
     st.markdown("Assign interview cases to SurveyCTO teams and produce upload-ready cases dataset.")
 
     # Data source selection
@@ -3660,10 +3660,10 @@ def render_case_assignment() -> None:
         st.success(f"Loaded {len(df):,} rows for case assignment.")
 
     if df is None:
-        st.info("≡ƒÆí Provide randomized data via the Randomization tab or upload a CSV here.")
+        st.info("💡 Provide randomized data via the Randomization tab or upload a CSV here.")
         return
 
-    st.markdown("#### ≡ƒôè Data Preview")
+    st.markdown("#### 📊 Data Preview")
     st.dataframe(df.head(10), use_container_width=True)
     
     available_cols = df.columns.tolist()
@@ -3678,7 +3678,7 @@ def render_case_assignment() -> None:
     )
     
     if config_mode == "YAML (Advanced)":
-        st.markdown("#### ΓÜÖ∩╕Å Configuration (YAML)")
+        st.markdown("#### ⚙️ Configuration (YAML)")
         default_case_cfg = load_default_config().get("case_assignment", {})
         config_text = st.text_area(
             "Case assignment configuration",
@@ -3695,7 +3695,7 @@ def render_case_assignment() -> None:
                 st.error(f"Assignment failed: {exc}")
                 return
 
-            st.success(f"Γ£à Generated cases with {len(roster):,} cases.")
+            st.success(f"✅ Generated cases with {len(roster):,} cases.")
             st.dataframe(roster.head(20), use_container_width=True)
 
             csv_buffer = io.StringIO()
@@ -3708,7 +3708,7 @@ def render_case_assignment() -> None:
             )
     else:
         # Interactive configuration form
-        st.markdown("#### ΓÜÖ∩╕Å Case Assignment Configuration")
+        st.markdown("#### ⚙️ Case Assignment Configuration")
         
         with st.form("case_assignment_form"):
             st.markdown("##### Basic Settings")
@@ -3841,7 +3841,7 @@ def render_case_assignment() -> None:
             
             with col1:
                 form_search = st.text_input(
-                    "≡ƒöì Search or filter treatment arms",
+                    "🔍 Search or filter treatment arms",
                     value="",
                     key="case_form_search",
                     placeholder="Type to search treatment arms...",
@@ -3867,7 +3867,7 @@ def render_case_assignment() -> None:
                 
                 # Show expandable sections for each arm
                 for i, arm in enumerate(filtered_arms):
-                    with st.expander(f"≡ƒôï {arm} - Form IDs", expanded=False):
+                    with st.expander(f"📋 {arm} - Form IDs", expanded=False):
                         arm_forms = st.text_input(
                             f"Form ID(s) for '{arm}'",
                             key=f"case_forms_{arm}",
@@ -3879,10 +3879,10 @@ def render_case_assignment() -> None:
                     
                     # Show count of cases for this arm
                     arm_count = len(df[df[treatment_column] == arm])
-                    st.caption(f"  ΓööΓöÇ {arm_count:,} cases in this arm")
+                    st.caption(f"  └─ {arm_count:,} cases in this arm")
             else:
                 # Show summary without expansion
-                st.info("≡ƒÆí Check 'Add custom form IDs' above to assign specific forms to each treatment arm")
+                st.info("💡 Check 'Add custom form IDs' above to assign specific forms to each treatment arm")
                 st.markdown(f"**Treatment Arms in Data ({len(treatment_arms)} total):**")
                 
                 # Show arms in a compact table format
@@ -3927,7 +3927,7 @@ def render_case_assignment() -> None:
             try:
                 roster = assign_cases(df, config)
                 
-                st.success(f"Γ£à Generated cases with {len(roster):,} cases!")
+                st.success(f"✅ Generated cases with {len(roster):,} cases!")
                 
                 # Show team distribution
                 st.markdown("#### Team Distribution")
@@ -3961,25 +3961,25 @@ def render_case_assignment() -> None:
                     csv_buffer = io.StringIO()
                     roster.to_csv(csv_buffer, index=False)
                     st.download_button(
-                        "≡ƒôÑ Download cases CSV",
+                        "📥 Download cases CSV",
                         data=csv_buffer.getvalue(),
                         file_name="surveycto_case_roster.csv",
                         mime="text/csv",
                     )
                 
                 with col2:
-                    if st.button("≡ƒÜÇ Upload to SurveyCTO", help="Upload cases via SurveyCTO API"):
+                    if st.button("🚀 Upload to SurveyCTO", help="Upload cases via SurveyCTO API"):
                         st.session_state['show_upload_form'] = True
                 
             except Exception as exc:
-                st.error(f"Γ¥î Assignment failed: {exc}")
+                st.error(f"❌ Assignment failed: {exc}")
                 import traceback
                 st.code(traceback.format_exc())
     
     # Upload to SurveyCTO section
     if st.session_state.get('show_upload_form') and st.session_state.get('generated_roster') is not None:
         st.markdown("---")
-        st.markdown("### ≡ƒÜÇ Upload Cases to SurveyCTO")
+        st.markdown("### 🚀 Upload Cases to SurveyCTO")
         
         roster = st.session_state['generated_roster']
         
@@ -3988,7 +3988,7 @@ def render_case_assignment() -> None:
         missing_cols = [col for col in required_cols if col not in roster.columns]
         
         if missing_cols:
-            st.error(f"Γ¥î Cases missing required columns: {missing_cols}")
+            st.error(f"❌ Cases missing required columns: {missing_cols}")
             st.info("Required columns: id (or caseid), label, users, formids")
         else:
             # Rename 'id' to 'caseid' if needed (SurveyCTO expects 'caseid')
@@ -4027,21 +4027,21 @@ def render_case_assignment() -> None:
                     "Upload mode",
                     ["merge", "append", "replace"],
                     help="""
-                    ΓÇó merge: Update existing cases and add new ones (recommended)
-                    ΓÇó append: Only add new cases, skip existing ones
-                    ΓÇó replace: Delete ALL existing cases and upload only these
+                    • merge: Update existing cases and add new ones (recommended)
+                    • append: Only add new cases, skip existing ones
+                    • replace: Delete ALL existing cases and upload only these
                     """
                 )
                 
                 mode_descriptions = {
-                    "merge": "Γ£à **Merge** will update existing cases with matching IDs and add new cases.",
-                    "append": "Γ₧ò **Append** will only add new cases and skip any with existing IDs.",
-                    "replace": "ΓÜá∩╕Å **Replace** will DELETE all existing cases and upload only these cases!"
+                    "merge": "✅ **Merge** will update existing cases with matching IDs and add new cases.",
+                    "append": "➕ **Append** will only add new cases and skip any with existing IDs.",
+                    "replace": "⚠️ **Replace** will DELETE all existing cases and upload only these cases!"
                 }
                 st.info(mode_descriptions[upload_mode])
                 
                 if upload_mode == "replace":
-                    st.warning("ΓÜá∩╕Å WARNING: Replace mode will permanently delete all existing cases. This cannot be undone!")
+                    st.warning("⚠️ WARNING: Replace mode will permanently delete all existing cases. This cannot be undone!")
                     confirm_replace = st.checkbox("I understand this will delete all existing cases")
                 else:
                     confirm_replace = True
@@ -4054,7 +4054,7 @@ def render_case_assignment() -> None:
             
             if upload_submitted:
                 if not all([scto_server, scto_username, scto_password, scto_form_id]):
-                    st.error("Γ¥î Please fill in all SurveyCTO connection fields")
+                    st.error("❌ Please fill in all SurveyCTO connection fields")
                 else:
                     try:
                         with st.spinner(f"Uploading {len(upload_roster)} cases to SurveyCTO..."):
@@ -4070,7 +4070,7 @@ def render_case_assignment() -> None:
                                 mode=upload_mode
                             )
                             
-                            st.success("Γ£à Successfully uploaded cases to SurveyCTO!")
+                            st.success("✅ Successfully uploaded cases to SurveyCTO!")
                             st.json(result)
                             
                             # Clear the upload form
@@ -4079,16 +4079,16 @@ def render_case_assignment() -> None:
                                 st.rerun()
                             
                     except requests.exceptions.HTTPError as e:
-                        st.error(f"Γ¥î Upload failed: {e}")
+                        st.error(f"❌ Upload failed: {e}")
                         st.error(f"Response: {e.response.text if hasattr(e, 'response') else 'No response details'}")
                     except Exception as exc:
-                        st.error(f"Γ¥î Upload failed: {exc}")
+                        st.error(f"❌ Upload failed: {exc}")
                         import traceback
                         st.code(traceback.format_exc())
             
             # Add visualizations and validation
             st.markdown("---")
-            st.markdown("### ≡ƒôè Roster Validation & Visualizations")
+            st.markdown("### 📊 Roster Validation & Visualizations")
             
             if upload_roster is not None and not upload_roster.empty:
                 col1, col2, col3, col4 = st.columns(4)
@@ -4107,11 +4107,11 @@ def render_case_assignment() -> None:
                         st.metric("Treatment Arms", unique_arms)
                 
                 with col4:
-                    st.metric("Status", "Γ£à Ready to upload")
+                    st.metric("Status", "✅ Ready to upload")
                 
                 # Team distribution
                 if 'team' in upload_roster.columns:
-                    st.markdown("#### ≡ƒæÑ Distribution by Team")
+                    st.markdown("#### 👥 Distribution by Team")
                     team_dist = upload_roster['team'].value_counts().reset_index()
                     team_dist.columns = ['Team', 'Cases']
                     st.dataframe(team_dist, use_container_width=True)
@@ -4121,14 +4121,14 @@ def render_case_assignment() -> None:
                 
                 # Treatment arm distribution
                 if treatment_column in upload_roster.columns:
-                    st.markdown("#### ≡ƒÄ» Distribution by Treatment Arm")
+                    st.markdown("#### 🎯 Distribution by Treatment Arm")
                     arm_dist = upload_roster[treatment_column].value_counts().reset_index()
                     arm_dist.columns = ['Treatment Arm', 'Cases']
                     arm_dist['Percentage'] = (arm_dist['Cases'] / arm_dist['Cases'].sum() * 100).round(1)
                     st.dataframe(arm_dist, use_container_width=True)
                 
                 # Validation checks
-                st.markdown("#### Γ£ô Validation Checks")
+                st.markdown("#### ✓ Validation Checks")
                 
                 validation_passed = True
                 
@@ -4136,18 +4136,18 @@ def render_case_assignment() -> None:
                 if case_id_column in upload_roster.columns:
                     duplicates = upload_roster[case_id_column].duplicated().sum()
                     if duplicates > 0:
-                        st.warning(f"ΓÜá∩╕Å {duplicates} duplicate case IDs found")
+                        st.warning(f"⚠️ {duplicates} duplicate case IDs found")
                         validation_passed = False
                     else:
-                        st.success("Γ£ô No duplicate case IDs")
+                        st.success("✓ No duplicate case IDs")
                 
                 # Check for missing values
                 missing = upload_roster.isnull().sum()
                 if missing.sum() > 0:
-                    st.warning(f"ΓÜá∩╕Å {missing.sum()} missing values found")
+                    st.warning(f"⚠️ {missing.sum()} missing values found")
                     validation_passed = False
                 else:
-                    st.success("Γ£ô No missing values")
+                    st.success("✓ No missing values")
                 
                 # Check treatment distribution
                 if treatment_column in upload_roster.columns:
@@ -4155,12 +4155,12 @@ def render_case_assignment() -> None:
                     if len(arm_counts) > 1:
                         imbalance = (arm_counts.max() - arm_counts.min()) / len(upload_roster) * 100
                         if imbalance > 20:
-                            st.info(f"Γä╣∩╕Å Moderate distribution imbalance ({imbalance:.1f}%)")
+                            st.info(f"ℹ️ Moderate distribution imbalance ({imbalance:.1f}%)")
                         else:
-                            st.success("Γ£ô Treatment arm distribution balanced")
+                            st.success("✓ Treatment arm distribution balanced")
                 
                 if validation_passed:
-                    st.success("Γ£à All validation checks passed!")
+                    st.success("✅ All validation checks passed!")
 
 
 # ----------------------------------------------------------------------------- #
@@ -4475,7 +4475,7 @@ def reshape_wide_to_long(
     def _structure_signature(frame: pd.DataFrame) -> tuple[int, bool, int]:
         """
         Signature for grouping patterns.
-        Primarily uses row count (SurveyCTO rule: same repeat group ΓçÆ same number of rows),
+        Primarily uses row count (SurveyCTO rule: same repeat group ⇒ same number of rows),
         but distinguishes top-level vs nested repeats via PARENT_KEY presence and repeat depth.
         """
         row_count = len(frame)
@@ -4507,15 +4507,15 @@ def reshape_wide_to_long(
             return f"{merged}_repeat"
         return "repeat_group"
     
-    st.write("### ≡ƒöä Reshaping Wide to Long Format")
-    st.info("Γä╣∩╕Å Patterns from the same repeat group will be merged together")
+    st.write("### 🔄 Reshaping Wide to Long Format")
+    st.info("ℹ️ Patterns from the same repeat group will be merged together")
     
     # Group patterns by their repeat structure (same suffixes)
     repeat_groups = {}  # Maps repeat_key -> list of (pattern, cols)
     patterns_skipped = []
     
     # Create progress expander for detailed progress
-    progress_expander = st.expander("≡ƒôï Reshaping Progress", expanded=True)
+    progress_expander = st.expander("📋 Reshaping Progress", expanded=True)
     
     with progress_expander:
         st.write("**Step 1: Grouping patterns by repeat structure...**")
@@ -4557,7 +4557,7 @@ def reshape_wide_to_long(
                 repeat_groups[repeat_key].append((pattern, cols))
     
     with progress_expander:
-        st.write(f"  Γ£ô Found {len(repeat_groups)} repeat group(s)")
+        st.write(f"  ✓ Found {len(repeat_groups)} repeat group(s)")
         for repeat_key, patterns_list in repeat_groups.items():
             st.write(f"    - {repeat_key}: {len(patterns_list)} variable pattern(s)")
     
@@ -4592,10 +4592,10 @@ def reshape_wide_to_long(
                     reshaped_patterns[pattern] = (reshaped, repeat_group_name, base_name)
                     
                     with progress_expander:
-                        st.write(f"  Γ£ô {pattern}: {len(reshaped):,} rows")
+                        st.write(f"  ✓ {pattern}: {len(reshaped):,} rows")
             except Exception as e:
                 with progress_expander:
-                    st.warning(f"  Γ£ù {pattern}: {str(e)}")
+                    st.warning(f"  ✗ {pattern}: {str(e)}")
                 patterns_skipped.append(f"{pattern} (error: {str(e)})")
     
     # Step 3: Group patterns by (repeat_group_name, row_count) - patterns with same rows belong together
@@ -4625,16 +4625,16 @@ def reshape_wide_to_long(
         group_entry["base_names"].append(base_name)
     
     with progress_expander:
-        st.write(f"  Γ£ô Found {len(repeat_structure_groups)} unique repeat structure(s)")
+        st.write(f"  ✓ Found {len(repeat_structure_groups)} unique repeat structure(s)")
         for group_data in repeat_structure_groups.values():
             group_data["display_name"] = _choose_dataset_name(
                 group_data["repeat_names"],
                 group_data["base_names"],
             )
             st.write(
-                f"    - {group_data['display_name']} ΓÇó {group_data['row_count']:,} rows "
+                f"    - {group_data['display_name']} • {group_data['row_count']:,} rows "
                 f"(repeat depth: {group_data['repeat_depth']}) "
-                f"ΓåÆ {len(group_data['patterns'])} variable pattern(s)"
+                f"→ {len(group_data['patterns'])} variable pattern(s)"
             )
     
     # Step 4: Merge patterns within each repeat structure group
@@ -4664,7 +4664,7 @@ def reshape_wide_to_long(
                 merged_df = reshaped_df.copy()
                 merged_var_names.append(base_name)
                 with progress_expander:
-                    st.write(f"      Γ£ô Starting with {base_name} ({len(reshaped_df)} rows, {len(reshaped_df.columns)} cols)")
+                    st.write(f"      ✓ Starting with {base_name} ({len(reshaped_df)} rows, {len(reshaped_df.columns)} cols)")
             else:
                 # Get structural columns that should be excluded from overlap check
                 structural_cols = ['KEY', 'PARENT_KEY', 'repeat', 'repeat_1', 'repeat_2']
@@ -4686,7 +4686,7 @@ def reshape_wide_to_long(
                 
                 if overlapping:
                     with progress_expander:
-                        st.write(f"      ΓÜá∩╕Å Skipping {base_name} - overlapping columns: {overlapping}")
+                        st.write(f"      ⚠️ Skipping {base_name} - overlapping columns: {overlapping}")
                     skipped_in_group.append(base_name)
                     continue
                 
@@ -4696,7 +4696,7 @@ def reshape_wide_to_long(
                 
                 if not merge_keys:
                     with progress_expander:
-                        st.write(f"      Γ£ù No common merge keys with {base_name}")
+                        st.write(f"      ✗ No common merge keys with {base_name}")
                     skipped_in_group.append(base_name)
                     continue
                 
@@ -4705,7 +4705,7 @@ def reshape_wide_to_long(
                 
                 if left_multi and right_multi:
                     with progress_expander:
-                        st.write("      ΓÜá∩╕Å Skipping merge: would create many-to-many matches on "
+                        st.write("      ⚠️ Skipping merge: would create many-to-many matches on "
                                  f"{merge_keys}. Prefer SurveyCTO-style 1:m or m:1 joins.")
                     skipped_in_group.append(f"{base_name} (m:m risk)")
                     continue
@@ -4721,10 +4721,10 @@ def reshape_wide_to_long(
                     after_rows = len(merged_df)
                     merged_var_names.append(base_name)
                     with progress_expander:
-                        st.write(f"      Γ£ô Merged {base_name} ({before_rows} ΓåÆ {after_rows} rows, +{len(data_cols)} cols)")
+                        st.write(f"      ✓ Merged {base_name} ({before_rows} → {after_rows} rows, +{len(data_cols)} cols)")
                 except Exception as e:
                     with progress_expander:
-                        st.write(f"      Γ£ù Failed to merge {base_name}: {str(e)}")
+                        st.write(f"      ✗ Failed to merge {base_name}: {str(e)}")
                     skipped_in_group.append(base_name)
                     continue
         
@@ -4741,20 +4741,20 @@ def reshape_wide_to_long(
             final_datasets[dataset_name] = merged_df
             
             with progress_expander:
-                st.write(f"\n  Γ£à **{dataset_name}**: {len(merged_df):,} rows ├ù {len(merged_df.columns)} cols")
+                st.write(f"\n  ✅ **{dataset_name}**: {len(merged_df):,} rows × {len(merged_df.columns)} cols")
                 st.write(f"      Merged variables: {', '.join(merged_var_names)}")
                 if skipped_in_group:
                     st.write(f"      Skipped: {', '.join(skipped_in_group)}")
     
     # Show skipped patterns
     if patterns_skipped:
-        with st.expander(f"ΓÜá∩╕Å Skipped {len(patterns_skipped)} pattern(s)", expanded=False):
+        with st.expander(f"⚠️ Skipped {len(patterns_skipped)} pattern(s)", expanded=False):
             st.warning("These patterns were not reshaped:")
             for skipped in patterns_skipped:
-                st.text(f"ΓÇó {skipped}")
+                st.text(f"• {skipped}")
     
     if not final_datasets:
-        st.error("Γ¥î No patterns could be reshaped. All patterns failed.")
+        st.error("❌ No patterns could be reshaped. All patterns failed.")
         st.info("Please check your data or select different patterns.")
         return {}
     
@@ -4762,15 +4762,15 @@ def reshape_wide_to_long(
     total_rows = sum(len(df) for df in final_datasets.values())
     with progress_expander:
         st.write("\n" + "="*60)
-        st.write("**≡ƒôè Reshaping Summary:**")
+        st.write("**📊 Reshaping Summary:**")
         st.write(f"   - Variable patterns detected: {len(reshaped_patterns)}")
         st.write(f"   - Repeat structures identified: {len(repeat_structure_groups)}")
         st.write(f"   - Final merged datasets: {len(final_datasets)}")
         st.write(f"   - Total rows: {total_rows:,}")
-        st.write("\n≡ƒÆí Variables from the same repeat group (same row count) are intelligently merged together")
+        st.write("\n💡 Variables from the same repeat group (same row count) are intelligently merged together")
     
-    st.success(f"Γ£à Reshaping complete! {len(final_datasets)} dataset(s) created with {total_rows:,} total rows")
-    st.caption("≡ƒÆí Each dataset represents ONE repeat group with all its variables merged (e.g., firstn, lastn, age together)")
+    st.success(f"✅ Reshaping complete! {len(final_datasets)} dataset(s) created with {total_rows:,} total rows")
+    st.caption("💡 Each dataset represents ONE repeat group with all its variables merged (e.g., firstn, lastn, age together)")
     
     return final_datasets
 
@@ -4993,13 +4993,13 @@ def merge_datasets_on_key(
         Dictionary with merged and unmerged datasets
     """
     if not datasets or len(datasets) < 2:
-        st.info("≡ƒôè Only one dataset available - no merging needed")
+        st.info("📊 Only one dataset available - no merging needed")
         return datasets
     
-    st.write("### ≡ƒöù Intelligent KEY-based Merging")
-    st.info("Γä╣∩╕Å Attempting to merge datasets with matching KEY values (1:1 merge, perfect matches only)")
+    st.write("### 🔗 Intelligent KEY-based Merging")
+    st.info("ℹ️ Attempting to merge datasets with matching KEY values (1:1 merge, perfect matches only)")
     
-    merge_expander = st.expander("≡ƒôï Merge Progress", expanded=True)
+    merge_expander = st.expander("📋 Merge Progress", expanded=True)
     
     # Convert dict to list of (name, df) tuples for easier manipulation
     remaining_datasets = [(name, df.copy()) for name, df in datasets.items()]
@@ -5029,7 +5029,7 @@ def merge_datasets_on_key(
             other_multi = other_df.duplicated(subset=merge_keys).any()
             if base_multi and other_multi:
                 with merge_expander:
-                    st.write(f"ΓÜá∩╕Å Skipping merge {base_name} + {other_name}: "
+                    st.write(f"⚠️ Skipping merge {base_name} + {other_name}: "
                              "both datasets have multiple rows per KEY (would be m:m).")
                 continue
             
@@ -5064,13 +5064,13 @@ def merge_datasets_on_key(
                 match_rate = (len(merged) / min(len(base_df), len(other_df))) * 100
                 
                 with merge_expander:
-                    st.write(f"\nΓ£à **Merge #{merge_counter}**: `{base_name}` + `{other_name}`")
+                    st.write(f"\n✅ **Merge #{merge_counter}**: `{base_name}` + `{other_name}`")
                     st.write(f"   - Matched: {len(merged):,} rows ({match_rate:.1f}% match rate)")
                     st.write(f"   - Unmatched from {base_name}: {base_unmatched:,} rows")
                     st.write(f"   - Unmatched from {other_name}: {other_unmatched:,} rows")
                 
                 # Create merged dataset name
-                merged_name = f"≡ƒöù Merged_{merge_counter}: {base_name} + {other_name}"
+                merged_name = f"🔗 Merged_{merge_counter}: {base_name} + {other_name}"
                 merged_datasets[merged_name] = merged
                 merge_counter += 1
                 
@@ -5095,28 +5095,28 @@ def merge_datasets_on_key(
         if not merged_in_iteration:
             # Move the first dataset to final results as unmerged
             name, df = remaining_datasets.pop(0)
-            merged_datasets[f"≡ƒôä {name}"] = df
+            merged_datasets[f"📄 {name}"] = df
             with merge_expander:
-                st.write(f"\n≡ƒôä **{name}**: No merge partners found - keeping separate ({len(df):,} rows)")
+                st.write(f"\n📄 **{name}**: No merge partners found - keeping separate ({len(df):,} rows)")
     
     # Add any remaining single dataset
     if remaining_datasets:
         name, df = remaining_datasets[0]
-        merged_datasets[f"≡ƒôä {name}"] = df
+        merged_datasets[f"📄 {name}"] = df
         with merge_expander:
-            st.write(f"\n≡ƒôä **{name}**: Last dataset - keeping separate ({len(df):,} rows)")
+            st.write(f"\n📄 **{name}**: Last dataset - keeping separate ({len(df):,} rows)")
     
     # Show final summary
     with merge_expander:
         st.write("\n" + "="*60)
-        st.write("**≡ƒôè Merge Summary:**")
+        st.write("**📊 Merge Summary:**")
         st.write(f"   - Original datasets: {len(datasets)}")
         st.write(f"   - Final datasets: {len(merged_datasets)}")
         st.write(f"   - Merged datasets: {merge_counter - 1}")
-        st.write(f"   - Unmerged datasets: {len([k for k in merged_datasets.keys() if k.startswith('≡ƒôä')])}")
+        st.write(f"   - Unmerged datasets: {len([k for k in merged_datasets.keys() if k.startswith('📄')])}")
     
     total_rows = sum(len(df) for df in merged_datasets.values())
-    st.success(f"Γ£à Merge complete! {len(merged_datasets)} dataset(s) ready for analysis ({total_rows:,} total rows)")
+    st.success(f"✅ Merge complete! {len(merged_datasets)} dataset(s) ready for analysis ({total_rows:,} total rows)")
     
     return merged_datasets
 
@@ -5339,7 +5339,7 @@ def render_data_visualization() -> None:
     - Cross-tabulation
     - Downloadable reports
     """
-    st.title("≡ƒôè Data Visualization & Exploration")
+    st.title("📊 Data Visualization & Exploration")
     st.markdown("""
     Explore your data with automatic wide-to-long reshaping, summary statistics, 
     and interactive visualizations for both numeric and categorical variables.
@@ -5360,7 +5360,7 @@ def render_data_visualization() -> None:
     # ------------------------------------------------------------------------ #
     
     st.markdown("---")
-    st.markdown("### ≡ƒôü Data Source")
+    st.markdown("### 📁 Data Source")
     
     cfg = load_default_config()
     
@@ -5384,7 +5384,7 @@ def render_data_visualization() -> None:
                 data = pd.read_csv(uploaded_file, low_memory=False)
                 # Clean and convert data types
                 data = clean_and_convert_data(data)
-                st.success(f"Γ£ô Loaded {len(data):,} rows and {len(data.columns)} columns")
+                st.success(f"✓ Loaded {len(data):,} rows and {len(data.columns)} columns")
             except Exception as e:
                 st.error(f"Error loading CSV: {e}")
     
@@ -5413,9 +5413,9 @@ def render_data_visualization() -> None:
                 help="Exact form ID (case-sensitive, use underscores not spaces). Find in Form Design > Form IDs."
             )
             
-            st.caption("≡ƒÆí **Tip**: Form IDs are case-sensitive. Use exact form ID from SurveyCTO (e.g., 'ADB_Questionnaire_test', not 'ADB Questionnaire Test')")
+            st.caption("💡 **Tip**: Form IDs are case-sensitive. Use exact form ID from SurveyCTO (e.g., 'ADB_Questionnaire_test', not 'ADB Questionnaire Test')")
             
-            submitted = st.form_submit_button("≡ƒôÑ Fetch Data")
+            submitted = st.form_submit_button("📥 Fetch Data")
             
             if submitted:
                 if not all([server, username, password, form_id]):
@@ -5428,7 +5428,7 @@ def render_data_visualization() -> None:
                             # Clean and convert data types
                             data = clean_and_convert_data(data)
                             st.session_state.viz_data = data.copy()
-                            st.success(f"Γ£ô Fetched {len(data):,} submissions")
+                            st.success(f"✓ Fetched {len(data):,} submissions")
                     except Exception as e:
                         st.error(f"Error fetching data: {e}")
     
@@ -5446,7 +5446,7 @@ def render_data_visualization() -> None:
                     # Clean and convert data types
                     data = clean_and_convert_data(data)
                     st.session_state.viz_data = data.copy()
-                    st.success(f"Γ£ô Loaded {len(data):,} submissions from config")
+                    st.success(f"✓ Loaded {len(data):,} submissions from config")
             except Exception as e:
                 st.error(f"Error loading from config: {e}")
                 st.info("Configure monitoring settings in config/default.yaml or use another data source")
@@ -5458,7 +5458,7 @@ def render_data_visualization() -> None:
         data = st.session_state.viz_data
     
     if data is None or data.empty:
-        st.info("≡ƒæå Please load data to begin exploration")
+        st.info("👆 Please load data to begin exploration")
         return
     
     # ------------------------------------------------------------------------ #
@@ -5466,7 +5466,7 @@ def render_data_visualization() -> None:
     # ------------------------------------------------------------------------ #
     
     st.markdown("---")
-    st.markdown("### ≡ƒöì Data Overview")
+    st.markdown("### 🔍 Data Overview")
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -5479,13 +5479,13 @@ def render_data_visualization() -> None:
         missing_pct = (data.isna().sum().sum() / (len(data) * len(data.columns)) * 100)
         st.metric("Missing %", f"{missing_pct:.1f}%")
     
-    with st.expander("≡ƒôï Data Preview", expanded=False):
+    with st.expander("📋 Data Preview", expanded=False):
         st.dataframe(data.head(20), use_container_width=True)
     
     # SurveyCTO-specific info
     surveycto_cols = [c for c in ['KEY', 'SubmissionDate', 'formdef_version'] if c in data.columns]
     if surveycto_cols:
-        with st.expander("Γä╣∩╕Å SurveyCTO Data Detected", expanded=False):
+        with st.expander("ℹ️ SurveyCTO Data Detected", expanded=False):
             st.markdown("""
             This appears to be SurveyCTO data. Special features detected:
             """)
@@ -5518,7 +5518,7 @@ def render_data_visualization() -> None:
     # ------------------------------------------------------------------------ #
     
     st.markdown("---")
-    st.markdown("### ≡ƒöæ ID Column & Duplicate Check")
+    st.markdown("### 🔑 ID Column & Duplicate Check")
     
     # Detect potential ID columns
     id_candidates = detect_unique_id(data)
@@ -5542,37 +5542,37 @@ def render_data_visualization() -> None:
         st.session_state.viz_id_column = id_col
     
     with col2:
-        check_duplicates = st.button("≡ƒöì Check for Duplicates", key="viz_check_dupes", use_container_width=True)
+        check_duplicates = st.button("🔍 Check for Duplicates", key="viz_check_dupes", use_container_width=True)
     
     if check_duplicates and id_col:
         duplicates = detect_duplicates(data, id_col)
         
         if not duplicates.empty:
-            st.warning(f"ΓÜá∩╕Å Found {len(duplicates)} duplicate rows based on '{id_col}'")
+            st.warning(f"⚠️ Found {len(duplicates)} duplicate rows based on '{id_col}'")
             
             with st.expander("View Duplicates", expanded=True):
                 st.dataframe(duplicates, use_container_width=True)
             
-            if st.button("≡ƒùæ∩╕Å Remove Duplicates (keep first occurrence)", key="viz_remove_dupes"):
+            if st.button("🗑️ Remove Duplicates (keep first occurrence)", key="viz_remove_dupes"):
                 data = data.drop_duplicates(subset=[id_col], keep='first')
                 st.session_state.viz_data = data.copy()
-                st.success(f"Γ£ô Removed duplicates. {len(data):,} rows remaining.")
+                st.success(f"✓ Removed duplicates. {len(data):,} rows remaining.")
                 st.rerun()
         else:
-            st.success(f"Γ£ô No duplicates found in '{id_col}'")
+            st.success(f"✓ No duplicates found in '{id_col}'")
     
     # ------------------------------------------------------------------------ #
     # Wide-to-Long Reshaping
     # ------------------------------------------------------------------------ #
     
     st.markdown("---")
-    st.markdown("### ≡ƒöä Data Reshaping (Wide to Long)")
+    st.markdown("### 🔄 Data Reshaping (Wide to Long)")
     
     st.markdown("""
     Automatically detect and reshape repeated patterns in your data:
-    - `var_1`, `var_2`, ... ΓåÆ Long format with `var` and `repeat` columns
-    - `var1`, `var2`, ... ΓåÆ Same transformation
-    - `var_1_1`, `var_1_2`, ... ΓåÆ Long with `var`, `repeat_1`, `repeat_2`
+    - `var_1`, `var_2`, ... → Long format with `var` and `repeat` columns
+    - `var1`, `var2`, ... → Same transformation
+    - `var_1_1`, `var_1_2`, ... → Long with `var`, `repeat_1`, `repeat_2`
     """)
     
     enable_reshape = st.checkbox("Enable automatic reshaping", value=False, key="enable_reshape")
@@ -5582,11 +5582,11 @@ def render_data_visualization() -> None:
             patterns = detect_wide_patterns(data)
         
         if patterns:
-            st.success(f"Γ£ô Detected {len(patterns)} repeated pattern(s)")
+            st.success(f"✓ Detected {len(patterns)} repeated pattern(s)")
             
             # Special value handling configuration
             st.write("---")
-            st.write("#### ΓÜÖ∩╕Å Special Value Handling")
+            st.write("#### ⚙️ Special Value Handling")
             st.caption("Specify values that represent special responses (will be treated as missing in numeric analysis)")
             
             col1, col2, col3 = st.columns(3)
@@ -5622,13 +5622,13 @@ def render_data_visualization() -> None:
                         pass
             
             if special_values:
-                st.info(f"Γä╣∩╕Å Special values {special_values} will be treated as missing in numeric analysis")
+                st.info(f"ℹ️ Special values {special_values} will be treated as missing in numeric analysis")
             
             st.session_state.viz_special_values = special_values
             
             st.write("---")
             
-            with st.expander("≡ƒöì Detected Patterns", expanded=False):
+            with st.expander("🔍 Detected Patterns", expanded=False):
                 for pattern, cols in patterns.items():
                     st.markdown(f"**Pattern:** `{pattern}`")
                     st.write(f"Columns ({len(cols)}): {', '.join(cols[:10])}" + 
@@ -5645,7 +5645,7 @@ def render_data_visualization() -> None:
             
             # Additional merge option for cross-repeat merging
             st.write("---")
-            st.write("#### ≡ƒöù Cross-Repeat Group Merging")
+            st.write("#### 🔗 Cross-Repeat Group Merging")
             st.caption("Variables from the same repeat structure are automatically merged. This option merges across different repeat structures.")
             
             cross_merge = st.checkbox(
@@ -5655,7 +5655,7 @@ def render_data_visualization() -> None:
                 help="Try to merge datasets from different repeat structures if they have matching KEY values. Use with caution."
             )
             
-            if st.button("Γû╢∩╕Å Apply Reshaping", type="primary", key="viz_apply_reshape"):
+            if st.button("▶️ Apply Reshaping", type="primary", key="viz_apply_reshape"):
                 selected_pattern_cols = {k: v for k, v in patterns.items() if k in selected_patterns}
                 
                 with st.spinner("Reshaping data to long format..."):
@@ -5668,13 +5668,13 @@ def render_data_visualization() -> None:
                     
                     st.session_state.viz_data_reshaped = reshaped_data
                     st.session_state.viz_download_cache = build_reshaped_download_payloads(reshaped_data)
-                    st.success("Γ£à Reshaping complete. Downloads are cached below.")
+                    st.success("✅ Reshaping complete. Downloads are cached below.")
                 else:
                     st.warning("No patterns could be reshaped. Check warnings above.")
 
             current_long = st.session_state.get("viz_data_reshaped")
             if isinstance(current_long, dict) and current_long:
-                st.write("\n### ≡ƒôè Reshaped Datasets Summary")
+                st.write("\n### 📊 Reshaped Datasets Summary")
                 
                 summary_data = []
                 for pattern_name, pattern_df in current_long.items():
@@ -5688,7 +5688,7 @@ def render_data_visualization() -> None:
                 summary_df = pd.DataFrame(summary_data)
                 st.dataframe(summary_df, use_container_width=True, hide_index=True)
                 
-                st.write("\n#### ≡ƒôÑ Download Long Format Datasets")
+                st.write("\n#### 📥 Download Long Format Datasets")
                 st.caption("Excel mirrors SurveyCTO exports (one sheet per repeat). CSV option provides a ZIP with one file per dataset.")
                 
                 download_cache = st.session_state.get("viz_download_cache")
@@ -5700,17 +5700,17 @@ def render_data_visualization() -> None:
                     dl_col1, dl_col2, dl_col3 = st.columns(3)
                     with dl_col1:
                         st.download_button(
-                            label="≡ƒôè Download All Datasets (Excel)",
+                            label="📊 Download All Datasets (Excel)",
                             data=download_cache["excel_bytes"],
                             file_name=download_cache["excel_filename"],
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            help="Cached workbook ΓÇô downloading will not clear analysis results.",
+                            help="Cached workbook – downloading will not clear analysis results.",
                             use_container_width=True,
                             key="viz_download_excel"
                         )
                     with dl_col2:
                         st.download_button(
-                            label="≡ƒôü Download CSV Bundle (ZIP)",
+                            label="📁 Download CSV Bundle (ZIP)",
                             data=download_cache["zip_bytes"],
                             file_name=download_cache["zip_filename"],
                             mime="application/zip",
@@ -5727,7 +5727,7 @@ def render_data_visualization() -> None:
                             id_col
                         )
                         st.download_button(
-                            label="≡ƒô£ Download Stata Do-File",
+                            label="📜 Download Stata Do-File",
                             data=stata_dofile,
                             file_name=f"reshape_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.do",
                             mime="text/plain",
@@ -5735,13 +5735,13 @@ def render_data_visualization() -> None:
                             use_container_width=True,
                             key="viz_download_stata"
                         )
-                    st.caption("≡ƒôÄ Downloads remain available after clicking. No need to rerun reshaping.")
+                    st.caption("📎 Downloads remain available after clicking. No need to rerun reshaping.")
         else:
             st.info("No repeated patterns detected in column names")
     
     # Multi-dataset analysis - analyze all datasets simultaneously
     st.markdown("---")
-    st.markdown("### ≡ƒôè Dataset Analysis")
+    st.markdown("### 📊 Dataset Analysis")
     
     # Check if long format datasets are available
     has_long_format = (st.session_state.viz_data_reshaped is not None and 
@@ -5752,14 +5752,14 @@ def render_data_visualization() -> None:
     if has_long_format:
         # Analyze ALL long format datasets by default
         datasets_to_analyze = st.session_state.viz_data_reshaped
-        st.info(f"≡ƒôè Analyzing **{len(datasets_to_analyze)} long-format dataset(s)** simultaneously (SurveyCTO style - each pattern separate)")
-        st.caption("≡ƒÆí Each dataset shown below with its own summary statistics. Toggle expanders to view details.")
+        st.info(f"📊 Analyzing **{len(datasets_to_analyze)} long-format dataset(s)** simultaneously (SurveyCTO style - each pattern separate)")
+        st.caption("💡 Each dataset shown below with its own summary statistics. Toggle expanders to view details.")
         analyze_mode = "multi"
     else:
         # Only wide format available
         datasets_to_analyze = {"Wide Format (original)": data}
-        st.info(f"≡ƒôï Analyzing **wide format**: {len(data):,} rows ├ù {len(data.columns)} columns")
-        st.caption("≡ƒÆí Enable reshaping above to create long-format datasets for repeat group analysis")
+        st.info(f"📋 Analyzing **wide format**: {len(data):,} rows × {len(data.columns)} columns")
+        st.caption("💡 Enable reshaping above to create long-format datasets for repeat group analysis")
         analyze_mode = "single"
     
     # ------------------------------------------------------------------------ #
@@ -5767,12 +5767,12 @@ def render_data_visualization() -> None:
     # ------------------------------------------------------------------------ #
     
     st.markdown("---")
-    st.markdown("### ≡ƒôè Summary Statistics for All Datasets")
+    st.markdown("### 📊 Summary Statistics for All Datasets")
     
     special_vals = st.session_state.get('viz_special_values', [-999, -888, -666])
     
     # Global filter settings (apply to all datasets)
-    st.write("#### ≡ƒÄ¢∩╕Å Global Filters (applies to all datasets)")
+    st.write("#### 🎛️ Global Filters (applies to all datasets)")
     col1, col2 = st.columns(2)
     
     with col1:
@@ -5784,7 +5784,7 @@ def render_data_visualization() -> None:
         )
     
     with col2:
-        search_term = st.text_input("≡ƒöì Search variables by name", key="var_search", placeholder="Enter variable name...")
+        search_term = st.text_input("🔍 Search variables by name", key="var_search", placeholder="Enter variable name...")
     
     # ------------------------------------------------------------------------ #
     # Multi-Dataset Analysis Sections
@@ -5792,7 +5792,7 @@ def render_data_visualization() -> None:
     
     # Analyze each dataset in expandable sections
     for idx, (dataset_name, working_data) in enumerate(datasets_to_analyze.items()):
-        with st.expander(f"≡ƒôè **{dataset_name}** ({len(working_data):,} rows ├ù {len(working_data.columns)} cols)", expanded=(idx == 0)):
+        with st.expander(f"📊 **{dataset_name}** ({len(working_data):,} rows × {len(working_data.columns)} cols)", expanded=(idx == 0)):
             
             # Classify variables for this dataset
             var_types = classify_variables(working_data, max_unique_for_categorical=20, special_values=special_vals)
@@ -5823,9 +5823,9 @@ def render_data_visualization() -> None:
             
             # Tabs for different analysis types
             tab1, tab2, tab3 = st.tabs([
-                "≡ƒôê Numeric Summary",
-                "≡ƒôè Data Preview",
-                "≡ƒôï Variable List"
+                "📈 Numeric Summary",
+                "📊 Data Preview",
+                "📋 Variable List"
             ])
             
             # TAB 1: Numeric Summary
@@ -5859,12 +5859,12 @@ def render_data_visualization() -> None:
                             hide_index=True
                         )
                         if special_vals:
-                            st.caption(f"Γä╣∩╕Å Statistics exclude special values {special_vals}")
+                            st.caption(f"ℹ️ Statistics exclude special values {special_vals}")
                         
                         # Download button
                         csv = summary_df.to_csv(index=False)
                         st.download_button(
-                            "≡ƒôÑ Download Summary (CSV)",
+                            "📥 Download Summary (CSV)",
                             csv,
                             f"{dataset_name}_summary.csv",
                             "text/csv",
@@ -5895,13 +5895,13 @@ def render_data_visualization() -> None:
     
     # Global download section for all datasets
     st.markdown("---")
-    st.markdown("### ≡ƒôÑ Download All Summaries")
+    st.markdown("### 📥 Download All Summaries")
     
     col1, col2 = st.columns(2)
     
     with col1:
         # Download all numeric summaries combined
-        if st.button("≡ƒôè Download All Numeric Summaries (Excel)", use_container_width=True):
+        if st.button("📊 Download All Numeric Summaries (Excel)", use_container_width=True):
             from io import BytesIO
             excel_buffer = BytesIO()
             
@@ -5917,7 +5917,7 @@ def render_data_visualization() -> None:
             
             excel_data = excel_buffer.getvalue()
             st.download_button(
-                "Γ¼ç∩╕Å Download",
+                "⬇️ Download",
                 excel_data,
                 f"all_numeric_summaries_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -5926,11 +5926,11 @@ def render_data_visualization() -> None:
     
     with col2:
         # Info about download
-        st.info("≡ƒÆí Excel file contains one sheet per dataset with all numeric variable summaries")
+        st.info("💡 Excel file contains one sheet per dataset with all numeric variable summaries")
 
 
 def render_quality_checks() -> None:
-    st.title("Γ£à Quality Checks")
+    st.title("✅ Quality Checks")
     st.markdown("Apply duration, duplicate, outlier, and intervention checks to submission data.")
 
     cfg = load_default_config()
@@ -5998,16 +5998,16 @@ def render_quality_checks() -> None:
     df = data
     
     # Show data preview
-    with st.expander("≡ƒôï Data Preview", expanded=False):
+    with st.expander("📋 Data Preview", expanded=False):
         st.dataframe(df.head(10), use_container_width=True)
-        st.write(f"**Shape:** {df.shape[0]} rows ├ù {df.shape[1]} columns")
+        st.write(f"**Shape:** {df.shape[0]} rows × {df.shape[1]} columns")
     
     # Get column lists for interactive configuration (after data is loaded)
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     all_cols = df.columns.tolist()
     
     # Show column information
-    with st.expander("Γä╣∩╕Å Column Information", expanded=False):
+    with st.expander("ℹ️ Column Information", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
             st.write(f"**Numeric columns ({len(numeric_cols)}):**")
@@ -6077,9 +6077,9 @@ def render_quality_checks() -> None:
         # Configuration tabs
         tab1, tab2, tab3, tab4 = st.tabs([
             " Outlier Detection",
-            "ΓÅ▒∩╕Å Duration Checks",
-            "≡ƒæÑ Duplicate Detection",
-            "Γ£à Intervention Fidelity"
+            "⏱️ Duration Checks",
+            "👥 Duplicate Detection",
+            "✅ Intervention Fidelity"
         ])
         
         # Tab 1: Outlier Detection
@@ -6087,8 +6087,8 @@ def render_quality_checks() -> None:
             st.markdown("**Detect outliers in numeric variables using IQR or standard deviation methods**")
             
             # Reshape option
-            with st.expander("≡ƒöä Reshape repeated measures (Wide to Long)", expanded=False):
-                st.info("≡ƒôï **Example:** `icm_hr_worked_7d_1`, `icm_hr_worked_7d_2`, `icm_hr_worked_7d_3` ΓåÆ `icm_hr_worked_7d`")
+            with st.expander("🔄 Reshape repeated measures (Wide to Long)", expanded=False):
+                st.info("📋 **Example:** `icm_hr_worked_7d_1`, `icm_hr_worked_7d_2`, `icm_hr_worked_7d_3` → `icm_hr_worked_7d`")
                 
                 enable_reshape = st.checkbox(
                     "Enable data reshaping before outlier detection",
@@ -6116,7 +6116,7 @@ def render_quality_checks() -> None:
                     potential_patterns = {k: v for k, v in potential_patterns.items() if len(v) > 1}
                     
                     if potential_patterns:
-                        st.success(f"≡ƒöì Found {len(potential_patterns)} potential reshape patterns")
+                        st.success(f"🔍 Found {len(potential_patterns)} potential reshape patterns")
                         
                         # Show detected patterns in an expander
                         with st.expander("View detected patterns", expanded=False):
@@ -6154,7 +6154,7 @@ def render_quality_checks() -> None:
                         base_name = manual_pattern.replace("_*", "").replace("*", "")
                         if base_name not in selected_patterns:
                             selected_patterns.append(base_name)
-                            st.success(f"Γ£à Added pattern: {base_name}")
+                            st.success(f"✅ Added pattern: {base_name}")
                     
                     # Key columns for reshaping
                     if selected_patterns:
@@ -6168,7 +6168,7 @@ def render_quality_checks() -> None:
                         )
                         
                         if id_cols:
-                            if st.button("≡ƒöä Apply Reshape", type="primary", key="apply_reshape_btn"):
+                            if st.button("🔄 Apply Reshape", type="primary", key="apply_reshape_btn"):
                                 with st.spinner("Reshaping data..."):
                                     try:
                                         reshaped_dfs = []
@@ -6195,7 +6195,7 @@ def render_quality_checks() -> None:
                                                 
                                                 reshaped_dfs.append(melted)
                                                 
-                                                st.success(f"Γ£à Reshaped {len(matching_cols)} columns for '{pattern}' ΓåÆ {len(melted)} observations")
+                                                st.success(f"✅ Reshaped {len(matching_cols)} columns for '{pattern}' → {len(melted)} observations")
                                         
                                         if reshaped_dfs:
                                             # Merge all reshaped dataframes
@@ -6215,17 +6215,17 @@ def render_quality_checks() -> None:
                                             st.session_state['reshaped_data'] = reshaped_data
                                             st.session_state['reshaped_patterns'] = selected_patterns
                                             
-                                            st.success(f"≡ƒôè Reshaped dataset: {len(reshaped_data)} rows ├ù {len(reshaped_data.columns)} columns")
+                                            st.success(f"📊 Reshaped dataset: {len(reshaped_data)} rows × {len(reshaped_data.columns)} columns")
                                             
                                             with st.expander("Preview reshaped data", expanded=True):
                                                 st.dataframe(reshaped_data.head(20), use_container_width=True)
                                     
                                     except Exception as e:
-                                        st.error(f"Γ¥î Error during reshaping: {e}")
+                                        st.error(f"❌ Error during reshaping: {e}")
                                         if 'reshaped_data' in st.session_state:
                                             del st.session_state['reshaped_data']
                         else:
-                            st.warning("ΓÜá∩╕Å Please select at least one ID column for reshaping")
+                            st.warning("⚠️ Please select at least one ID column for reshaping")
             
             st.divider()
             
@@ -6236,9 +6236,9 @@ def render_quality_checks() -> None:
                 
                 col1, col2 = st.columns([4, 1])
                 with col1:
-                    st.info(f"Γ£¿ **Using reshaped data** ({len(reshaped_data)} observations). Reshaped variables: {', '.join(reshaped_patterns)}")
+                    st.info(f"✨ **Using reshaped data** ({len(reshaped_data)} observations). Reshaped variables: {', '.join(reshaped_patterns)}")
                 with col2:
-                    if st.button("≡ƒöä Reset", help="Clear reshape and use original data", key="clear_reshape_btn"):
+                    if st.button("🔄 Reset", help="Clear reshape and use original data", key="clear_reshape_btn"):
                         del st.session_state['reshaped_data']
                         if 'reshaped_patterns' in st.session_state:
                             del st.session_state['reshaped_patterns']
@@ -6253,7 +6253,7 @@ def render_quality_checks() -> None:
                 other_var_options = []
                 for col in (available_all_cols if not available_numeric_cols else available_numeric_cols):
                     if col in reshaped_patterns:
-                        reshaped_var_options.append(f"≡ƒôè {col} (reshaped)")
+                        reshaped_var_options.append(f"📊 {col} (reshaped)")
                     else:
                         other_var_options.append(col)
                 
@@ -6262,8 +6262,8 @@ def render_quality_checks() -> None:
             else:
                 # Use original data
                 if not numeric_cols:
-                    st.warning("ΓÜá∩╕Å No numeric columns automatically detected. Select columns manually below.")
-                    st.info("≡ƒÆí **Tip:** Columns may need to be converted to numeric. The tool will attempt automatic conversion.")
+                    st.warning("⚠️ No numeric columns automatically detected. Select columns manually below.")
+                    st.info("💡 **Tip:** Columns may need to be converted to numeric. The tool will attempt automatic conversion.")
                 
                 outlier_var_options = all_cols if not numeric_cols else numeric_cols
             
@@ -6275,7 +6275,7 @@ def render_quality_checks() -> None:
             )
             
             # Clean up outlier_vars to remove formatting
-            outlier_vars = [var.replace("≡ƒôè ", "").replace(" (reshaped)", "") for var in outlier_vars]
+            outlier_vars = [var.replace("📊 ", "").replace(" (reshaped)", "") for var in outlier_vars]
             
             col1, col2 = st.columns(2)
             
@@ -6283,7 +6283,7 @@ def render_quality_checks() -> None:
                 outlier_method = st.selectbox(
                     "Detection method",
                     ["IQR", "Standard Deviation"],
-                    help="IQR: Q1/Q3 ┬▒ threshold├ùIQR | SD: mean ┬▒ threshold├ùSD",
+                    help="IQR: Q1/Q3 ± threshold×IQR | SD: mean ± threshold×SD",
                     key="outlier_method"
                 )
             
@@ -6309,8 +6309,8 @@ def render_quality_checks() -> None:
             st.markdown("**Flag surveys that are too fast or too slow**")
             
             if not numeric_cols:
-                st.warning("ΓÜá∩╕Å No numeric columns automatically detected. Select column manually below.")
-                st.info("≡ƒÆí **Tip:** Duration column should contain numeric values (seconds or minutes).")
+                st.warning("⚠️ No numeric columns automatically detected. Select column manually below.")
+                st.info("💡 **Tip:** Duration column should contain numeric values (seconds or minutes).")
             
             duration_col = st.selectbox(
                 "Duration column",
@@ -6362,7 +6362,7 @@ def render_quality_checks() -> None:
             
             if check_gps_dups:
                 if not numeric_cols:
-                    st.warning("ΓÜá∩╕Å GPS columns should be numeric (latitude/longitude coordinates)")
+                    st.warning("⚠️ GPS columns should be numeric (latitude/longitude coordinates)")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     lat_col = st.selectbox("Latitude", ["None"] + (all_cols if not numeric_cols else numeric_cols), key="lat_col")
@@ -6396,7 +6396,7 @@ def render_quality_checks() -> None:
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            run_checks = st.button("Γû╢∩╕Å Run Quality Checks", type="primary", use_container_width=True)
+            run_checks = st.button("▶️ Run Quality Checks", type="primary", use_container_width=True)
         with col2:
             group_results_by = st.selectbox("Group by", ["None"] + all_cols)
         
@@ -6405,7 +6405,7 @@ def render_quality_checks() -> None:
             # Use reshaped data if available, otherwise use original
             if 'reshaped_data' in st.session_state:
                 working_df = st.session_state['reshaped_data'].copy()
-                st.info(f"Γ£¿ Running checks on reshaped data ({len(working_df)} observations)")
+                st.info(f"✨ Running checks on reshaped data ({len(working_df)} observations)")
             else:
                 working_df = df.copy()
             
@@ -6417,19 +6417,19 @@ def render_quality_checks() -> None:
                     for var in outlier_vars:
                         # Check if variable exists in working dataframe
                         if var not in working_df.columns:
-                            st.warning(f"ΓÜá∩╕Å Column '{var}' not found in dataset. Skipping...")
+                            st.warning(f"⚠️ Column '{var}' not found in dataset. Skipping...")
                             continue
                         
                         # Try to convert to numeric
                         try:
                             working_df[var] = pd.to_numeric(working_df[var], errors='coerce')
                         except Exception:
-                            st.warning(f"ΓÜá∩╕Å Could not convert '{var}' to numeric. Skipping...")
+                            st.warning(f"⚠️ Could not convert '{var}' to numeric. Skipping...")
                             continue
                         
                         # Check if we have numeric values after conversion
                         if not pd.api.types.is_numeric_dtype(working_df[var]):
-                            st.warning(f"ΓÜá∩╕Å Column '{var}' does not contain numeric values. Skipping...")
+                            st.warning(f"⚠️ Column '{var}' does not contain numeric values. Skipping...")
                             continue
                         
                         if group_by_outlier != "None":
@@ -6486,18 +6486,18 @@ def render_quality_checks() -> None:
             if duration_col != "None":
                 with st.spinner("Checking survey duration..."):
                     if duration_col not in working_df.columns:
-                        st.error(f"Γ¥î Column '{duration_col}' not found in dataset.")
+                        st.error(f"❌ Column '{duration_col}' not found in dataset.")
                         st.stop()
                     
                     # Try to convert to numeric
                     try:
                         working_df[duration_col] = pd.to_numeric(working_df[duration_col], errors='coerce')
                     except Exception:
-                        st.error(f"Γ¥î Could not convert '{duration_col}' to numeric. Please select a numeric column.")
+                        st.error(f"❌ Could not convert '{duration_col}' to numeric. Please select a numeric column.")
                         st.stop()
                     
                     if not pd.api.types.is_numeric_dtype(working_df[duration_col]):
-                        st.error(f"Γ¥î Column '{duration_col}' does not contain numeric values. Please select a different column.")
+                        st.error(f"❌ Column '{duration_col}' does not contain numeric values. Please select a different column.")
                         st.stop()
                     
                     durations = working_df[duration_col].copy()
@@ -6561,7 +6561,7 @@ def render_quality_checks() -> None:
                         })
             
             # Display results
-            st.success(f"Γ£à Quality checks complete! Found {len(flagged_records)} issues.")
+            st.success(f"✅ Quality checks complete! Found {len(flagged_records)} issues.")
             
             if flagged_records:
                 flagged_df = pd.DataFrame(flagged_records)
@@ -6592,14 +6592,14 @@ def render_quality_checks() -> None:
                 # Download button
                 csv = flagged_df.to_csv(index=False)
                 st.download_button(
-                    "≡ƒôÑ Download Flagged Cases",
+                    "📥 Download Flagged Cases",
                     csv,
                     "flagged_cases.csv",
                     "text/csv",
                     key='download-flagged'
                 )
             else:
-                st.info("Γ£¿ No issues found! All data passed quality checks.")
+                st.info("✨ No issues found! All data passed quality checks.")
 
 
 # ----------------------------------------------------------------------------- #
@@ -6608,7 +6608,7 @@ def render_quality_checks() -> None:
 
 
 def render_analysis() -> None:
-    st.title("≡ƒôè Analysis & Results")
+    st.title("📊 Analysis & Results")
     st.markdown("Run statistical analysis on your endline data with interactive configuration.")
     
     # Initialize session state for analysis
@@ -6618,7 +6618,7 @@ def render_analysis() -> None:
         st.session_state.baseline_for_attrition: pd.DataFrame | None = None
     
     # Data source tabs
-    tab1, tab2, tab3 = st.tabs(["≡ƒôü Upload Endline Data", "≡ƒôè Attrition Analysis", "Γä╣∩╕Å Help"])
+    tab1, tab2, tab3 = st.tabs(["📁 Upload Endline Data", "📊 Attrition Analysis", "ℹ️ Help"])
     
     with tab1:
         st.markdown("#### Load Endline/Follow-up Data")
@@ -6642,7 +6642,7 @@ def render_analysis() -> None:
             if upload:
                 df = pd.read_csv(upload)
                 st.session_state.analysis_data = df
-                st.success(f"Γ£à Loaded {len(df):,} observations with {len(df.columns)} variables.")
+                st.success(f"✅ Loaded {len(df):,} observations with {len(df.columns)} variables.")
         else:
             # SurveyCTO API
             col1, col2 = st.columns(2)
@@ -6653,7 +6653,7 @@ def render_analysis() -> None:
                 password = st.text_input("Password", type="password", key="analysis_api_pass")
                 form_id = st.text_input("Form ID", key="analysis_api_form")
             
-            if st.button("≡ƒôÑ Fetch from SurveyCTO", key="analysis_fetch"):
+            if st.button("📥 Fetch from SurveyCTO", key="analysis_fetch"):
                 if not all([server, username, password, form_id]):
                     st.error("All fields are required.")
                 else:
@@ -6661,20 +6661,20 @@ def render_analysis() -> None:
                         client = SurveyCTO(server=server, username=username, password=password)
                         df = client.get_submissions(form_id)
                         st.session_state.analysis_data = df
-                        st.success(f"Γ£à Fetched {len(df):,} observations from SurveyCTO.")
+                        st.success(f"✅ Fetched {len(df):,} observations from SurveyCTO.")
                     except Exception as exc:
                         st.error(f"Failed to fetch data: {exc}")
         
         df = st.session_state.analysis_data
         
         if df is not None and not df.empty:
-            st.markdown("#### ≡ƒôè Data Preview")
+            st.markdown("#### 📊 Data Preview")
             st.dataframe(df.head(10), use_container_width=True)
-            st.caption(f"Showing 10 of {len(df):,} rows ΓÇó {len(df.columns)} columns")
+            st.caption(f"Showing 10 of {len(df):,} rows • {len(df.columns)} columns")
             
             # Analysis configuration
             st.markdown("---")
-            st.markdown("### ΓÜÖ∩╕Å Analysis Configuration")
+            st.markdown("### ⚙️ Analysis Configuration")
             
             available_cols = df.columns.tolist()
             numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
@@ -6745,7 +6745,7 @@ def render_analysis() -> None:
                     else:
                         moderator = None
                 
-                submit = st.form_submit_button("≡ƒö¼ Run Analysis", type="primary", use_container_width=True)
+                submit = st.form_submit_button("🔬 Run Analysis", type="primary", use_container_width=True)
             
             if submit:
                 if not outcomes:
@@ -6759,11 +6759,11 @@ def render_analysis() -> None:
                     )
                     
                     st.markdown("---")
-                    st.markdown("## ≡ƒôê Results")
+                    st.markdown("## 📈 Results")
                     
                     # Balance table
                     if run_balance and covariates:
-                        st.markdown("### ΓÜû∩╕Å Balance Table")
+                        st.markdown("### ⚖️ Balance Table")
                         st.markdown("Check if covariates are balanced across treatment arms.")
                         
                         balance_results = []
@@ -6782,7 +6782,7 @@ def render_analysis() -> None:
                                                 "Parameter": param,
                                                 "Coefficient": result.params[param],
                                                 "P-value": p_value,
-                                                "Balanced": "Γ£ô" if p_value > 0.05 else "Γ£ù"
+                                                "Balanced": "✓" if p_value > 0.05 else "✗"
                                             })
                                 except Exception as e:
                                     st.warning(f"Could not test balance for {cov}: {e}")
@@ -6791,15 +6791,15 @@ def render_analysis() -> None:
                             balance_df = pd.DataFrame(balance_results)
                             st.dataframe(balance_df, use_container_width=True)
                             
-                            imbalanced = balance_df[balance_df["Balanced"] == "Γ£ù"]
+                            imbalanced = balance_df[balance_df["Balanced"] == "✗"]
                             if len(imbalanced) > 0:
-                                st.warning(f"ΓÜá∩╕Å {len(imbalanced)} covariate(s) show significant imbalance (p < 0.05)")
+                                st.warning(f"⚠️ {len(imbalanced)} covariate(s) show significant imbalance (p < 0.05)")
                             else:
-                                st.success("Γ£à All covariates are balanced across treatment arms")
+                                st.success("✅ All covariates are balanced across treatment arms")
                     
                     # Average Treatment Effects
                     if run_ate:
-                        st.markdown("### ≡ƒôè Average Treatment Effects (ATE)")
+                        st.markdown("### 📊 Average Treatment Effects (ATE)")
                         
                         all_results = []
                         
@@ -6860,7 +6860,7 @@ def render_analysis() -> None:
                         # Export all results
                         if all_results:
                             st.markdown("---")
-                            st.markdown("### ≡ƒôÑ Download Results")
+                            st.markdown("### 📥 Download Results")
                             
                             results_export = pd.DataFrame(all_results)
                             
@@ -6868,7 +6868,7 @@ def render_analysis() -> None:
                             with col1:
                                 csv = results_export.to_csv(index=False)
                                 st.download_button(
-                                    "≡ƒôÑ Download as CSV",
+                                    "📥 Download as CSV",
                                     csv,
                                     "ate_results.csv",
                                     "text/csv",
@@ -6881,7 +6881,7 @@ def render_analysis() -> None:
                                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                                     results_export.to_excel(writer, index=False, sheet_name='ATE Results')
                                 st.download_button(
-                                    "≡ƒôÑ Download as Excel",
+                                    "📥 Download as Excel",
                                     buffer.getvalue(),
                                     "ate_results.xlsx",
                                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -6890,7 +6890,7 @@ def render_analysis() -> None:
                     
                     # Heterogeneity Analysis
                     if run_heterogeneity and moderator:
-                        st.markdown("### ≡ƒöì Heterogeneity Analysis")
+                        st.markdown("### 🔍 Heterogeneity Analysis")
                         st.markdown(f"Treatment effects by **{moderator}**")
                         
                         for outcome in outcomes:
@@ -6926,7 +6926,7 @@ def render_analysis() -> None:
                                     # Interpretation
                                     sig_interactions = [d for d in interaction_data if d["Significance"]]
                                     if sig_interactions:
-                                        st.info(f"≡ƒÆí Found {len(sig_interactions)} significant interaction effect(s). "
+                                        st.info(f"💡 Found {len(sig_interactions)} significant interaction effect(s). "
                                                f"Treatment effects differ by {moderator}.")
                                     else:
                                         st.info(f"No significant heterogeneity found by {moderator}.")
@@ -6937,10 +6937,10 @@ def render_analysis() -> None:
                                 st.error(f"Error in heterogeneity analysis for {outcome}: {e}")
         
         else:
-            st.info("≡ƒæå Upload endline data or fetch from SurveyCTO to begin analysis.")
+            st.info("👆 Upload endline data or fetch from SurveyCTO to begin analysis.")
     
     with tab2:
-        st.markdown("### ≡ƒôë Attrition Analysis")
+        st.markdown("### 📉 Attrition Analysis")
         st.markdown("Compare baseline enrollment with endline completion to calculate attrition rates.")
         
         col1, col2 = st.columns(2)
@@ -6956,12 +6956,12 @@ def render_analysis() -> None:
             if baseline_upload:
                 baseline = pd.read_csv(baseline_upload)
                 st.session_state.baseline_for_attrition = baseline
-                st.success(f"Γ£à Loaded {len(baseline):,} baseline observations")
+                st.success(f"✅ Loaded {len(baseline):,} baseline observations")
         
         with col2:
             st.markdown("#### Endline Data")
             if st.session_state.analysis_data is not None:
-                st.success(f"Γ£à Using loaded endline data ({len(st.session_state.analysis_data):,} obs)")
+                st.success(f"✅ Using loaded endline data ({len(st.session_state.analysis_data):,} obs)")
             else:
                 st.info("Load endline data in the first tab")
         
@@ -6991,12 +6991,12 @@ def render_analysis() -> None:
                     key="attrition_treatment_col"
                 )
             
-            if st.button("≡ƒôè Calculate Attrition", type="primary"):
+            if st.button("📊 Calculate Attrition", type="primary"):
                 try:
                     attrition_df = attrition_table(baseline, endline, id_col, treatment_col)
                     
                     st.markdown("---")
-                    st.markdown("### ≡ƒôè Attrition Results")
+                    st.markdown("### 📊 Attrition Results")
                     
                     # Format the table
                     attrition_df['attrition_rate'] = (attrition_df['rate'] * 100).round(2).astype(str) + '%'
@@ -7023,22 +7023,22 @@ def render_analysis() -> None:
                     
                     # Interpretation
                     if overall_attrition > 20:
-                        st.warning(f"ΓÜá∩╕Å High attrition rate ({overall_attrition:.1f}%). Consider sensitivity analyses.")
+                        st.warning(f"⚠️ High attrition rate ({overall_attrition:.1f}%). Consider sensitivity analyses.")
                     elif overall_attrition > 10:
-                        st.info(f"Γä╣∩╕Å Moderate attrition rate ({overall_attrition:.1f}%). Check for differential attrition.")
+                        st.info(f"ℹ️ Moderate attrition rate ({overall_attrition:.1f}%). Check for differential attrition.")
                     else:
-                        st.success(f"Γ£à Low attrition rate ({overall_attrition:.1f}%).")
+                        st.success(f"✅ Low attrition rate ({overall_attrition:.1f}%).")
                     
                     # Check differential attrition
                     if len(attrition_df) > 1:
                         diff = max_attrition - min_attrition
                         if diff > 5:
-                            st.warning(f"ΓÜá∩╕Å Differential attrition detected: {diff:.1f} percentage point difference between arms.")
+                            st.warning(f"⚠️ Differential attrition detected: {diff:.1f} percentage point difference between arms.")
                     
                     # Download
                     csv = display_df.to_csv(index=False)
                     st.download_button(
-                        "≡ƒôÑ Download Attrition Table",
+                        "📥 Download Attrition Table",
                         csv,
                         "attrition_analysis.csv",
                         "text/csv"
@@ -7047,10 +7047,10 @@ def render_analysis() -> None:
                 except Exception as e:
                     st.error(f"Error calculating attrition: {e}")
         else:
-            st.info("≡ƒÆí Upload both baseline and endline data to calculate attrition rates.")
+            st.info("💡 Upload both baseline and endline data to calculate attrition rates.")
     
     with tab3:
-        st.markdown("### Γä╣∩╕Å Analysis Guide")
+        st.markdown("### ℹ️ Analysis Guide")
         
         st.markdown("""
         #### Average Treatment Effects (ATE)
@@ -7105,7 +7105,7 @@ def render_analysis() -> None:
 
 
 def render_backcheck() -> None:
-    st.title("≡ƒöì Backcheck Selection")
+    st.title("🔍 Backcheck Selection")
     st.markdown("Select cases for quality backcheck interviews using stratified sampling.")
     
     # Initialize session state
@@ -7115,7 +7115,7 @@ def render_backcheck() -> None:
         st.session_state.backcheck_flags: pd.DataFrame | None = None
     
     # Data loading
-    st.markdown("### ≡ƒôü Load Data")
+    st.markdown("### 📁 Load Data")
     
     col1, col2 = st.columns(2)
     
@@ -7130,7 +7130,7 @@ def render_backcheck() -> None:
         if submissions_upload:
             df = pd.read_csv(submissions_upload)
             st.session_state.backcheck_data = df
-            st.success(f"Γ£à Loaded {len(df):,} submissions")
+            st.success(f"✅ Loaded {len(df):,} submissions")
     
     with col2:
         st.markdown("#### Quality Flags (Optional)")
@@ -7143,19 +7143,19 @@ def render_backcheck() -> None:
         if flags_upload:
             flags = pd.read_csv(flags_upload)
             st.session_state.backcheck_flags = flags
-            st.success(f"Γ£à Loaded flags for {len(flags):,} submissions")
+            st.success(f"✅ Loaded flags for {len(flags):,} submissions")
         else:
-            st.info("≡ƒÆí Upload quality flags to prioritize high-risk cases for backchecks")
+            st.info("💡 Upload quality flags to prioritize high-risk cases for backchecks")
     
     df = st.session_state.backcheck_data
     flags = st.session_state.backcheck_flags
     
     if df is None:
-        st.info("≡ƒæå Upload submissions data to begin backcheck selection.")
+        st.info("👆 Upload submissions data to begin backcheck selection.")
         return
     
     st.markdown("---")
-    st.markdown("### ΓÜÖ∩╕Å Backcheck Configuration")
+    st.markdown("### ⚙️ Backcheck Configuration")
     
     available_cols = df.columns.tolist()
     
@@ -7233,7 +7233,7 @@ def render_backcheck() -> None:
             help="Other columns to include (e.g., enumerator, date, treatment)"
         )
         
-        submit = st.form_submit_button("≡ƒÄ▓ Generate Backcheck Roster", type="primary", use_container_width=True)
+        submit = st.form_submit_button("🎲 Generate Backcheck Roster", type="primary", use_container_width=True)
     
     if submit:
         # Create configuration
@@ -7265,7 +7265,7 @@ def render_backcheck() -> None:
                         )
             
             st.markdown("---")
-            st.markdown("### Γ£à Backcheck Roster Generated")
+            st.markdown("### ✅ Backcheck Roster Generated")
             
             # Summary statistics
             col1, col2, col3 = st.columns(3)
@@ -7279,12 +7279,12 @@ def render_backcheck() -> None:
                 st.metric("Random Cases", random_count)
             
             # Show roster
-            st.markdown("#### ≡ƒôï Backcheck Roster")
+            st.markdown("#### 📋 Backcheck Roster")
             st.dataframe(backcheck_roster, use_container_width=True)
             
             # Risk score distribution
             if 'risk_score' in backcheck_roster.columns:
-                st.markdown("#### ≡ƒôè Risk Score Distribution")
+                st.markdown("#### 📊 Risk Score Distribution")
                 risk_summary = backcheck_roster['risk_score'].describe()
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -7299,14 +7299,14 @@ def render_backcheck() -> None:
             
             # Download options
             st.markdown("---")
-            st.markdown("### ≡ƒôÑ Download Roster")
+            st.markdown("### 📥 Download Roster")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 csv = backcheck_roster.to_csv(index=False)
                 st.download_button(
-                    "≡ƒôÑ Download as CSV",
+                    "📥 Download as CSV",
                     csv,
                     "backcheck_roster.csv",
                     "text/csv",
@@ -7319,7 +7319,7 @@ def render_backcheck() -> None:
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     backcheck_roster.to_excel(writer, index=False, sheet_name='Backcheck Roster')
                 st.download_button(
-                    "≡ƒôÑ Download as Excel",
+                    "📥 Download as Excel",
                     buffer.getvalue(),
                     "backcheck_roster.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -7328,7 +7328,7 @@ def render_backcheck() -> None:
             
             # Instructions
             st.markdown("---")
-            st.markdown("### ≡ƒô¥ Next Steps")
+            st.markdown("### 📝 Next Steps")
             st.info("""
             **Using the Backcheck Roster:**
             
@@ -7353,7 +7353,7 @@ def render_backcheck() -> None:
 
 def render_facilitator_dashboard() -> None:
     """Render the facilitator dashboard for monitoring team progress."""
-    st.title("≡ƒæ¿ΓÇì≡ƒÅ½ Facilitator Dashboard")
+    st.title("👨‍🏫 Facilitator Dashboard")
     st.markdown("Monitor team progress and provide guidance during the RCT Design Activity workshop.")
     
     # Password protection
@@ -7371,16 +7371,16 @@ def render_facilitator_dashboard() -> None:
             if submit:
                 if password == "facilitator2025":  # Default password
                     st.session_state.facilitator_authenticated = True
-                    st.success("Γ£à Access granted!")
+                    st.success("✅ Access granted!")
                     st.rerun()
                 else:
-                    st.error("Γ¥î Incorrect password")
+                    st.error("❌ Incorrect password")
         return
     
     # Authenticated - show dashboard
-    st.success("Γ£à Authenticated as facilitator")
+    st.success("✅ Authenticated as facilitator")
     
-    if st.button("≡ƒöÆ Logout", key="facilitator_logout"):
+    if st.button("🔒 Logout", key="facilitator_logout"):
         st.session_state.facilitator_authenticated = False
         st.rerun()
     
@@ -7390,7 +7390,7 @@ def render_facilitator_dashboard() -> None:
     progress_file = Path(__file__).parent / "rct-design" / "data" / "team_progress.json"
     
     if not progress_file.exists():
-        st.warning("≡ƒôè No team progress data yet. Teams will appear here once they start the activity.")
+        st.warning("📊 No team progress data yet. Teams will appear here once they start the activity.")
         st.info("**Instructions:**\n- Teams enter their names in the sidebar\n- Progress is automatically tracked\n- Refresh this page to see updates")
         return
     
@@ -7402,11 +7402,11 @@ def render_facilitator_dashboard() -> None:
         return
     
     if not team_data:
-        st.warning("≡ƒôè No teams have started yet.")
+        st.warning("📊 No teams have started yet.")
         return
     
     # Summary metrics
-    st.markdown("### ≡ƒôè Workshop Summary")
+    st.markdown("### 📊 Workshop Summary")
     
     teams_started = sum(1 for team in team_data.values() if team.get("started"))
     teams_completed = sum(1 for team in team_data.values() if team.get("completed"))
@@ -7426,7 +7426,7 @@ def render_facilitator_dashboard() -> None:
     st.markdown("---")
     
     # Team progress table
-    st.markdown("### ≡ƒôï Team Progress")
+    st.markdown("### 📋 Team Progress")
     
     # Create progress dataframe
     progress_list = []
@@ -7434,9 +7434,9 @@ def render_facilitator_dashboard() -> None:
         progress_list.append({
             "Team": team_name,
             "Program Card": data.get("program_card", "N/A"),
-            "Started": "Γ£à" if data.get("started") else "Γ¥î",
+            "Started": "✅" if data.get("started") else "❌",
             "Current Step": data.get("current_step", 0),
-            "Completed": "Γ£à" if data.get("completed") else "ΓÅ│",
+            "Completed": "✅" if data.get("completed") else "⏳",
             "Started At": data.get("started_at", "N/A"),
             "Completed At": data.get("completed_at", "N/A")
         })
@@ -7447,7 +7447,7 @@ def render_facilitator_dashboard() -> None:
     st.markdown("---")
     
     # Individual team details
-    st.markdown("### ≡ƒöì Team Details")
+    st.markdown("### 🔍 Team Details")
     
     selected_team = st.selectbox("Select team to view details:", list(team_data.keys()))
     
@@ -7486,9 +7486,9 @@ def render_facilitator_dashboard() -> None:
     st.markdown("---")
     
     # Coaching tips
-    st.markdown("### ≡ƒÆí Facilitator Tips")
+    st.markdown("### 💡 Facilitator Tips")
     
-    with st.expander("≡ƒÄ» Common Challenges & Interventions"):
+    with st.expander("🎯 Common Challenges & Interventions"):
         st.markdown("""
         **If teams are stuck on Step 1 (Frame the Challenge):**
         - Ask: "Who exactly will benefit from this program?"
@@ -7509,11 +7509,11 @@ def render_facilitator_dashboard() -> None:
     
     # Download progress report
     st.markdown("---")
-    st.markdown("### ≡ƒôÑ Export Progress Report")
+    st.markdown("### 📥 Export Progress Report")
     
     csv_data = progress_df.to_csv(index=False)
     st.download_button(
-        "≡ƒôÑ Download Progress Report (CSV)",
+        "📥 Download Progress Report (CSV)",
         csv_data,
         f"workshop_progress_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
         "text/csv",
@@ -7529,7 +7529,7 @@ def render_facilitator_dashboard() -> None:
 def render_user_information():
     """Render the User Information page - admin only with password protection."""
     
-    st.title("≡ƒæÑ User Information")
+    st.title("👥 User Information")
     st.markdown("---")
     
     # Password protection
@@ -7547,23 +7547,23 @@ def render_user_information():
             if submit:
                 if password == "admin2025":  # Admin password
                     st.session_state.userinfo_authenticated = True
-                    st.success("Γ£à Access granted!")
+                    st.success("✅ Access granted!")
                     st.rerun()
                 else:
-                    st.error("Γ¥î Incorrect password")
+                    st.error("❌ Incorrect password")
         return
     
     # Logout button for admin
     col1, col2 = st.columns([3, 1])
     with col2:
-        if st.button("≡ƒöô Lock Page", use_container_width=True):
+        if st.button("🔓 Lock Page", use_container_width=True):
             st.session_state.userinfo_authenticated = False
             st.rerun()
     
     st.markdown("---")
     
     # Persistent user listing (historical)
-    st.markdown("### ≡ƒùé∩╕Å Historical Users")
+    st.markdown("### 🗂️ Historical Users")
     try:
         from .persistence import (
             fetch_all_users,
@@ -7585,10 +7585,10 @@ def render_user_information():
             {
                 "Username": u["username"],
                 "Org": u.get("organization") or "",
-                "Consent": "Γ£à" if u.get("consent") else "Γ¥î",
-                "Hashed": "≡ƒöÆ" if u.get("hashed") else "ΓÇö",
-                "Encrypted": "≡ƒ¢í∩╕Å" if u.get("encrypted") else "ΓÇö",
-                "User ID": (u.get("user_id") or "")[0:10] + ("ΓÇª" if u.get("user_id") and len(u.get("user_id")) > 10 else ""),
+                "Consent": "✅" if u.get("consent") else "❌",
+                "Hashed": "🔒" if u.get("hashed") else "—",
+                "Encrypted": "🛡️" if u.get("encrypted") else "—",
+                "User ID": (u.get("user_id") or "")[0:10] + ("…" if u.get("user_id") and len(u.get("user_id")) > 10 else ""),
                 "First Access": u.get("first_access"),
                 "Last Access": u.get("last_access"),
             }
@@ -7617,7 +7617,7 @@ def render_user_information():
     
     # Session Summary
     if has_active_session:
-        st.markdown("### ≡ƒæñ Current Browser Session Summary")
+        st.markdown("### 👤 Current Browser Session Summary")
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Username", username)
@@ -7630,17 +7630,17 @@ def render_user_information():
             st.metric("Session Duration", duration_str)
         st.markdown("---")
     else:
-        st.info("No live session loaded ΓÇô use historical selector above to inspect persisted data.")
+        st.info("No live session loaded – use historical selector above to inspect persisted data.")
         st.markdown("---")
     
     st.markdown("---")
     
     # Activity Log (live session) & historical persisted activity (selected user)
-    st.markdown("### ≡ƒôè Activity Log (Current Session)")
+    st.markdown("### 📊 Activity Log (Current Session)")
     activity_log = st.session_state.get('activity_log', []) if has_active_session else []
     
     if activity_log:
-        st.info(f"≡ƒô¥ Total activities logged: **{len(activity_log)}**")
+        st.info(f"📝 Total activities logged: **{len(activity_log)}**")
         
         # Convert to DataFrame for display
         df_activity = pd.DataFrame(activity_log)
@@ -7665,7 +7665,7 @@ def render_user_information():
     st.markdown("---")
     # Historical persisted data for selected user
     if selected_history_user:
-        st.markdown("### ≡ƒùä∩╕Å Persisted Data for Selected User")
+        st.markdown("### 🗄️ Persisted Data for Selected User")
         try:
             persisted_session = fetch_user_session(selected_history_user)
             persisted_activity = fetch_user_activity(selected_history_user)
@@ -7724,7 +7724,7 @@ def render_user_information():
         st.markdown("---")
 
         # Downloads of persisted data
-        st.markdown("### ≡ƒÆ╛ Download Persisted Data")
+        st.markdown("### 💾 Download Persisted Data")
         export_payload = {
             'session': persisted_session,
             'activity': persisted_activity,
@@ -7733,7 +7733,7 @@ def render_user_information():
         }
         json_hist = json.dumps(export_payload, indent=2)
         st.download_button(
-            "≡ƒôÑ Download Persisted JSON",
+            "📥 Download Persisted JSON",
             json_hist,
             file_name=f"persisted_{selected_history_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
@@ -7745,7 +7745,7 @@ def render_user_information():
             df_hist_csv.to_csv(csv_buf, index=False)
             csv_buf.seek(0)
             st.download_button(
-                "≡ƒôÑ Download Persisted Activity CSV",
+                "📥 Download Persisted Activity CSV",
                 csv_buf.getvalue(),
                 file_name=f"persisted_activity_{selected_history_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
@@ -7754,7 +7754,7 @@ def render_user_information():
         st.markdown("---")
     
     # RCT Design Data
-    st.markdown("### ≡ƒÄ» RCT Design Data")
+    st.markdown("### 🎯 RCT Design Data")
     has_design_data = False
     
     if 'design_team_name' in st.session_state:
@@ -7784,19 +7784,19 @@ def render_user_information():
     st.markdown("---")
     
     # Download Options
-    st.markdown("### ≡ƒÆ╛ Download Options")
+    st.markdown("### 💾 Download Options")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### ≡ƒôä Complete Session Data (JSON)")
+        st.markdown("#### 📄 Complete Session Data (JSON)")
         st.caption("Includes all session info, activity log, and RCT design data")
         
         session_data = get_session_data()
         json_str = json.dumps(session_data, indent=2, default=str)
         
         st.download_button(
-            label="≡ƒôÑ Download JSON",
+            label="📥 Download JSON",
             data=json_str,
             file_name=f"session_data_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
@@ -7804,7 +7804,7 @@ def render_user_information():
         )
     
     with col2:
-        st.markdown("#### ≡ƒôè Activity Log (CSV)")
+        st.markdown("#### 📊 Activity Log (CSV)")
         st.caption("Spreadsheet-friendly format of your activities")
         
         if activity_log:
@@ -7830,21 +7830,21 @@ def render_user_information():
             csv_buffer.seek(0)
             
             st.download_button(
-                label="≡ƒôÑ Download CSV",
+                label="📥 Download CSV",
                 data=csv_buffer.getvalue(),
                 file_name=f"activity_log_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
         else:
-            st.button("≡ƒôÑ Download CSV", disabled=True, use_container_width=True)
+            st.button("📥 Download CSV", disabled=True, use_container_width=True)
             st.caption("No activity data to download")
     
     st.markdown("---")
     # ------------------------------------------------------------------
     # Maintenance & Privacy Actions
     # ------------------------------------------------------------------
-    st.markdown("### ≡ƒ¢á∩╕Å Maintenance & Privacy Actions")
+    st.markdown("### 🛠️ Maintenance & Privacy Actions")
     with st.expander("Admin Maintenance Tools", expanded=False):
         st.caption("Perform irreversible maintenance tasks. Proceed with care.")
         # User-specific actions
@@ -7853,7 +7853,7 @@ def render_user_information():
             col_a, col_b = st.columns(2)
             with col_a:
                 st.markdown("**Anonymize User**")
-                if st.button("≡ƒîÇ Anonymize", key="btn_anonymize_user", use_container_width=True):
+                if st.button("🌀 Anonymize", key="btn_anonymize_user", use_container_width=True):
                     try:
                         new_name = anonymize_user(selected_history_user)
                         if new_name:
@@ -7868,7 +7868,7 @@ def render_user_information():
                 confirm_text = st.text_input(
                     "Type username to confirm deletion", key="delete_confirm_input"
                 )
-                if st.button("≡ƒùæ∩╕Å Delete", key="btn_delete_user", use_container_width=True, disabled=not confirm_text):
+                if st.button("🗑️ Delete", key="btn_delete_user", use_container_width=True, disabled=not confirm_text):
                     if confirm_text == selected_history_user:
                         try:
                             delete_user(selected_history_user)
@@ -7890,7 +7890,7 @@ def render_user_information():
         with prune_col2:
             prune_time = st.time_input("Time (UTC)", key="prune_time_input")
         with prune_col3:
-            if st.button("≡ƒº╣ Prune", key="btn_prune", use_container_width=True):
+            if st.button("🧹 Prune", key="btn_prune", use_container_width=True):
                 if prune_date:
                     from datetime import datetime
                     dt = datetime.combine(prune_date, prune_time)
@@ -7906,7 +7906,7 @@ def render_user_information():
         st.markdown("---")
         # Vacuum database
         st.markdown("#### Optimize Database")
-        if st.button("≡ƒº¬ VACUUM", key="btn_vacuum_db", use_container_width=True):
+        if st.button("🧪 VACUUM", key="btn_vacuum_db", use_container_width=True):
             try:
                 vacuum_db()
                 st.success("Database vacuum completed.")
@@ -7921,7 +7921,7 @@ def render_user_information():
     st.markdown("---")
     
     # Data Privacy Notice
-    with st.expander("Γä╣∩╕Å About User Data"):
+    with st.expander("ℹ️ About User Data"):
         st.markdown("""
         **What's included:**
         - Live session data (in-memory) AND persisted historical records
@@ -7939,11 +7939,11 @@ def render_user_information():
         
         **Administration:**
         - Use this page to audit usage and export historical datasets
-        - Password protects access (`admin2025`) ΓÇô change for production
+        - Password protects access (`admin2025`) – change for production
         """)
     
     st.markdown("---")
-    st.caption("≡ƒöÆ Administrator Access Only | Password: admin2025")
+    st.caption("🔒 Administrator Access Only | Password: admin2025")
 
 
 # ----------------------------------------------------------------------------- #
@@ -7960,7 +7960,7 @@ def _render_coming_soon(title: str) -> None:
         st.markdown(
             """
             <div style="text-align:center; padding: 3rem 0;">
-                <div style="font-size: 4rem;">≡ƒÜº</div>
+                <div style="font-size: 4rem;">🚧</div>
                 <h2 style="color: #1f77b4; margin-top: 1rem;">Coming Soon</h2>
                 <p style="color: #666; font-size: 1.1rem;">This module is currently under development.<br>Check back soon!</p>
             </div>
@@ -8201,15 +8201,15 @@ def show_temp_access_form(page_name: str):
     
     st.markdown('<div class="access-container">', unsafe_allow_html=True)
     
-    st.markdown('<h1 class="access-title">≡ƒÄ» RCT Field Flow</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="access-title">🎯 RCT Field Flow</h1>', unsafe_allow_html=True)
     st.markdown(f'<p class="access-subtitle">Access Required: {page_name.replace("_", " ").title()}</p>', 
                 unsafe_allow_html=True)
     
-    st.info("≡ƒæñ Please provide your details to access this feature. No registration required!")
+    st.info("👤 Please provide your details to access this feature. No registration required!")
     
     # Temporary access form
     with st.form("temp_access_form", clear_on_submit=False):
-        st.markdown("##### ≡ƒô¥ Your Information")
+        st.markdown("##### 📝 Your Information")
         
         username = st.text_input(
             "Username *",
@@ -8249,7 +8249,7 @@ def show_temp_access_form(page_name: str):
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             submit = st.form_submit_button(
-                "Γ£à Continue to App",
+                "✅ Continue to App",
                 use_container_width=True,
                 type="primary"
             )
@@ -8257,7 +8257,7 @@ def show_temp_access_form(page_name: str):
         if submit:
             if username and username.strip():
                 if not consent:
-                    st.error("ΓÜá∩╕Å Please provide consent to proceed.")
+                    st.error("⚠️ Please provide consent to proceed.")
                     st.stop()
                 # Store temporary access credentials
                 st.session_state.temp_user = username.strip()
@@ -8277,15 +8277,15 @@ def show_temp_access_form(page_name: str):
                     'target_page': page_name
                 })
                 
-                st.success(f"Γ£à Welcome, {username}! Redirecting...")
+                st.success(f"✅ Welcome, {username}! Redirecting...")
                 st.rerun()
             else:
-                st.error("ΓÜá∩╕Å Please enter a username to continue")
+                st.error("⚠️ Please enter a username to continue")
     
     st.markdown("---")
     
     # Information box
-    with st.expander("Γä╣∩╕Å About Temporary Access"):
+    with st.expander("ℹ️ About Temporary Access"):
         st.markdown("""
         **How it works:**
         - No registration or account creation required
@@ -8306,7 +8306,7 @@ def show_temp_access_form(page_name: str):
     st.markdown("""
     <div style='text-align: center; margin-top: 50px; color: #666; font-size: 0.85rem;'>
         <p>RCT Field Flow | Developed by <strong>Aubrey Jolex</strong></p>
-        <p>≡ƒôº <a href='mailto:aubreyjolex@gmail.com'>aubreyjolex@gmail.com</a></p>
+        <p>📧 <a href='mailto:aubreyjolex@gmail.com'>aubreyjolex@gmail.com</a></p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -8320,7 +8320,7 @@ def show_user_info_sidebar():
         user_name = st.session_state.temp_user
         user_org = st.session_state.get('temp_organization', None)
         
-        st.sidebar.markdown("### ≡ƒæñ Current Session")
+        st.sidebar.markdown("### 👤 Current Session")
         st.sidebar.markdown(f"**Name:** {user_name}")
         if user_org:
             st.sidebar.markdown(f"**Org:** {user_org}")
@@ -8330,20 +8330,20 @@ def show_user_info_sidebar():
             access_time = st.session_state.temp_access_time
             duration = datetime.now() - access_time
             minutes = int(duration.total_seconds() / 60)
-            st.sidebar.caption(f"ΓÅ▒∩╕Å Session: {minutes} min")
+            st.sidebar.caption(f"⏱️ Session: {minutes} min")
         
         # Show last save time
         if 'last_save_time' in st.session_state:
             last_save = st.session_state.last_save_time
             seconds_ago = int((datetime.now() - last_save).total_seconds())
             if seconds_ago < 60:
-                st.sidebar.caption(f"≡ƒÆ╛ Auto-saved: {seconds_ago}s ago")
+                st.sidebar.caption(f"💾 Auto-saved: {seconds_ago}s ago")
             else:
                 minutes_ago = seconds_ago // 60
-                st.sidebar.caption(f"≡ƒÆ╛ Auto-saved: {minutes_ago}m ago")
+                st.sidebar.caption(f"💾 Auto-saved: {minutes_ago}m ago")
         
         # Logout button
-        if st.sidebar.button("∩┐╜ End Session", use_container_width=True):
+        if st.sidebar.button("� End Session", use_container_width=True):
             # Log session end before clearing
             if 'activity_log' in st.session_state:
                 log_activity('user_session_ended')
@@ -8359,7 +8359,7 @@ def show_user_info_sidebar():
             for key in keys_to_clear:
                 st.session_state.pop(key, None)
             
-            st.success("≡ƒæï Session ended. Redirecting to home...")
+            st.success("👋 Session ended. Redirecting to home...")
             st.rerun()
 
 
@@ -8378,14 +8378,14 @@ def main() -> None:
     
     # Visible navigation menu for users
     nav = {
-        "home": "≡ƒÅá Home",
-        "design": "≡ƒÄ» RCT Design",
-        "power": "ΓÜí Power Calculations",
-        "random": "≡ƒÄ▓ Randomization",
-        "visualize": "≡ƒôè Data Visualization",
-        "quality": "Γ£à Quality Checks",
-        "analysis": "≡ƒôè Analysis & Results",
-        "backcheck": "≡ƒöì Backcheck Selection",
+        "home": "🏠 Home",
+        "design": "🎯 RCT Design",
+        "power": "⚡ Power Calculations",
+        "random": "🎲 Randomization",
+        "visualize": "📊 Data Visualization",
+        "quality": "✅ Quality Checks",
+        "analysis": "📊 Analysis & Results",
+        "backcheck": "🔍 Backcheck Selection",
     }
     
     # Hidden admin pages (not in menu, accessible via URL):
@@ -8435,7 +8435,7 @@ def main() -> None:
         save_session_snapshot()
 
     st.sidebar.markdown("---")
-    if st.sidebar.button("≡ƒùæ∩╕Å Clear cached data"):
+    if st.sidebar.button("🗑️ Clear cached data"):
         for key in ["baseline_data", "randomization_result", "case_data", "quality_data", 
                     "analysis_data", "baseline_for_attrition", "backcheck_data", "backcheck_flags"]:
             st.session_state.pop(key, None)
@@ -8452,7 +8452,7 @@ def main() -> None:
         <p style="margin: 0.3rem 0;"><strong>RCT Field Flow</strong></p>
         <p style="margin: 0.3rem 0; font-size: 0.7rem;">by <strong>Aubrey Jolex</strong></p>
         <p style="margin: 0.3rem 0; font-size: 0.65rem;">
-        <a href="mailto:aubreyjolex@gmail.com" style="color: #888; text-decoration: none;">≡ƒôº Email</a> | 
+        <a href="mailto:aubreyjolex@gmail.com" style="color: #888; text-decoration: none;">📧 Email</a> | 
         <a href="https://github.com/ajolex/rct_field_flow" target="_blank" style="color: #888; text-decoration: none;">GitHub</a>
         </p>
         </div>
@@ -8475,13 +8475,13 @@ def main() -> None:
     elif page == "random":
         render_randomization()
     elif page == "visualize":
-        _render_coming_soon("≡ƒôè Data Visualization")
+        _render_coming_soon("📊 Data Visualization")
     elif page == "quality":
         render_quality_checks()
     elif page == "analysis":
         render_analysis()
     elif page == "backcheck":
-        _render_coming_soon("≡ƒöì Backcheck Selection")
+        _render_coming_soon("🔍 Backcheck Selection")
     elif page == "userinfo":
         render_user_information()
     elif page == "facilitator":
@@ -8503,7 +8503,7 @@ def render_footer():
             <div style="text-align: center; color: #888; font-size: 0.85rem; padding: 1rem 0;">
             <p style="margin: 0;">
             <strong>RCT Field Flow</strong> | Developed by <strong>Aubrey Jolex</strong><br>
-            ≡ƒôº <a href="mailto:aubreyjolex@gmail.com">aubreyjolex@gmail.com</a><br>
+            📧 <a href="mailto:aubreyjolex@gmail.com">aubreyjolex@gmail.com</a><br>
             <a href="https://github.com/ajolex/rct_field_flow" target="_blank">View on GitHub</a>
             </p>
             </div>

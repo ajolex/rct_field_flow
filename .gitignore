@@ -60,6 +60,7 @@ image/
 
 # Runtime/persistent data
 rct_field_flow/persistent_data/
+app/persistent_data/
 *.key
 
 # IDE & Editor files
