@@ -1,4 +1,4 @@
-"""
+""
 Direct test of randomization without importing from package __init__
 This bypasses the weasyprint dependency issue.
 """
@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 # Import directly from module, not package
-from rct_field_flow.randomize import RandomizationConfig, Randomizer, TreatmentArm
+from randomize import RandomizationConfig, Randomizer, TreatmentArm
 
 # Load sample data
 df = pd.read_csv('examples/sample_baseline.csv')

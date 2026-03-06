@@ -1,6 +1,6 @@
-import pandas as pd
+mport pandas as pd
 
-from rct_field_flow.randomize import RandomizationConfig, Randomizer, TreatmentArm
+from randomize import RandomizationConfig, Randomizer, TreatmentArm
 
 
 def _demo_df():

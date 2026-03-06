@@ -1,9 +1,9 @@
-"""Tests for randomization validation feature."""
+""Tests for randomization validation feature."""
 import numpy as np
 import pandas as pd
 import pytest
 
-from rct_field_flow.randomize import (
+from randomize import (
     RandomizationConfig,
     Randomizer,
     TreatmentArm,

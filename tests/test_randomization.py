@@ -1,8 +1,8 @@
-"""
+""
 Test script to validate enhanced randomization with all types
 """
 import pandas as pd
-from rct_field_flow.randomize import RandomizationConfig, Randomizer, TreatmentArm
+from randomize import RandomizationConfig, Randomizer, TreatmentArm
 
 # Load the sample baseline
 df = pd.read_csv('examples/sample_baseline.csv')

@@ -1,4 +1,4 @@
-"""
+""
 Example: Validate Randomization Fairness
 
 This script demonstrates how to use the randomization validation feature
@@ -11,7 +11,7 @@ a few hundred times with different seeds and compare the outcomes."
 
 import pandas as pd
 import matplotlib.pyplot as plt
-from rct_field_flow.randomize import RandomizationConfig, Randomizer, TreatmentArm
+from randomize import RandomizationConfig, Randomizer, TreatmentArm
 
 # Load sample baseline data
 print("Loading sample baseline data...")

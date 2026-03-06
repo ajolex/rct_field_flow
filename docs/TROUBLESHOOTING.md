@@ -4,19 +4,19 @@
 
 ### Import Error: "attempted relative import with no known parent package"
 
-**Problem**: When running `streamlit run rct_field_flow/app.py`, you get an ImportError about relative imports.
+**Problem**: When running `streamlit run app/app.py`, you get an ImportError about relative imports.
 
 **Solution**: The app now automatically handles both relative and absolute imports. Make sure you're using:
 
 ```bash
-python -m streamlit run rct_field_flow/app.py
+python -m streamlit run app/app.py
 ```
 
 Or from the project root:
 
 ```bash
 cd rct_field_flow
-python -m streamlit run app.py
+python -m streamlit run app/app.py
 ```
 
 ### Port Already in Use
@@ -27,7 +27,7 @@ python -m streamlit run app.py
 1. Stop the existing Streamlit instance
 2. Use a different port:
    ```bash
-   python -m streamlit run rct_field_flow/app.py --server.port 8502
+   python -m streamlit run app/app.py --server.port 8502
    ```
 
 ### Module Not Found Errors
@@ -134,7 +134,7 @@ pip install streamlit pandas plotly numpy scipy pyyaml
 
 **Solution**: Use network settings:
 ```bash
-python -m streamlit run rct_field_flow/app.py --server.address 0.0.0.0 --server.port 8501
+python -m streamlit run app/app.py --server.address 0.0.0.0 --server.port 8501
 ```
 
 Then access via: `http://your-server-ip:8501`
@@ -191,7 +191,7 @@ For development/debugging:
 export STREAMLIT_LOG_LEVEL=debug
 
 # Run with auto-reload
-streamlit run rct_field_flow/app.py --server.runOnSave true
+streamlit run app/app.py --server.runOnSave true
 ```
 
 ### System Requirements

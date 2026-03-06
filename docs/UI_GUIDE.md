@@ -7,7 +7,7 @@ This guide will help you get started with the RCT Field Flow integrated web inte
 Open your terminal and run:
 
 ```bash
-streamlit run rct_field_flow/app.py
+streamlit run app/app.py
 ```
 
 The application will open in your default web browser at `http://localhost:8501`
@@ -147,7 +147,7 @@ Every major output can be downloaded as CSV:
 ### Application Won't Start
 - Ensure all dependencies are installed: `pip install -e .`
 - Check that port 8501 is not already in use
-- Try specifying a different port: `streamlit run rct_field_flow/app.py --server.port 8502`
+- Try specifying a different port: `streamlit run app/app.py --server.port 8502`
 
 ### Data Upload Issues
 - Ensure CSV is properly formatted (UTF-8 encoding)
