@@ -6,8 +6,6 @@
 
 RCT Field Flow provides an integrated web-based platform supporting the complete lifecycle of RCT field operations. The toolkit offers intuitive interfaces and automated workflows that maintain research rigor while streamlining operations from initial design through final analysis.
 
-**📥 [Installation &amp; Setup Instructions](INSTALLATION.md)**
-
 ---
 
 ## Access & Authentication
@@ -36,52 +34,58 @@ Study planning hub for documenting research design, intervention logic, and prep
 
 ### ⚡ Power Calculations
 
-Statistical power analysis and sample size determination based on J-PAL methodologies.
+An interactive dashboard for statistical power analysis and sample size determination, built on J-PAL methodologies.
 
-**Capabilities:**
+**Calculation Modes:**
 
-- Calculate required sample size for target effect or MDE for given sample
-- Support for continuous outcomes (test scores, income) and binary outcomes (enrollment, employment)
-- Individual and cluster randomization designs with ICC and design effect calculations
-- Baseline covariate adjustments (R²) and imperfect compliance modeling
+- **MDE given sample size** — fix your sample and find the minimum detectable effect
+- **Sample size given MDE** — set your target effect and find the required sample
+
+**Outcome Types:**
+
+- Continuous outcomes (test scores, income, consumption)
+- Binary outcomes (enrollment, employment, take-up)
+
+**Design Options:**
+
+- Individual and cluster randomization with ICC and design effect calculations
+- Baseline covariate adjustments (R²) to increase precision
+- Imperfect compliance modeling
 - Interactive power curves and cluster configuration trade-off tables
-- Export Python and Stata code for transparency and pre-registration
-- Built-in educational content explaining power concepts
+
+**Attrition Adjustment:**
+
+- Specify an expected attrition rate and the module automatically calculates required sample size **with and without attrition** side by side — so you can see exactly how much attrition inflates your required sample
+
+**Reproducibility:**
+
+- Download the complete **Stata or Python code** that replicates your exact results — run it outside the app to verify or share for pre-registration
 
 ### 🎲 Randomization
 
-Treatment assignment with complete transparency and reproducibility.
+Comprehensive treatment assignment covering all major randomization designs, with built-in optimization and fairness validation.
 
 **Methods:**
 
-- Simple random assignment
-- Stratified (block randomization within strata)
-- Cluster (group-level assignment)
-- Stratified-cluster (combined approach)
+- **Simple** — pure random assignment
+- **Stratified** — block randomization within strata to ensure balance across key subgroups
+- **Cluster** — group-level assignment (e.g., villages, schools)
+- **Stratified-cluster** — combined approach for clustered designs with stratification
 
-**Features:**
+**Rerandomization:**
 
-- Seed-based randomization for exact reproducibility
-- Balance diagnostics comparing treatment arms
-- Optional rerandomization (up to 10,000 iterations) to optimize covariate balance
-- **Randomization validation**: Run randomization multiple times (e.g., 500) with different seeds to verify fairness
-- Assignment probability analysis with histograms to detect systematic bias
-- Preserves existing assignments for follow-up rounds
+A powerful feature for achieving well-balanced treatment arms. Configure the number of iterations (up to 10,000), select balance variables, and the algorithm runs all iterations and picks the one with the **maximum minimum p-value** — the draw that produces the best covariate balance across all arms. A formatted balance table is shown and downloadable.
+
+**Randomization Fairness Validation:**
+
+An underused but important diagnostic: the module re-runs your randomization many times with different random seeds to verify that the procedure is truly fair. Each observation should have approximately equal probability of being assigned to each treatment arm across draws. Results are displayed as a histogram that you can download — a transparent, shareable proof that your randomization is unbiased.
+
+**Reproducibility:**
+
+- Seed-based randomization for exact reproduction at any time
+- Download complete **Python and Stata code** replicating the exact procedure
+- Preserves existing assignments for follow-up survey rounds
 - Visual balance checks with automatic flagging
-- Downloadable Python and Stata code replicating exact procedure
-
-### 📋 Case Assignment
-
-Distribute survey cases to enumerator teams with configurable rules.
-
-**Capabilities:**
-
-- Interactive team assignment rule builder
-- Stratified assignment by geography, treatment arm, or other factors
-- Quota management and distribution validation
-- Treatment-specific form ID routing
-- Direct SurveyCTO API upload (merge/append/replace modes)
-- Download prepared case lists as CSV
 
 ### ✅ Quality Checks
 
@@ -122,48 +126,13 @@ Statistical analysis of RCT outcomes using standard approaches.
 - Automatic merge with randomization data
 - Export results as CSV/Excel with confidence intervals and formatted tables
 
-### 🔍 Backcheck Selection
+### 🔍 Backcheck Selection *(Coming Soon)*
 
-Sample cases for quality verification using stratified random sampling.
+Stratified sampling of cases for quality verification backchecks.
 
-**Features:**
+### 📊 Data Visualization *(Coming Soon)*
 
-- Define sample size with high-risk quota oversampling
-- Risk scoring based on quality flags
-- Stratified sampling by enumerator, date, or other factors
-- Visual risk distributions and enumerator summaries
-- Generate backcheck rosters as CSV/Excel
-
-### 📄 Report Generation
-
-Automated summary reports combining monitoring and quality data.
-
-**Components:**
-
-- Treatment arm progress and enumerator productivity
-- Quality issue summaries with flagged cases
-- Timeline projections and target progress
-- Key metrics dashboard
-
-**Outputs:** HTML (always) and PDF (optional)
-
-### 📈 Monitoring Dashboard
-
-Real-time field operations tracking.
-
-**Tracking:**
-
-- Submissions per enumerator with daily counts
-- Average survey duration and productivity metrics
-- Progress by treatment arm vs. targets
-- Timeline projections with business-day calculations
-- Supervisor roll-ups and performance identification
-
-**Integration:**
-
-- SurveyCTO API for live data or CSV uploads
-- Configurable column mapping
-- Export productivity and progress tables as CSV
+Interactive exploration and visualization of field data.
 
 ---
 
@@ -181,10 +150,9 @@ Real-time field operations tracking.
 Modules work seamlessly together with automatic data flow:
 
 1. **Planning**: RCT Design + Power Calculations determine requirements
-2. **Pre-Field**: Randomization assigns treatments → Case Assignment distributes work
-3. **During Field**: Monitoring Dashboard tracks progress + Quality Checks flag issues
-4. **Quality Assurance**: Backcheck Selection for verification sampling
-5. **Post-Field**: Analysis & Results for findings + Report Generation for documentation
+2. **Pre-Field**: Randomization assigns treatments to participants
+3. **During Field**: Quality Checks flag data issues in real time
+4. **Post-Field**: Analysis & Results for treatment effect estimation
 
 ### Configuration Flexibility
 
@@ -195,7 +163,6 @@ Modules work seamlessly together with automatic data flow:
 
 ## Documentation
 
-- **[INSTALLATION.md](INSTALLATION.md)** — Setup and running instructions
 - **[UI Quick Start Guide](docs/UI_GUIDE.md)** — Step-by-step walkthrough
 - **[Randomization Guide](docs/RANDOMIZATION.md)** — Detailed methodology and best practices
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — Common issues and solutions

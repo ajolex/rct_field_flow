@@ -1226,34 +1226,20 @@ def render_home() -> None:
            - Real-time covariates balance checking
         
         ### Phase 3: Implementation
-        4. **📋 SurveyCTO Case Assignment** – Build SurveyCTO-ready cases dataset
-           - Assign interview cases to enumerators
-           - Export case assignment files for SurveyCTO
-           - Supports direct upload to SurveyCTO via API
-        
-        5. **🔍 Quality Checks** – Apply speed, outlier, duplicate checks
+        4. **✅ Quality Checks** – Apply speed, outlier, duplicate checks
            - Monitor data quality during collection
            - Flag and resolve issues in real-time
            - Generate quality reports
         
-        6. **📈 Monitoring Dashboard** – Track live productivity
-           - Monitor survey completion rates
-           - Track enumerator performance
-           - Project completion timelines
-        
         ### Phase 4: Analysis & Reporting
-        7. **📊 Analysis & Results** – Estimate treatment effects
+        5. **📊 Analysis & Results** – Estimate treatment effects
            - Calculate average treatment effects (ATE)
            - Analyze treatment effect heterogeneity
            - Generate publication-ready tables
         
-        8. **🔍 Backcheck Selection** – Quality validation
-           - Select representative sample for backchecks
-           - Ensure data integrity
-        
-        9. **📄 Report Generation** – Create weekly reports
-           - Auto-generate monitoring summaries
-           - Share with stakeholders
+        ### Coming Soon
+        - 📊 Data Visualization
+        - 🔍 Backcheck Selection
         """)
     
     with col2:
@@ -7361,596 +7347,6 @@ def render_backcheck() -> None:
 
 
 # ----------------------------------------------------------------------------- #
-# REPORT GENERATION                                                             #
-# ----------------------------------------------------------------------------- #
-
-
-def render_reports() -> None:
-    st.title("📄 Report Generation")
-    st.markdown("Generate formatted weekly reports with monitoring statistics and quality summaries.")
-    
-    st.markdown("### 📊 Report Data Sources")
-    st.info("""
-    **Required Data:**
-    - Submissions data (from monitoring or upload)
-    - Quality flags (from quality checks module)
-    - Backcheck roster (optional)
-    
-    Reports include:
-    - Survey progress by treatment arm
-    - Productivity statistics by enumerator
-    - Quality flag summaries
-    - Backcheck roster (if provided)
-    """)
-    
-    # Data collection
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### Submissions Data")
-        submissions_upload = st.file_uploader(
-            "Upload submissions (CSV)",
-            type="csv",
-            key="report_submissions",
-            help="Survey submissions for the reporting period"
-        )
-        
-        if submissions_upload:
-            submissions_df = pd.read_csv(submissions_upload)
-            st.success(f"✅ Loaded {len(submissions_df):,} submissions")
-        else:
-            submissions_df = None
-            st.info("Upload submissions data")
-    
-    with col2:
-        st.markdown("#### Quality Flags")
-        flags_upload = st.file_uploader(
-            "Upload quality flags (CSV)",
-            type="csv",
-            key="report_flags",
-            help="Quality check results"
-        )
-        
-        if flags_upload:
-            flags_df = pd.read_csv(flags_upload)
-            st.success(f"✅ Loaded {len(flags_df):,} flag records")
-        else:
-            flags_df = None
-            st.info("Upload quality flags")
-    
-    if submissions_df is None:
-        st.warning("⚠️ Upload submissions data to continue.")
-        return
-    
-    st.markdown("---")
-    st.markdown("### ⚙️ Report Configuration")
-    
-    with st.form("report_config_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            report_title = st.text_input(
-                "Report title",
-                value="Weekly Field Monitoring Report",
-                key="report_title"
-            )
-            
-            report_period = st.text_input(
-                "Reporting period",
-                value="Week of [DATE]",
-                key="report_period",
-                help="e.g., 'Week of January 15-21, 2025'"
-            )
-        
-        with col2:
-            project_name = st.text_input(
-                "Project name",
-                value="RCT Field Project",
-                key="report_project"
-            )
-            
-            format_option = st.radio(
-                "Output format",
-                ["HTML only", "HTML + PDF"],
-                key="report_format",
-                help="PDF requires WeasyPrint with native dependencies"
-            )
-        
-        # Column mapping
-        st.markdown("#### Column Mapping")
-        available_cols = submissions_df.columns.tolist()
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            date_col = st.selectbox(
-                "Date column",
-                available_cols,
-                index=available_cols.index("SubmissionDate") if "SubmissionDate" in available_cols else 0,
-                key="report_date_col"
-            )
-        
-        with col2:
-            enumerator_col = st.selectbox(
-                "Enumerator column",
-                available_cols,
-                index=available_cols.index("enumerator") if "enumerator" in available_cols else 0,
-                key="report_enum_col"
-            )
-        
-        with col3:
-            treatment_col = st.selectbox(
-                "Treatment column",
-                available_cols,
-                index=available_cols.index("treatment") if "treatment" in available_cols else 0,
-                key="report_treatment_col"
-            )
-        
-        submit = st.form_submit_button("📄 Generate Report", type="primary", use_container_width=True)
-    
-    if submit:
-        try:
-            st.markdown("---")
-            st.markdown("### 📄 Report Preview")
-            
-            # Calculate statistics
-            st.markdown("#### Summary Statistics")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Submissions", f"{len(submissions_df):,}")
-            with col2:
-                if date_col in submissions_df.columns:
-                    unique_dates = submissions_df[date_col].nunique()
-                    st.metric("Survey Days", unique_dates)
-            with col3:
-                if enumerator_col in submissions_df.columns:
-                    unique_enums = submissions_df[enumerator_col].nunique()
-                    st.metric("Enumerators", unique_enums)
-            with col4:
-                if flags_df is not None:
-                    total_flags = len(flags_df)
-                    st.metric("Quality Flags", f"{total_flags:,}")
-            
-            # Progress by treatment
-            if treatment_col in submissions_df.columns:
-                st.markdown("#### Progress by Treatment Arm")
-                progress = submissions_df[treatment_col].value_counts().reset_index()
-                progress.columns = ['Treatment Arm', 'Count']
-                progress['Percentage'] = (progress['Count'] / progress['Count'].sum() * 100).round(1)
-                st.dataframe(progress, use_container_width=True)
-            
-            # Productivity
-            if enumerator_col in submissions_df.columns:
-                st.markdown("#### Enumerator Productivity")
-                productivity = submissions_df[enumerator_col].value_counts().reset_index()
-                productivity.columns = ['Enumerator', 'Surveys Completed']
-                productivity['Average per Day'] = (
-                    productivity['Surveys Completed'] / unique_dates
-                ).round(1) if date_col in submissions_df.columns else None
-                st.dataframe(productivity.head(10), use_container_width=True)
-            
-            # Quality flags summary
-            if flags_df is not None:
-                st.markdown("#### Quality Issues")
-                flag_summary = flags_df.sum().sort_values(ascending=False).head(10)
-                if not flag_summary.empty:
-                    flag_df = pd.DataFrame({
-                        'Issue Type': flag_summary.index,
-                        'Count': flag_summary.values
-                    })
-                    st.dataframe(flag_df, use_container_width=True)
-            
-            # Generate HTML report
-            st.markdown("---")
-            st.markdown("### 📥 Download Report")
-            
-            # Create simple HTML report
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>{report_title}</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                    h1 {{ color: #2c3e50; }}
-                    h2 {{ color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
-                    table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-                    th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
-                    th {{ background-color: #3498db; color: white; }}
-                    tr:nth-child(even) {{ background-color: #f2f2f2; }}
-                    .metric {{ display: inline-block; margin: 10px 20px; }}
-                    .metric-value {{ font-size: 24px; font-weight: bold; color: #3498db; }}
-                    .metric-label {{ font-size: 14px; color: #7f8c8d; }}
-                </style>
-            </head>
-            <body>
-                <h1>{report_title}</h1>
-                <p><strong>Project:</strong> {project_name}</p>
-                <p><strong>Period:</strong> {report_period}</p>
-                
-                <h2>Summary Statistics</h2>
-                <div class="metric">
-                    <div class="metric-value">{len(submissions_df):,}</div>
-                    <div class="metric-label">Total Submissions</div>
-                </div>
-                
-                <h2>Data Tables</h2>
-                {submissions_df.head(20).to_html(index=False)}
-                
-                <p style="margin-top: 40px; color: #7f8c8d; font-size: 12px;">
-                    Generated by RCT Field Flow on {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
-                </p>
-            </body>
-            </html>
-            """
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.download_button(
-                    "📥 Download HTML Report",
-                    html_content,
-                    "weekly_report.html",
-                    "text/html",
-                    use_container_width=True
-                )
-            
-            with col2:
-                if format_option == "HTML + PDF":
-                    st.info("💡 PDF generation requires WeasyPrint. Download HTML and convert externally if needed.")
-            
-            st.success("✅ Report generated successfully!")
-            
-            # Add button to proceed to randomization
-            st.markdown("---")
-            st.markdown("### 🎲 Next Step: Randomization")
-            st.info("With your design sprint complete and report generated, you're ready to randomize your baseline data.")
-            
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                if st.button("▶️ Proceed to Randomization", type="primary", use_container_width=True, key="proceed_to_random"):
-                    st.session_state.current_page = "random"
-                    st.session_state.selected_page = "random"
-                    st.rerun()
-            
-        except Exception as e:
-            st.error(f"Error generating report: {e}")
-
-
-# ----------------------------------------------------------------------------- #
-# MONITORING DASHBOARD                                                          #
-# ----------------------------------------------------------------------------- #
-
-
-def render_monitoring() -> None:
-    st.title("📈 Monitoring Dashboard")
-    st.markdown("Real-time progress monitoring with interactive configuration.")
-    
-    # Initialize session state
-    if "monitor_data" not in st.session_state:
-        st.session_state.monitor_data: pd.DataFrame | None = None
-    if "monitor_config" not in st.session_state:
-        st.session_state.monitor_config = {}
-    
-    cfg = mon_load_config()
-
-    # Data source selection
-    st.markdown("### 📁 Data Source")
-    source = st.radio(
-        "Load data from",
-        ["Use project config", "Upload CSV", "SurveyCTO API"],
-        key="monitor_data_source",
-        horizontal=True
-    )
-
-    data: pd.DataFrame | None = None
-
-    if source == "Use project config":
-        try:
-            submissions = mon_load_submissions(cfg)
-            data = mon_prepare_data(submissions, cfg)
-            st.session_state.monitor_data = data
-        except Exception as exc:  # pragma: no cover
-            st.error(f"Couldn't load monitoring components using project config: {exc}")
-            return
-    elif source == "Upload CSV":
-        upload = st.file_uploader("Upload submissions CSV", type="csv", key="monitor_csv_upload")
-        if upload:
-            data = pd.read_csv(upload, sep=None, engine="python")
-            st.session_state.monitor_data = data
-            st.success(f"✅ Loaded {len(data):,} submissions")
-        else:
-            data = st.session_state.get("monitor_data")
-        if data is None:
-            st.info("📤 Upload a CSV file to continue.")
-            return
-    else:  # SurveyCTO API
-        col1, col2 = st.columns(2)
-        surveycto_cfg = cfg.get("surveycto", {})
-        with col1:
-            server_default = surveycto_cfg.get("server", "")
-            server = st.text_input(
-                "SurveyCTO server (without https://)",
-                value="",
-                placeholder=server_default,
-                key="monitor_api_server",
-            )
-            username_default = surveycto_cfg.get("username", "")
-            username = st.text_input(
-                "Username",
-                value="",
-                placeholder=username_default,
-                key="monitor_api_user",
-            )
-        with col2:
-            password = st.text_input("Password", type="password", key="monitor_api_pass")
-            form_default = surveycto_cfg.get("form_id", "")
-            form_id = st.text_input(
-                "Form ID",
-                value="",
-                placeholder=form_default,
-                key="monitor_api_form",
-            )
-
-        if st.button("📥 Fetch SurveyCTO submissions", key="monitor_fetch_api"):
-            if not all([server, username, password, form_id]):
-                st.error("Server, username, password, and form ID are required.")
-            else:
-                try:
-                    client = SurveyCTO(server=server, username=username, password=password)
-                    api_df = client.get_submissions(form_id)
-                    st.session_state.monitor_data = api_df
-                    st.success(f"✅ Fetched {len(api_df):,} submissions from SurveyCTO.")
-                except Exception as exc:
-                    st.error(f"Failed to fetch SurveyCTO submissions: {exc}")
-        data = st.session_state.get("monitor_data")
-        if data is None:
-            st.info("💡 Enter credentials and click the fetch button to load live data.")
-            return
-
-    if data is None or data.empty:
-        st.warning("⚠️ No submissions available. Check your data source.")
-        return
-
-    # Data preview
-    st.markdown("---")
-    st.markdown("#### 📊 Data Preview")
-    st.dataframe(data.head(10), use_container_width=True)
-    st.caption(f"Showing 10 of {len(data):,} rows")
-
-    # Interactive configuration
-    st.markdown("---")
-    st.markdown("### ⚙️ Dashboard Configuration")
-    
-    available_cols = data.columns.tolist()
-    
-    with st.form("monitor_config_form"):
-        st.markdown("#### Column Mapping")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            date_col = st.selectbox(
-                "Date column",
-                available_cols,
-                index=available_cols.index("SubmissionDate") if "SubmissionDate" in available_cols else 0,
-                key="monitor_date_col",
-                help="When the submission was made"
-            )
-        
-        with col2:
-            enumerator_col = st.selectbox(
-                "Enumerator column",
-                available_cols,
-                index=available_cols.index("enumerator") if "enumerator" in available_cols else 0,
-                key="monitor_enum_col",
-                help="Who conducted the survey"
-            )
-        
-        with col3:
-            treatment_col = st.selectbox(
-                "Treatment column",
-                available_cols,
-                index=available_cols.index("treatment") if "treatment" in available_cols else 0,
-                key="monitor_treatment_col",
-                help="Treatment assignment"
-            )
-        
-        st.markdown("#### Work Week Configuration")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            work_start = st.time_input(
-                "Work start time",
-                value=pd.Timestamp("08:00").time(),
-                key="monitor_work_start",
-                help="Time enumerators start work each day"
-            )
-        
-        with col2:
-            work_end = st.time_input(
-                "Work end time",
-                value=pd.Timestamp("17:00").time(),
-                key="monitor_work_end",
-                help="Time enumerators end work each day"
-            )
-        
-        with col3:
-            rest_days = st.multiselect(
-                "Rest days",
-                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-                default=["Sunday"],
-                key="monitor_rest_days",
-                help="Days when no surveying occurs"
-            )
-        
-        st.markdown("#### Dashboard Display Options")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            show_productivity = st.checkbox("Show productivity table", value=True, key="monitor_show_prod")
-            show_by_arm = st.checkbox("Show progress by treatment arm", value=True, key="monitor_show_arm")
-        
-        with col2:
-            show_projections = st.checkbox("Show completion projections", value=True, key="monitor_show_proj")
-            show_enumerators = st.checkbox("Show enumerator details", value=True, key="monitor_show_enum")
-        
-        st.markdown("#### Target Configuration (Optional)")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            target_total = st.number_input(
-                "Target total surveys",
-                min_value=0,
-                value=0,
-                step=10,
-                key="monitor_target_total",
-                help="Leave as 0 to skip target visualization"
-            )
-        
-        with col2:
-            if target_total > 0:
-                target_per_arm = st.text_input(
-                    "Target per treatment arm (comma-separated)",
-                    value="",
-                    key="monitor_target_per_arm",
-                    help="e.g., '100,100,100' for three equal arms"
-                )
-        
-        submit = st.form_submit_button("📊 Generate Dashboard", type="primary", use_container_width=True)
-    
-    if submit:
-        st.markdown("---")
-        st.markdown("## 📊 Monitoring Dashboard")
-        
-        # Summary statistics
-        st.markdown("### 📈 Summary Statistics")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Submissions", f"{len(data):,}")
-        with col2:
-            if date_col in data.columns:
-                unique_dates = data[date_col].nunique()
-                st.metric("Survey Days", unique_dates)
-        with col3:
-            if enumerator_col in data.columns:
-                unique_enums = data[enumerator_col].nunique()
-                st.metric("Active Enumerators", unique_enums)
-        with col4:
-            if treatment_col in data.columns:
-                unique_arms = data[treatment_col].nunique()
-                st.metric("Treatment Arms", unique_arms)
-        
-        # Productivity table
-        if show_productivity and enumerator_col in data.columns:
-            st.markdown("### 👤 Enumerator Productivity")
-            productivity = data[enumerator_col].value_counts().reset_index()
-            productivity.columns = ['Enumerator', 'Surveys']
-            
-            if date_col in data.columns:
-                unique_dates = data[date_col].nunique()
-                productivity['Avg/Day'] = (productivity['Surveys'] / unique_dates).round(1)
-            
-            st.dataframe(productivity.head(20), use_container_width=True)
-        
-        # Progress by treatment arm
-        if show_by_arm and treatment_col in data.columns:
-            st.markdown("### 🎯 Progress by Treatment Arm")
-            
-            arm_progress = data[treatment_col].value_counts().reset_index()
-            arm_progress.columns = ['Treatment Arm', 'Count']
-            arm_progress['Percentage'] = (arm_progress['Count'] / arm_progress['Count'].sum() * 100).round(1)
-            
-            st.dataframe(arm_progress, use_container_width=True)
-            
-            # Visualize as bar chart
-            chart_data = arm_progress.set_index('Treatment Arm')['Count']
-            st.bar_chart(chart_data)
-        
-        # Projections
-        if show_projections and date_col in data.columns and target_total > 0:
-            st.markdown("### 📅 Completion Projection")
-            
-            # Calculate daily submission rate
-            if date_col in data.columns:
-                try:
-                    # Convert to datetime if needed
-                    dates = pd.to_datetime(data[date_col], errors='coerce')
-                    daily_counts = dates.dt.date.value_counts().sort_index()
-                    
-                    if len(daily_counts) > 1:
-                        avg_daily_rate = daily_counts.mean()
-                        current_total = len(data)
-                        remaining = target_total - current_total
-                        
-                        if remaining > 0 and avg_daily_rate > 0:
-                            days_needed = remaining / avg_daily_rate
-                            
-                            col1, col2, col3, col4 = st.columns(4)
-                            with col1:
-                                st.metric("Current Progress", f"{current_total:,} / {target_total:,}")
-                            with col2:
-                                pct_complete = (current_total / target_total * 100)
-                                st.metric("% Complete", f"{pct_complete:.1f}%")
-                            with col3:
-                                st.metric("Daily Average", f"{avg_daily_rate:.1f}")
-                            with col4:
-                                st.metric("Days to Target", f"{days_needed:.0f}")
-                        elif current_total >= target_total:
-                            st.success(f"✅ Target reached! ({current_total:,}/{target_total:,})")
-                except Exception:
-                    st.info("Could not calculate projections for this date format.")
-        
-        # Enumerator details
-        if show_enumerators and enumerator_col in data.columns:
-            st.markdown("### 📋 Enumerator Details")
-            
-            selected_enum = st.selectbox(
-                "Select enumerator to view details",
-                sorted(data[enumerator_col].unique()),
-                key="monitor_selected_enum"
-            )
-            
-            enum_data = data[data[enumerator_col] == selected_enum]
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Surveys", len(enum_data))
-            with col2:
-                if date_col in data.columns:
-                    enum_dates = enum_data[date_col].nunique()
-                    st.metric("Days Active", enum_dates)
-            with col3:
-                if treatment_col in data.columns and date_col in data.columns:
-                    try:
-                        dates = pd.to_datetime(enum_data[date_col], errors='coerce')
-                        last_submission = dates.max()
-                        st.metric("Last Submission", last_submission.strftime("%Y-%m-%d") if pd.notna(last_submission) else "N/A")
-                    except Exception:
-                        pass
-            
-            if treatment_col in data.columns:
-                st.markdown("#### Surveys by Arm")
-                arm_dist = enum_data[treatment_col].value_counts().reset_index()
-                arm_dist.columns = ['Treatment Arm', 'Count']
-                st.dataframe(arm_dist, use_container_width=True)
-        
-        # Export data
-        st.markdown("---")
-        st.markdown("### 📥 Download Data")
-        
-        csv = data.to_csv(index=False)
-        st.download_button(
-            "📥 Download submissions",
-            csv,
-            "submissions_export.csv",
-            "text/csv",
-            use_container_width=True
-        )
-
-
-# ----------------------------------------------------------------------------- #
 # FACILITATOR DASHBOARD                                                         #
 # ----------------------------------------------------------------------------- #
 
@@ -8555,12 +7951,30 @@ def render_user_information():
 # ----------------------------------------------------------------------------- #
 
 
+def _render_coming_soon(title: str) -> None:
+    """Display a coming soon placeholder for modules under development."""
+    st.title(title)
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            """
+            <div style="text-align:center; padding: 3rem 0;">
+                <div style="font-size: 4rem;">🚧</div>
+                <h2 style="color: #1f77b4; margin-top: 1rem;">Coming Soon</h2>
+                <p style="color: #666; font-size: 1.1rem;">This module is currently under development.<br>Check back soon!</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 # Pages that don't require access credentials
 PUBLIC_PAGES = ["home"]
 
 # Pages that require temporary access (excludes admin pages with their own auth)
-PROTECTED_PAGES = ["design", "power", "random", "cases", "visualize", "quality", "analysis", 
-                   "backcheck", "reports", "monitor"]
+PROTECTED_PAGES = ["design", "power", "random", "visualize", "quality", "analysis",
+                   "backcheck"]
 
 # Admin pages with their own password protection (skip temporary access)
 ADMIN_PAGES = ["facilitator", "userinfo"]
@@ -8968,13 +8382,10 @@ def main() -> None:
         "design": "🎯 RCT Design",
         "power": "⚡ Power Calculations",
         "random": "🎲 Randomization",
-        "cases": "📋 Case Assignment",
         "visualize": "📊 Data Visualization",
         "quality": "✅ Quality Checks",
         "analysis": "📊 Analysis & Results",
         "backcheck": "🔍 Backcheck Selection",
-        "reports": "📄 Report Generation",
-        "monitor": "📈 Monitoring Dashboard",
     }
     
     # Hidden admin pages (not in menu, accessible via URL):
@@ -9063,20 +8474,14 @@ def main() -> None:
         render_power_calculations()
     elif page == "random":
         render_randomization()
-    elif page == "cases":
-        render_case_assignment()
     elif page == "visualize":
-        render_data_visualization()
+        _render_coming_soon("📊 Data Visualization")
     elif page == "quality":
         render_quality_checks()
     elif page == "analysis":
         render_analysis()
     elif page == "backcheck":
-        render_backcheck()
-    elif page == "reports":
-        render_reports()
-    elif page == "monitor":
-        render_monitoring()
+        _render_coming_soon("🔍 Backcheck Selection")
     elif page == "userinfo":
         render_user_information()
     elif page == "facilitator":
